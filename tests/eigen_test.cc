@@ -1,12 +1,13 @@
-// Checks that Eigen, compiled with EIGEN_USE_BLAS, routes its matrix products
-// through hwyBLAS and gets correct results.
+// Checks that Eigen, compiled with EIGEN_USE_BLAS, routes its matrix
+// products, triangular and self-adjoint operations and decompositions through
+// hwyBLAS and gets correct results.
 //
-// Only operations backed by routines that hwyBLAS implements may be used
-// here: with EIGEN_USE_BLAS, e.g. a triangular solve references dtrsm_.
+// Including Eigen/Dense also checks that hwyBLAS provides every BLAS routine
+// Eigen may call: a missing one would be a link error.
 #define EIGEN_USE_BLAS
 #include <complex>
 
-#include "Eigen/Core"
+#include "Eigen/Dense"
 #include "gtest/gtest.h"
 #include "test_util.h"
 
@@ -94,6 +95,86 @@ TYPED_TEST(EigenTest, MatrixVectorProducts) {
   // A dynamic matrix-matrix product with one column becomes a gemv at runtime.
   const Mat c = a * Mat(x);
   EXPECT_LE((c - expected).norm(), tol * expected.norm());
+}
+
+// Relative error of `actual` against `expected` (Frobenius norm).
+template <typename MatA, typename MatB>
+double RelError(const MatA& actual, const MatB& expected) {
+  return static_cast<double>((actual - expected).norm()) /
+         static_cast<double>(expected.norm());
+}
+
+TYPED_TEST(EigenTest, TriangularAndSelfAdjoint) {
+  using T = TypeParam;
+  using Mat = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+  using Vec = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+  const Eigen::Index n = 90, k = 33;
+  const double tol = 100 * n * Eps<T>();
+  Mat a = Mat::Random(n, n);
+  // A real diagonal (so that self-adjoint views are valid Hermitian
+  // matrices), large enough for well conditioned triangular solves.
+  a.diagonal() = a.diagonal().real().template cast<T>();
+  a.diagonal().array() += T(n);
+  const Mat b = Mat::Random(n, k);
+  const Vec x = Vec::Random(n);
+
+  // TRMM / TRMV
+  const Mat lower = a.template triangularView<Eigen::Lower>();
+  EXPECT_LE(RelError(Mat(a.template triangularView<Eigen::Lower>() * b),
+                     NaiveProduct(lower, b)),
+            tol);
+  EXPECT_LE(RelError(Vec(a.template triangularView<Eigen::Lower>() * x),
+                     NaiveProduct(lower, Mat(x))),
+            tol);
+  const Mat upper_t = Mat(a.template triangularView<Eigen::Upper>()).adjoint();
+  EXPECT_LE(
+      RelError(Mat(a.template triangularView<Eigen::Upper>().adjoint() * b),
+               NaiveProduct(upper_t, b)),
+      tol);
+
+  // TRSM: solve and check the residual.
+  const Mat sol = a.template triangularView<Eigen::Upper>().solve(b);
+  const Mat upper = a.template triangularView<Eigen::Upper>();
+  EXPECT_LE(RelError(NaiveProduct(upper, sol), b), tol);
+  Mat sol_right = b.transpose();
+  a.template triangularView<Eigen::Lower>()
+      .template solveInPlace<Eigen::OnTheRight>(sol_right);
+  EXPECT_LE(RelError(NaiveProduct(sol_right, lower), Mat(b.transpose())), tol);
+
+  // SYMM / HEMM and SYMV / HEMV (self-adjoint: symmetric or Hermitian).
+  const Mat sa = a.template selfadjointView<Eigen::Lower>();
+  EXPECT_LE(RelError(Mat(a.template selfadjointView<Eigen::Lower>() * b),
+                     NaiveProduct(sa, b)),
+            tol);
+  EXPECT_LE(RelError(Vec(a.template selfadjointView<Eigen::Lower>() * x),
+                     NaiveProduct(sa, Mat(x))),
+            tol);
+
+  // SYRK (rank update of a self-adjoint matrix).
+  Mat c = Mat::Zero(n, n);
+  c.template selfadjointView<Eigen::Lower>().rankUpdate(b);
+  const Mat expected_c = NaiveProduct(b, Mat(b.adjoint()));
+  EXPECT_LE(RelError(Mat(c.template triangularView<Eigen::Lower>()),
+                     Mat(expected_c.template triangularView<Eigen::Lower>())),
+            tol);
+}
+
+TYPED_TEST(EigenTest, Decompositions) {
+  using T = TypeParam;
+  using Mat = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+  // Large enough for Eigen's blocked algorithms (which call TRSM and GEMM).
+  const Eigen::Index n = 200, k = 5;
+  const double tol = 1000 * n * Eps<T>();
+  const Mat m = Mat::Random(n, n);
+  const Mat spd = m * m.adjoint() + Mat::Identity(n, n) * T(n);
+  const Mat rhs = Mat::Random(n, k);
+
+  const Mat x_llt = spd.llt().solve(rhs);
+  EXPECT_LE(RelError(NaiveProduct(spd, x_llt), rhs), tol);
+  const Mat x_ldlt = spd.ldlt().solve(rhs);
+  EXPECT_LE(RelError(NaiveProduct(spd, x_ldlt), rhs), tol);
+  const Mat x_lu = m.partialPivLu().solve(rhs);
+  EXPECT_LE(RelError(NaiveProduct(m, x_lu), rhs), tol);
 }
 
 }  // namespace

@@ -42,7 +42,24 @@ extern "C" {
 typedef int hwyblas_int;
 
 /* ------------------------------------------------------------------------ */
-/* Level 2                                                                   */
+/* Level 1                                                                  */
+
+/* y := alpha * x + y. */
+HWYBLAS_API void saxpy_(const hwyblas_int* n, const float* alpha,
+                        const float* x, const hwyblas_int* incx, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void daxpy_(const hwyblas_int* n, const double* alpha,
+                        const double* x, const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void caxpy_(const hwyblas_int* n, const float* alpha,
+                        const float* x, const hwyblas_int* incx, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zaxpy_(const hwyblas_int* n, const double* alpha,
+                        const double* x, const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+
+/* ------------------------------------------------------------------------ */
+/* Level 2                                                                  */
 
 /* y := alpha * op(A) * x + beta * y, where op(A) is A, A^T or A^H. */
 HWYBLAS_API void sgemv_(const char* trans, const hwyblas_int* m,
@@ -66,8 +83,50 @@ HWYBLAS_API void zgemv_(const char* trans, const hwyblas_int* m,
                         const double* x, const hwyblas_int* incx,
                         const double* beta, double* y, const hwyblas_int* incy);
 
+/* y := alpha * A * x + beta * y, A symmetric (one triangle stored). */
+HWYBLAS_API void ssymv_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void dsymv_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* x,
+                        const hwyblas_int* incx, const double* beta, double* y,
+                        const hwyblas_int* incy);
+
+/* y := alpha * A * x + beta * y, A Hermitian (one triangle stored). */
+HWYBLAS_API void chemv_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zhemv_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* x,
+                        const hwyblas_int* incx, const double* beta, double* y,
+                        const hwyblas_int* incy);
+
+/* x := op(A) * x, A triangular. */
+HWYBLAS_API void strmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* a,
+                        const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtrmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* a,
+                        const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctrmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* a,
+                        const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztrmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* a,
+                        const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+
 /* ------------------------------------------------------------------------ */
-/* Level 3                                                                   */
+/* Level 3                                                                  */
 
 /* C := alpha * op(A) * op(B) + beta * C, where op(X) is X, X^T or X^H. */
 HWYBLAS_API void sgemm_(const char* transa, const char* transb,
@@ -94,6 +153,128 @@ HWYBLAS_API void zgemm_(const char* transa, const char* transb,
                         const double* a, const hwyblas_int* lda,
                         const double* b, const hwyblas_int* ldb,
                         const double* beta, double* c, const hwyblas_int* ldc);
+
+/* C := alpha * A * B + beta * C (side L) or alpha * B * A + beta * C
+ * (side R), A symmetric. */
+HWYBLAS_API void ssymm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* b,
+                        const hwyblas_int* ldb, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void dsymm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* b,
+                        const hwyblas_int* ldb, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void csymm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* b,
+                        const hwyblas_int* ldb, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void zsymm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* b,
+                        const hwyblas_int* ldb, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+
+/* As ?symm_, A Hermitian. */
+HWYBLAS_API void chemm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* b,
+                        const hwyblas_int* ldb, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void zhemm_(const char* side, const char* uplo,
+                        const hwyblas_int* m, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* b,
+                        const hwyblas_int* ldb, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+
+/* C := alpha * A * A^T + beta * C (trans N) or alpha * A^T * A + beta * C;
+ * only the uplo triangle of C is referenced. */
+HWYBLAS_API void ssyrk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void dsyrk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void csyrk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void zsyrk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+
+/* As ?syrk_ with A^H instead of A^T; alpha and beta are real. */
+HWYBLAS_API void cherk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* beta, float* c,
+                        const hwyblas_int* ldc);
+HWYBLAS_API void zherk_(const char* uplo, const char* trans,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* beta, double* c,
+                        const hwyblas_int* ldc);
+
+/* B := alpha * op(A) * B (side L) or alpha * B * op(A) (side R),
+ * A triangular. */
+HWYBLAS_API void strmm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const float* alpha,
+                        const float* a, const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void dtrmm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const double* alpha,
+                        const double* a, const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void ctrmm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const float* alpha,
+                        const float* a, const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void ztrmm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const double* alpha,
+                        const double* a, const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb);
+
+/* Solves op(A) * X = alpha * B (side L) or X * op(A) = alpha * B (side R)
+ * for X, A triangular; X overwrites B. */
+HWYBLAS_API void strsm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const float* alpha,
+                        const float* a, const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void dtrsm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const double* alpha,
+                        const double* a, const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void ctrsm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const float* alpha,
+                        const float* a, const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb);
+HWYBLAS_API void ztrsm_(const char* side, const char* uplo, const char* transa,
+                        const char* diag, const hwyblas_int* m,
+                        const hwyblas_int* n, const double* alpha,
+                        const double* a, const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb);
 
 /* ------------------------------------------------------------------------ */
 /* Error handling                                                            */

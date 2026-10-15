@@ -16,6 +16,15 @@
 // beta is applied during the first pass over K only (pc == 0); later passes
 // accumulate into C with beta = 1.
 //
+// The same driver serves the other level 3 routines (see GemmProblem):
+//   - Symmetric/Hermitian operands (SYMM, HEMM) only change the packing.
+//   - Triangular operands (TRMM) also restrict, per micro-tile, the range of
+//     k to the part where the operand is non-zero, skipping about half of
+//     the work.
+//   - Triangular C (SYRK, HERK) skips micro-tiles outside the triangle;
+//     tiles crossing the diagonal are computed into a temporary and merged
+//     element-wise.
+//
 // Per-target include guard (see Highway's "-inl.h" convention).
 #if defined(HWYBLAS_SRC_GEMM_INL_H_) == defined(HWY_TARGET_TOGGLE)
 #ifdef HWYBLAS_SRC_GEMM_INL_H_
@@ -36,14 +45,84 @@ HWY_BEFORE_NAMESPACE();
 namespace hwyblas {
 namespace HWY_NAMESPACE {
 
-template <size_t kR, typename T>
-HWY_INLINE void PackPanelsMaybeConj(bool conj, size_t rows, size_t kc,
-                                    const T* src, ptrdiff_t rs, ptrdiff_t ks,
-                                    T* dst) {
-  if (IsComplex<T>::value && conj) {
-    PackPanels<kR, true>(rows, kc, src, rs, ks, dst);
-  } else {
-    PackPanels<kR, false>(rows, kc, src, rs, ks, dst);
+// Returns op(B)^T as an operand, so that B can be packed with the same
+// routine as A (panel rows are then the columns of op(B)).
+template <typename T>
+Operand<T> Transposed(Operand<T> x) {
+  const ptrdiff_t rs = x.rs;
+  x.rs = x.cs;
+  x.cs = rs;
+  x.lower = !x.lower;
+  return x;
+}
+
+// Range [begin, end) of k for which the product of rows [i0, i0 + mr) of
+// op(A) and columns [j0, j0 + nr) of op(B) can be non-zero. This is all of k
+// unless an operand is triangular.
+template <typename T>
+HWY_INLINE void NonZeroRange(const GemmProblem<T>& g, size_t i0, size_t mr,
+                             size_t j0, size_t nr, size_t* begin, size_t* end) {
+  *begin = 0;
+  *end = g.k;
+  if (g.a.structure == Structure::kTriangular) {
+    // Row i of a lower triangular op(A) is zero beyond column i.
+    if (g.a.lower) {
+      *end = HWY_MIN(*end, i0 + mr);
+    } else {
+      *begin = HWY_MAX(*begin, i0);
+    }
+  }
+  if (g.b.structure == Structure::kTriangular) {
+    // Column j of a lower triangular op(B) is zero above row j.
+    if (g.b.lower) {
+      *begin = HWY_MAX(*begin, j0);
+    } else {
+      *end = HWY_MIN(*end, j0 + nr);
+    }
+  }
+}
+
+// How a micro-tile of C relates to the updated part of C. Tiles containing
+// a diagonal element always count as crossing, so that real_diagonal can be
+// applied element-wise.
+enum class TileCoverage { kOutside, kInside, kCrossing };
+
+HWY_INLINE TileCoverage Coverage(Part part, size_t i0, size_t mr, size_t j0,
+                                 size_t nr) {
+  const size_t i_last = i0 + mr - 1, j_last = j0 + nr - 1;
+  switch (part) {
+    case Part::kLower:  // i >= j
+      if (i_last < j0) return TileCoverage::kOutside;
+      return (i0 > j_last) ? TileCoverage::kInside : TileCoverage::kCrossing;
+    case Part::kUpper:  // i <= j
+      if (i0 > j_last) return TileCoverage::kOutside;
+      return (i_last < j0) ? TileCoverage::kInside : TileCoverage::kCrossing;
+    default:
+      return TileCoverage::kInside;
+  }
+}
+
+// Merges a tile computed into `tmp` (column-major, leading dimension ld_tmp,
+// already scaled by alpha) into the triangle `part` of C, applying beta.
+template <typename T>
+void MergeTile(const T* tmp, size_t ld_tmp, Part part, bool real_diagonal,
+               T beta, T* c, size_t ldc, size_t i0, size_t mr, size_t j0,
+               size_t nr) {
+  for (size_t j = 0; j < nr; ++j) {
+    for (size_t i = 0; i < mr; ++i) {
+      const size_t gi = i0 + i, gj = j0 + j;
+      if (part == Part::kLower ? (gi < gj) : (gi > gj)) continue;
+      T& cij = c[i + j * ldc];
+      T v = tmp[i + j * ld_tmp];
+      if (real_diagonal && gi == gj) {
+        // HERK: the imaginary part of the diagonal is neither read nor kept.
+        v = T(std::real(v));
+        if (!IsZero(beta)) v += beta * T(std::real(cij));
+      } else if (!IsZero(beta)) {
+        v += beta * cij;
+      }
+      cij = v;
+    }
   }
 }
 
@@ -63,6 +142,8 @@ void BlockedGemm(const GemmProblem<T>& g) {
       ScratchBuffer(kScratchPackA, mc_max * kc_max * sizeof(T)));
   T* HWY_RESTRICT packed_b = static_cast<T*>(
       ScratchBuffer(kScratchPackB, nc_max * kc_max * sizeof(T)));
+  const Operand<T> bt = Transposed(g.b);
+  HWY_ALIGN T tmp[MR * NR];  // for micro-tiles crossing the diagonal of C
 
   for (size_t jc = 0; jc < g.n; jc += NC) {
     const size_t nc = HWY_MIN(NC, g.n - jc);
@@ -71,27 +152,47 @@ void BlockedGemm(const GemmProblem<T>& g) {
       const size_t kc = HWY_MIN(KC, g.k - pc);
       const T beta = (pc == 0) ? g.beta : T(1);
 
-      // B[pc:pc+kc, jc:jc+nc]: panel "rows" are columns of B.
-      PackPanelsMaybeConj<NR>(g.conj_b, nc, kc, g.b + pc * g.b_rs + jc * g.b_cs,
-                              g.b_cs, g.b_rs, packed_b);
+      // op(B)[pc:pc+kc, jc:jc+nc]: panel rows are columns of op(B).
+      PackOperand<NR>(bt, jc, nc, pc, kc, packed_b);
 
       for (size_t ic = 0; ic < g.m; ic += MC) {
         const size_t mc = HWY_MIN(MC, g.m - ic);
 
-        // A[ic:ic+mc, pc:pc+kc].
-        PackPanelsMaybeConj<MR>(g.conj_a, mc, kc,
-                                g.a + ic * g.a_rs + pc * g.a_cs, g.a_rs, g.a_cs,
-                                packed_a);
+        // op(A)[ic:ic+mc, pc:pc+kc].
+        PackOperand<MR>(g.a, ic, mc, pc, kc, packed_a);
 
         for (size_t jr = 0; jr < nc; jr += NR) {
           const size_t nr = HWY_MIN(NR, nc - jr);
+          const size_t j0 = jc + jr;  // global column
           const T* panel_b = packed_b + jr * kc;
-          T* c_col = g.c + (jc + jr) * g.ldc + ic;
+          T* c_col = g.c + j0 * g.ldc + ic;
 
           for (size_t ir = 0; ir < mc; ir += MR) {
             const size_t mr = HWY_MIN(MR, mc - ir);
-            K::Run(kc, packed_a + ir * kc, panel_b, g.alpha, beta, c_col + ir,
-                   g.ldc, mr, nr);
+            const size_t i0 = ic + ir;  // global row
+            const TileCoverage coverage = Coverage(g.part, i0, mr, j0, nr);
+            if (coverage == TileCoverage::kOutside) continue;
+
+            // Restrict k to [pc, pc + kc) intersected with the non-zero
+            // range; an empty range still applies beta.
+            size_t k_begin, k_end;
+            NonZeroRange(g, i0, mr, j0, nr, &k_begin, &k_end);
+            k_begin = HWY_MAX(k_begin, pc) - pc;
+            k_end = HWY_MIN(k_end, pc + kc);
+            k_end = (k_end > pc + k_begin) ? k_end - pc : k_begin;
+            if (k_end == k_begin && pc != 0) continue;  // nothing to add
+
+            const T* a_panel = packed_a + ir * kc + k_begin * MR;
+            const T* b_panel = panel_b + k_begin * NR;
+            const size_t k_len = k_end - k_begin;
+            if (coverage == TileCoverage::kInside) {
+              K::Run(k_len, a_panel, b_panel, g.alpha, beta, c_col + ir, g.ldc,
+                     mr, nr);
+            } else {
+              K::Run(k_len, a_panel, b_panel, g.alpha, T(0), tmp, MR, MR, NR);
+              MergeTile(tmp, MR, g.part, g.real_diagonal, beta, c_col + ir,
+                        g.ldc, i0, mr, j0, nr);
+            }
           }
         }
       }

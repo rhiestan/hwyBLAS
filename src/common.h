@@ -12,6 +12,8 @@
 namespace hwyblas {
 
 using blasint = hwyblas_int;
+using c32 = std::complex<float>;
+using c64 = std::complex<double>;
 
 // ---------------------------------------------------------------------------
 // Scalar type traits
@@ -101,6 +103,10 @@ enum : size_t {
   kScratchTemp = 2,   // level 2: kernel temporaries
   kNumScratchSlots = 3
 };
+
+// TRSM recursion stops at triangles of at most this many rows, which are
+// solved by a substitution kernel.
+constexpr size_t kTrsmBase = 32;
 
 // Returns a pointer to element 0 of a BLAS vector with `n` elements and
 // increment `inc` (element i is at start + i * inc). For negative increments

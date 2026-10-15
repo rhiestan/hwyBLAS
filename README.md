@@ -16,14 +16,17 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 
 ## Status
 
-| Routine | s | d | c | z | Notes |
-|---------|---|---|---|---|-------|
-| `?gemm_` | ✓ | ✓ | ✓ | ✓ | `N`/`T`/`C` for both operands |
-| `?gemv_` | ✓ | ✓ | ✓ | ✓ | any `incx`/`incy`, including negative |
+| Level | Routines | Precisions |
+|-------|----------|------------|
+| 1 | `?axpy_` | s d c z |
+| 2 | `?gemv_`, `?trmv_` | s d c z |
+| 2 | `?symv_` / `?hemv_` | s d / c z |
+| 3 | `?gemm_`, `?symm_`, `?syrk_`, `?trmm_`, `?trsm_` | s d c z |
+| 3 | `?hemm_`, `?herk_` | c z |
 
-Next up: the remaining routines that Eigen uses with `EIGEN_USE_BLAS`:
-`?symv_`/`?hemv_`, `?trmv_`, `?symm_`/`?hemm_`, `?syrk_`/`?herk_`,
-`?trmm_`, `?trsm_`.
+This covers every BLAS routine that Eigen calls with `EIGEN_USE_BLAS`.
+All options are supported (transposition, conjugation, side, uplo, unit
+diagonal, any vector increments including negative ones).
 
 ## Building
 
@@ -56,9 +59,8 @@ target_compile_definitions(my_app PRIVATE EIGEN_USE_BLAS)
 target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
 ```
 
-Note that with `EIGEN_USE_BLAS`, every Eigen operation backed by BLAS
-references its routine, so currently only matrix-matrix and matrix-vector
-products may be used. `tests/eigen_test.cc` checks the integration.
+`tests/eigen_test.cc` checks the integration: products, triangular and
+self-adjoint views, rank updates and the LLT, LDLT and LU decompositions.
 
 ## Performance
 
@@ -76,14 +78,16 @@ with OpenBLAS 0.3.34 and MKL, square matrices, `trans = NN`:
 | zgemm | 128 | 62 | 61 | 64 |
 | | 2048 | 63 | 59 | 58 |
 
-GEMV is memory-bound. hwyBLAS matches or exceeds OpenBLAS for all precisions
-and both `N` and `T`.
+The other routines (`symm`, `syrk`, `trmm`, `trsm`, `gemv`, `symv`/`hemv`,
+`trmv`) perform on par with OpenBLAS at medium and large sizes, and mostly
+better than MKL on this AMD CPU. AOCL-BLAS, which has special code paths
+for small matrices, is the fastest for small (n ≤ 128) GEMM and TRSM.
 
 To reproduce, pass other BLAS DLLs as `name=path`:
 
 ```sh
 build/bin/blas_bench gemm --types=sdcz OpenBLAS=path/to/libopenblas.dll MKL=path/to/mkl_rt.2.dll
-build/bin/blas_bench gemv --trans=T --shape=4000x4000
+build/bin/blas_bench trsm --side=R --uplo=U --sizes=256,1024
 ```
 
 The benchmark forces every library to a single thread. It interleaves the
@@ -93,12 +97,18 @@ libraries over several rounds and reports each one's best time.
 
 ```
 include/hwyblas/hwyblas.h   public C API (Fortran calling convention)
-src/common.h, common.cc     argument decoding, scratch buffers, xerbla_
-src/gemm.cc                 GEMM API, argument checks, dispatch
+src/common.h, common.cc     scalar traits, scratch buffers, xerbla_
+src/api.h                   argument decoding and dispatch helpers
+src/gemm.h                  GemmProblem: the description of any level 3 product
+src/gemm.cc                 GEMM API and the dispatched GEMM driver
 src/gemm-inl.h              GEMM driver: cache blocking (Goto/BLIS algorithm)
 src/gemm_kernel-inl.h       GEMM micro-kernels (real and complex)
-src/pack-inl.h              packing of operands into contiguous panels
+src/pack-inl.h              packing of (structured) operands into panels
+src/level3.cc               SYMM, HEMM, SYRK, HERK, TRMM on top of the driver
+src/trsm.cc, trsm-inl.h     recursive TRSM and its small-triangle kernels
 src/gemv.cc, gemv-inl.h     GEMV API and kernels
+src/level2.cc               SYMV, HEMV (symv-inl.h) and TRMV (trmv-inl.h)
+src/level1.cc, level1-inl.h AXPY and the vector kernels shared by others
 tests/                      GoogleTest tests, Eigen integration test
 bench/                      benchmark comparing BLAS libraries at runtime
 ```
@@ -116,6 +126,25 @@ Complex kernels store numbers interleaved. They accumulate `a·re(b)` and
 `a·im(b)` separately and combine them once at the end with
 `AddSub(acc_re, Reverse2(acc_im))`.
 
+**The other level 3 routines reuse the GEMM driver.** A `GemmProblem`
+describes each operand by strides plus a structure. Symmetric and Hermitian
+operands are read from their stored triangle while packing. For triangular
+operands (TRMM), the driver also skips the all-zero parts of k. For a
+triangular C (SYRK/HERK), it skips tiles outside the triangle. Packing
+classifies each panel, so only panels crossing the diagonal take a slower
+element-by-element path.
+
+**TRSM is recursive.** It splits the triangle in half, solves one half,
+updates the rest with a single large GEMM, and solves the other half.
+Triangles of at most 32 rows go to a substitution kernel. That kernel works
+on chunks of rows of `X` in registers (rows of `X` are independent in
+`X·T = B`); the left side uses transposed 64-column blocks of B.
+
+**Level 2 kernels stream the matrix once.** SYMV/HEMV process 4-column
+strips, and each stored element serves both its own position and its mirror
+image ("axpy" and "dot" form in one pass). TRMV uses the GEMV kernels on
+strips.
+
 **Files ending in `-inl.h`** are compiled once per SIMD target via Highway's
 `foreach_target.h`. `HWY_DYNAMIC_DISPATCH` then selects the best target at
 runtime. `hwyblas_force_target()` restricts dispatch, which lets the tests
@@ -129,6 +158,10 @@ cover every target.
   `xerbla_`, the default handler prints a message but does not terminate.
 - `beta == 0` means the output is not read, so NaN/Inf in it do not
   propagate. This is the reference BLAS semantics.
+- Elements that BLAS defines as not referenced are never read: the other
+  triangle of structured matrices, the diagonal of unit triangular matrices
+  and the imaginary parts of the diagonal of Hermitian matrices. The tests
+  fill all of them with NaN to verify this.
 
 ## License
 

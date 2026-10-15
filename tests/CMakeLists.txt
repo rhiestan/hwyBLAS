@@ -14,6 +14,8 @@ include(GoogleTest)
 add_executable(hwyblas_tests
   gemm_test.cc
   gemv_test.cc
+  level2_test.cc
+  level3_test.cc
 )
 target_link_libraries(hwyblas_tests PRIVATE hwyblas::hwyblas GTest::gtest_main hwyblas_options)
 

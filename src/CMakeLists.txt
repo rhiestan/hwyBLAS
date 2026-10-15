@@ -2,6 +2,10 @@ add_library(hwyblas
   common.cc
   gemm.cc
   gemv.cc
+  level1.cc
+  level2.cc
+  level3.cc
+  trsm.cc
 )
 add_library(hwyblas::hwyblas ALIAS hwyblas)
 

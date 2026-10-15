@@ -10,15 +10,15 @@ HWY_BEFORE_NAMESPACE();
 namespace hwyblas {
 namespace HWY_NAMESPACE {
 
-#define HWYBLAS_GEMV(NAME, T)                                           \
-  void NAME(Op op, size_t m, size_t n, T alpha, const T* a, size_t lda, \
-            const T* x, T beta, T* y) {                                 \
-    GemvContiguous(op, m, n, alpha, a, lda, x, beta, y);                \
+#define HWYBLAS_GEMV(SUFFIX, T)                                     \
+  void Gemv##SUFFIX(Op op, size_t m, size_t n, T alpha, const T* a, \
+                    size_t lda, const T* x, T beta, T* y) {         \
+    GemvContiguous(op, m, n, alpha, a, lda, x, beta, y);            \
   }
-HWYBLAS_GEMV(GemvF32, float)
-HWYBLAS_GEMV(GemvF64, double)
-HWYBLAS_GEMV(GemvC32, std::complex<float>)
-HWYBLAS_GEMV(GemvC64, std::complex<double>)
+HWYBLAS_GEMV(F32, float)
+HWYBLAS_GEMV(F64, double)
+HWYBLAS_GEMV(C32, c32)
+HWYBLAS_GEMV(C64, c64)
 #undef HWYBLAS_GEMV
 
 }  // namespace HWY_NAMESPACE
@@ -26,26 +26,12 @@ HWYBLAS_GEMV(GemvC64, std::complex<double>)
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
+#include "src/api.h"
+#include "src/level2.h"
+
 namespace hwyblas {
 
-HWY_EXPORT(GemvF32);
-HWY_EXPORT(GemvF64);
-HWY_EXPORT(GemvC32);
-HWY_EXPORT(GemvC64);
-
-template <typename T>
-void DispatchGemv(Op op, size_t m, size_t n, T alpha, const T* a, size_t lda,
-                  const T* x, T beta, T* y) {
-  if constexpr (std::is_same_v<T, float>) {
-    HWY_DYNAMIC_DISPATCH(GemvF32)(op, m, n, alpha, a, lda, x, beta, y);
-  } else if constexpr (std::is_same_v<T, double>) {
-    HWY_DYNAMIC_DISPATCH(GemvF64)(op, m, n, alpha, a, lda, x, beta, y);
-  } else if constexpr (std::is_same_v<T, std::complex<float>>) {
-    HWY_DYNAMIC_DISPATCH(GemvC32)(op, m, n, alpha, a, lda, x, beta, y);
-  } else {
-    HWY_DYNAMIC_DISPATCH(GemvC64)(op, m, n, alpha, a, lda, x, beta, y);
-  }
-}
+HWYBLAS_EXPORT_BY_TYPE(Gemv);
 
 // Validates the Fortran arguments, handles trivial cases, makes x and y
 // contiguous if needed and dispatches.
@@ -71,46 +57,25 @@ void Gemv(const char* name, const char* trans, const blasint* m_ptr,
   } else if (incy == 0) {
     info = 11;
   }
-  if (info != 0) {
-    ReportError(name, info);
-    return;
-  }
+  if (info != 0) return ReportError(name, info);
 
   const T alpha = *alpha_ptr, beta = *beta_ptr;
   if (m == 0 || n == 0 || (IsZero(alpha) && IsOne(beta))) return;
 
   const size_t len_x = (op == Op::kNoTrans) ? n : m;
   const size_t len_y = (op == Op::kNoTrans) ? m : n;
-
-  // Gather a strided x into a contiguous buffer.
-  const T* x_start = VectorStart(x, len_x, incx);
-  const T* x_contig = x_start;
-  if (incx != 1) {
-    T* buf = static_cast<T*>(ScratchBuffer(kScratchX, len_x * sizeof(T)));
-    for (size_t i = 0; i < len_x; ++i) buf[i] = x_start[i * incx];
-    x_contig = buf;
-  }
-
-  if (incy == 1) {
-    DispatchGemv(op, m, n, alpha, a, lda, x_contig, beta, y);
-    return;
-  }
-
-  // Strided y: compute into a contiguous copy, then scatter back.
-  T* y_start = VectorStart(y, len_y, incy);
-  T* buf = static_cast<T*>(ScratchBuffer(kScratchY, len_y * sizeof(T)));
-  if (!IsZero(beta)) {  // beta == 0: y must not be read
-    for (size_t i = 0; i < len_y; ++i) buf[i] = y_start[i * incy];
-  }
-  DispatchGemv(op, m, n, alpha, a, lda, x_contig, beta, buf);
-  for (size_t i = 0; i < len_y; ++i) y_start[i * incy] = buf[i];
+  const T* xc = ContiguousInput(x, len_x, incx, kScratchX);
+  // beta == 0: y must not be read.
+  T* yc = BeginOutput(y, len_y, incy, kScratchY, !IsZero(beta));
+  HWYBLAS_DISPATCH_BY_TYPE(T, Gemv, op, m, n, alpha, a, lda, xc, beta, yc);
+  FinishOutput(yc, y, len_y, incy);
 }
 
 }  // namespace hwyblas
 
 using hwyblas::blasint;
-using c32 = std::complex<float>;
-using c64 = std::complex<double>;
+using hwyblas::C32;
+using hwyblas::C64;
 
 extern "C" {
 
@@ -133,11 +98,8 @@ HWYBLAS_API void cgemv_(const char* trans, const blasint* m, const blasint* n,
                         const float* alpha, const float* a, const blasint* lda,
                         const float* x, const blasint* incx, const float* beta,
                         float* y, const blasint* incy) {
-  hwyblas::Gemv("CGEMV", trans, m, n, reinterpret_cast<const c32*>(alpha),
-                reinterpret_cast<const c32*>(a), lda,
-                reinterpret_cast<const c32*>(x), incx,
-                reinterpret_cast<const c32*>(beta), reinterpret_cast<c32*>(y),
-                incy);
+  hwyblas::Gemv("CGEMV", trans, m, n, C32(alpha), C32(a), lda, C32(x), incx,
+                C32(beta), C32(y), incy);
 }
 
 HWYBLAS_API void zgemv_(const char* trans, const blasint* m, const blasint* n,
@@ -145,11 +107,8 @@ HWYBLAS_API void zgemv_(const char* trans, const blasint* m, const blasint* n,
                         const blasint* lda, const double* x,
                         const blasint* incx, const double* beta, double* y,
                         const blasint* incy) {
-  hwyblas::Gemv("ZGEMV", trans, m, n, reinterpret_cast<const c64*>(alpha),
-                reinterpret_cast<const c64*>(a), lda,
-                reinterpret_cast<const c64*>(x), incx,
-                reinterpret_cast<const c64*>(beta), reinterpret_cast<c64*>(y),
-                incy);
+  hwyblas::Gemv("ZGEMV", trans, m, n, C64(alpha), C64(a), lda, C64(x), incx,
+                C64(beta), C64(y), incy);
 }
 
 }  // extern "C"

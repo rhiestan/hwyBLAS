@@ -4,11 +4,14 @@
 // Usage:
 //   blas_bench <routine> [options] [name=path/to/blas.dll ...]
 //
-// Routines: gemm, gemv
+// Routines: gemm, gemv, symm (hemm for complex), syrk, trmm, trsm,
+// symv (hemv for complex), trmv. A square size n means m = n = k; for
+// syrk, C is m x m and A is m x k.
 //
 // Options:
 //   --types=sdcz        precisions to run (default: d)
-//   --trans=NN          gemm: transa/transb (default: NN); gemv: one letter
+//   --trans=NN          gemm: transa/transb (default: NN); others: one letter
+//   --side=L --uplo=L --diag=N   options of the structured routines
 //   --sizes=64,128,...  square sizes (m = n = k)
 //   --shape=MxNxK       a single, possibly non-square shape (repeatable;
 //                       gemv uses M x N)
@@ -43,6 +46,7 @@ struct Options {
   std::string routine;
   std::string types = "d";
   std::string trans;  // empty: routine default
+  char side = 'L', uplo = 'L', diag = 'N';
   std::vector<Shape> shapes;
   double min_time = 0.5;  // per library and shape, over all rounds
   int rounds = 3;
@@ -54,6 +58,16 @@ using Libraries = std::vector<std::unique_ptr<BlasLibrary>>;
 template <typename T>
 constexpr bool kIsComplex =
     !std::is_same_v<T, float> && !std::is_same_v<T, double>;
+
+// Real type of T: float for float and std::complex<float>, etc.
+template <typename T>
+struct RealType {
+  using type = T;
+};
+template <typename T>
+struct RealType<std::complex<T>> {
+  using type = T;
+};
 
 // BLAS symbol name for the precision of T, e.g. Symbol<double>("gemm").
 template <typename T>
@@ -243,12 +257,186 @@ void BenchGemv(const Options& opt, const Libraries& libs) {
   }
 }
 
+// Random n x n matrix with a dominant diagonal (|diag| ~ n), so that
+// triangular solves stay well conditioned. Both triangles are filled.
+template <typename T>
+std::shared_ptr<std::vector<T>> DominantMatrix(int n, std::mt19937& rng) {
+  auto a =
+      std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * n, rng));
+  for (int i = 0; i < n; ++i)
+    (*a)[i + size_t(i) * n] += T(static_cast<typename RealType<T>::type>(n));
+  return a;
+}
+
+std::string Label(int m, int n) {
+  return std::to_string(m) + " x " + std::to_string(n);
+}
+
+template <typename T>
+void BenchSymm(const Options& opt, const Libraries& libs) {
+  const std::string symbol = Symbol<T>(kIsComplex<T> ? "hemm" : "symm");
+  PrintHeader<T>(libs, symbol + "  side=" + opt.side + " uplo=" + opt.uplo,
+                 "m x n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int ka = (opt.side == 'L') ? s.m : s.n;
+    const auto a = DominantMatrix<T>(ka, rng);
+    const auto b = std::make_shared<std::vector<T>>(
+        RandomVector<T>(size_t(s.m) * s.n, rng));
+    Case<T> c;
+    c.label = Label(s.m, s.n);
+    c.flops = (kIsComplex<T> ? 8.0 : 2.0) * s.m * s.n * ka;
+    c.initial_out = RandomVector<T>(size_t(s.m) * s.n, rng);
+    const char side = opt.side, uplo = opt.uplo;
+    c.call = [=](void* fn, T* out) {
+      using Fn = void (*)(const char*, const char*, const int*, const int*,
+                          const T*, const T*, const int*, const T*, const int*,
+                          const T*, T*, const int*);
+      const T alpha = T(1), beta = T(0.5);
+      reinterpret_cast<Fn>(fn)(&side, &uplo, &s.m, &s.n, &alpha, a->data(), &ka,
+                               b->data(), &s.m, &beta, out, &s.m);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+template <typename T>
+void BenchSyrk(const Options& opt, const Libraries& libs) {
+  const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
+  const std::string symbol = Symbol<T>("syrk");
+  PrintHeader<T>(libs, symbol + "  uplo=" + opt.uplo + " trans=" + trans,
+                 "n x k");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    // C is n x n; A is n x k (trans = N) or k x n.
+    const int n = s.m, k = s.k;
+    const int lda = (trans == 'N') ? n : k;
+    const auto a =
+        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
+    Case<T> c;
+    c.label = Label(n, k);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * n * (n + 1.0) * k;
+    c.initial_out = RandomVector<T>(size_t(n) * n, rng);
+    const char uplo = opt.uplo;
+    c.call = [=](void* fn, T* out) {
+      using Fn =
+          void (*)(const char*, const char*, const int*, const int*, const T*,
+                   const T*, const int*, const T*, T*, const int*);
+      const T alpha = T(1), beta = T(0.5);
+      reinterpret_cast<Fn>(fn)(&uplo, &trans, &n, &k, &alpha, a->data(), &lda,
+                               &beta, out, &n);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+// TRMM and TRSM. Both overwrite B, so every call starts from a fresh copy of
+// the input (the copy is cheap compared to the O(m^2 n) work).
+template <typename T>
+void BenchTriangular3(const Options& opt, const Libraries& libs,
+                      const char* routine) {
+  const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
+  const std::string symbol = Symbol<T>(routine);
+  PrintHeader<T>(libs,
+                 symbol + "  side=" + opt.side + " uplo=" + opt.uplo +
+                     " trans=" + trans + " diag=" + opt.diag,
+                 "m x n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int ka = (opt.side == 'L') ? s.m : s.n;
+    const auto a = DominantMatrix<T>(ka, rng);
+    const auto b0 = std::make_shared<std::vector<T>>(
+        RandomVector<T>(size_t(s.m) * s.n, rng));
+    Case<T> c;
+    c.label = Label(s.m, s.n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * s.m * s.n * ka;
+    c.initial_out = *b0;
+    const char side = opt.side, uplo = opt.uplo, diag = opt.diag;
+    c.call = [=](void* fn, T* out) {
+      using Fn = void (*)(const char*, const char*, const char*, const char*,
+                          const int*, const int*, const T*, const T*,
+                          const int*, T*, const int*);
+      const T alpha = T(1);
+      std::copy(b0->begin(), b0->end(), out);
+      reinterpret_cast<Fn>(fn)(&side, &uplo, &trans, &diag, &s.m, &s.n, &alpha,
+                               a->data(), &ka, out, &s.m);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+template <typename T>
+void BenchSymv(const Options& opt, const Libraries& libs) {
+  const std::string symbol = Symbol<T>(kIsComplex<T> ? "hemv" : "symv");
+  PrintHeader<T>(libs, symbol + "  uplo=" + opt.uplo, "n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.m, inc = 1;
+    const auto a = DominantMatrix<T>(n, rng);
+    const auto x = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+    Case<T> c;
+    c.label = std::to_string(n);
+    c.flops = (kIsComplex<T> ? 8.0 : 2.0) * n * n;
+    c.initial_out = RandomVector<T>(n, rng);
+    const char uplo = opt.uplo;
+    c.call = [=](void* fn, T* out) {
+      using Fn =
+          void (*)(const char*, const int*, const T*, const T*, const int*,
+                   const T*, const int*, const T*, T*, const int*);
+      const T alpha = T(1), beta = T(0.5);
+      reinterpret_cast<Fn>(fn)(&uplo, &n, &alpha, a->data(), &n, x->data(),
+                               &inc, &beta, out, &inc);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+template <typename T>
+void BenchTrmv(const Options& opt, const Libraries& libs) {
+  const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
+  const std::string symbol = Symbol<T>("trmv");
+  PrintHeader<T>(
+      libs,
+      symbol + "  uplo=" + opt.uplo + " trans=" + trans + " diag=" + opt.diag,
+      "n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.m, inc = 1;
+    const auto a = DominantMatrix<T>(n, rng);
+    const auto x0 = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+    Case<T> c;
+    c.label = std::to_string(n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * n * n;
+    c.initial_out = *x0;
+    const char uplo = opt.uplo, diag = opt.diag;
+    c.call = [=](void* fn, T* out) {
+      using Fn = void (*)(const char*, const char*, const char*, const int*,
+                          const T*, const int*, T*, const int*);
+      // Restart from x0 so that repeated products stay bounded.
+      std::copy(x0->begin(), x0->end(), out);
+      reinterpret_cast<Fn>(fn)(&uplo, &trans, &diag, &n, a->data(), &n, out,
+                               &inc);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 template <typename T>
 bool RunRoutine(const Options& opt, const Libraries& libs) {
   if (opt.routine == "gemm") {
     BenchGemm<T>(opt, libs);
   } else if (opt.routine == "gemv") {
     BenchGemv<T>(opt, libs);
+  } else if (opt.routine == "symm") {
+    BenchSymm<T>(opt, libs);
+  } else if (opt.routine == "syrk") {
+    BenchSyrk<T>(opt, libs);
+  } else if (opt.routine == "trmm" || opt.routine == "trsm") {
+    BenchTriangular3<T>(opt, libs, opt.routine.c_str());
+  } else if (opt.routine == "symv") {
+    BenchSymv<T>(opt, libs);
+  } else if (opt.routine == "trmv") {
+    BenchTrmv<T>(opt, libs);
   } else {
     fprintf(stderr, "Unknown routine: %s\n", opt.routine.c_str());
     return false;
@@ -276,7 +464,7 @@ std::string ExeDirectory(const char* argv0) {
 int Main(int argc, char** argv) {
   if (argc < 2 || argv[1][0] == '-') {
     fprintf(stderr,
-            "Usage: %s <gemm|gemv> [--types=sdcz] [--trans=..] "
+            "Usage: %s <routine> [--types=sdcz] [--trans=..] "
             "[--sizes=..] [--shape=MxNxK] [name=library ...]\n",
             argv[0]);
     return 1;
@@ -296,6 +484,12 @@ int Main(int argc, char** argv) {
       opt.types = arg + 8;
     } else if (strncmp(arg, "--trans=", 8) == 0) {
       opt.trans = arg + 8;
+    } else if (strncmp(arg, "--side=", 7) == 0) {
+      opt.side = arg[7];
+    } else if (strncmp(arg, "--uplo=", 7) == 0) {
+      opt.uplo = arg[7];
+    } else if (strncmp(arg, "--diag=", 7) == 0) {
+      opt.diag = arg[7];
     } else if (strncmp(arg, "--sizes=", 8) == 0) {
       for (int n : ParseInts(arg + 8, ',')) opt.shapes.push_back({n, n, n});
     } else if (strncmp(arg, "--shape=", 8) == 0) {

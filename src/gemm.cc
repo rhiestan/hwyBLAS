@@ -15,8 +15,8 @@ namespace HWY_NAMESPACE {
 
 void GemmF32(const GemmProblem<float>& g) { BlockedGemm(g); }
 void GemmF64(const GemmProblem<double>& g) { BlockedGemm(g); }
-void GemmC32(const GemmProblem<std::complex<float>>& g) { BlockedGemm(g); }
-void GemmC64(const GemmProblem<std::complex<double>>& g) { BlockedGemm(g); }
+void GemmC32(const GemmProblem<c32>& g) { BlockedGemm(g); }
+void GemmC64(const GemmProblem<c64>& g) { BlockedGemm(g); }
 
 const char* TargetName() { return hwy::TargetName(HWY_TARGET); }
 
@@ -25,40 +25,45 @@ const char* TargetName() { return hwy::TargetName(HWY_TARGET); }
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
+#include "src/api.h"
+
 namespace hwyblas {
 
-HWY_EXPORT(GemmF32);
-HWY_EXPORT(GemmF64);
-HWY_EXPORT(GemmC32);
-HWY_EXPORT(GemmC64);
+HWYBLAS_EXPORT_BY_TYPE(Gemm);
 HWY_EXPORT(TargetName);
 
 template <typename T>
-void Dispatch(const GemmProblem<T>& g) {
-  if constexpr (std::is_same_v<T, float>) {
-    HWY_DYNAMIC_DISPATCH(GemmF32)(g);
-  } else if constexpr (std::is_same_v<T, double>) {
-    HWY_DYNAMIC_DISPATCH(GemmF64)(g);
-  } else if constexpr (std::is_same_v<T, std::complex<float>>) {
-    HWY_DYNAMIC_DISPATCH(GemmC32)(g);
-  } else {
-    HWY_DYNAMIC_DISPATCH(GemmC64)(g);
-  }
+void RunGemm(const GemmProblem<T>& g) {
+  HWYBLAS_DISPATCH_BY_TYPE(T, Gemm, g);
 }
+template void RunGemm(const GemmProblem<float>&);
+template void RunGemm(const GemmProblem<double>&);
+template void RunGemm(const GemmProblem<std::complex<float>>&);
+template void RunGemm(const GemmProblem<std::complex<double>>&);
 
-// C := beta * C for an m x n column-major matrix. beta == 0 sets C to zero
-// without reading it (so NaN/Inf in C are not propagated).
 template <typename T>
-void ScaleMatrix(size_t m, size_t n, T beta, T* c, size_t ldc) {
+void ScaleMatrix(size_t m, size_t n, T beta, T* c, size_t ldc, Part part,
+                 bool real_diagonal) {
   for (size_t j = 0; j < n; ++j) {
     T* cj = c + j * ldc;
+    // Row range of column j that belongs to `part`.
+    const size_t begin = (part == Part::kLower) ? HWY_MIN(j, m) : 0;
+    const size_t end = (part == Part::kUpper) ? HWY_MIN(j + 1, m) : m;
+    // HERK: the imaginary part of the diagonal is neither read nor kept.
+    if (real_diagonal && j < m) cj[j] = T(std::real(cj[j]));
     if (IsZero(beta)) {
-      for (size_t i = 0; i < m; ++i) cj[i] = T(0);
+      for (size_t i = begin; i < end; ++i) cj[i] = T(0);
     } else {
-      for (size_t i = 0; i < m; ++i) cj[i] *= beta;
+      for (size_t i = begin; i < end; ++i) cj[i] *= beta;
     }
   }
 }
+template void ScaleMatrix(size_t, size_t, float, float*, size_t, Part, bool);
+template void ScaleMatrix(size_t, size_t, double, double*, size_t, Part, bool);
+template void ScaleMatrix(size_t, size_t, std::complex<float>,
+                          std::complex<float>*, size_t, Part, bool);
+template void ScaleMatrix(size_t, size_t, std::complex<double>,
+                          std::complex<double>*, size_t, Part, bool);
 
 // Validates the Fortran arguments, handles trivial cases and dispatches.
 template <typename T>
@@ -115,26 +120,18 @@ void Gemm(const char* name, const char* transa, const char* transb,
   g.k = k;
   g.alpha = alpha;
   g.beta = beta;
-  g.a = a;
-  g.b = b;
   g.c = c;
   g.ldc = ldc;
-  // op(A)(i, p): A(i, p) = a[i + p * lda], or A(p, i) = a[p + i * lda].
-  g.a_rs = (op_a == Op::kNoTrans) ? 1 : lda;
-  g.a_cs = (op_a == Op::kNoTrans) ? lda : 1;
-  g.conj_a = (op_a == Op::kConjTrans);
-  // op(B)(p, j): B(p, j) = b[p + j * ldb], or B(j, p) = b[j + p * ldb].
-  g.b_rs = (op_b == Op::kNoTrans) ? 1 : ldb;
-  g.b_cs = (op_b == Op::kNoTrans) ? ldb : 1;
-  g.conj_b = (op_b == Op::kConjTrans);
-  Dispatch(g);
+  g.a = GeneralOperand(op_a, a, lda);
+  g.b = GeneralOperand(op_b, b, ldb);
+  RunGemm(g);
 }
 
 }  // namespace hwyblas
 
 using hwyblas::blasint;
-using c32 = std::complex<float>;
-using c64 = std::complex<double>;
+using hwyblas::C32;
+using hwyblas::C64;
 
 extern "C" {
 
@@ -161,10 +158,8 @@ HWYBLAS_API void cgemm_(const char* transa, const char* transb,
                         const float* alpha, const float* a, const blasint* lda,
                         const float* b, const blasint* ldb, const float* beta,
                         float* c, const blasint* ldc) {
-  hwyblas::Gemm(
-      "CGEMM", transa, transb, m, n, k, reinterpret_cast<const c32*>(alpha),
-      reinterpret_cast<const c32*>(a), lda, reinterpret_cast<const c32*>(b),
-      ldb, reinterpret_cast<const c32*>(beta), reinterpret_cast<c32*>(c), ldc);
+  hwyblas::Gemm("CGEMM", transa, transb, m, n, k, C32(alpha), C32(a), lda,
+                C32(b), ldb, C32(beta), C32(c), ldc);
 }
 
 HWYBLAS_API void zgemm_(const char* transa, const char* transb,
@@ -172,10 +167,8 @@ HWYBLAS_API void zgemm_(const char* transa, const char* transb,
                         const double* alpha, const double* a,
                         const blasint* lda, const double* b, const blasint* ldb,
                         const double* beta, double* c, const blasint* ldc) {
-  hwyblas::Gemm(
-      "ZGEMM", transa, transb, m, n, k, reinterpret_cast<const c64*>(alpha),
-      reinterpret_cast<const c64*>(a), lda, reinterpret_cast<const c64*>(b),
-      ldb, reinterpret_cast<const c64*>(beta), reinterpret_cast<c64*>(c), ldc);
+  hwyblas::Gemm("ZGEMM", transa, transb, m, n, k, C64(alpha), C64(a), lda,
+                C64(b), ldb, C64(beta), C64(c), ldc);
 }
 
 HWYBLAS_API const char* hwyblas_target_name(void) {

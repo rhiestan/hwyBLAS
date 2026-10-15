@@ -114,24 +114,6 @@ void CheckGemm(const GemmCase& tc, T alpha, T beta, uint64_t seed) {
 }
 
 template <typename T>
-std::vector<char> Ops() {
-  if constexpr (IsComplex<T>::value) {
-    return {'N', 'T', 'C'};
-  } else {
-    return {'N', 'T'};
-  }
-}
-
-template <typename T>
-T MakeScalar(double re, double im) {
-  if constexpr (IsComplex<T>::value) {
-    return T(static_cast<RealT<T>>(re), static_cast<RealT<T>>(im));
-  } else {
-    return static_cast<T>(re);
-  }
-}
-
-template <typename T>
 class GemmTest : public ::testing::Test {};
 
 using ScalarTypes =
