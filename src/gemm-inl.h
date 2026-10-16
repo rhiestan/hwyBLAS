@@ -16,6 +16,9 @@
 // beta is applied during the first pass over K only (pc == 0); later passes
 // accumulate into C with beta = 1.
 //
+// When m is small, B is not packed: the micro-kernels read op(B) in place
+// (see UseDirectB), which makes small products much cheaper.
+//
 // The same driver serves the other level 3 routines (see GemmProblem):
 //   - Symmetric/Hermitian operands (SYMM, HEMM) only change the packing.
 //   - Triangular operands (TRMM) also restrict, per micro-tile, the range of
@@ -126,9 +129,29 @@ void MergeTile(const T* tmp, size_t ld_tmp, Part part, bool real_diagonal,
   }
 }
 
-// Requires m, n, k > 0 and alpha != 0 (callers handle the trivial cases).
+// Whether the micro-kernels read op(B) in place instead of packing it.
+//
+// Packing B costs O(k * n) and pays off over the m / MR micro-tiles that
+// reuse each panel, so it is skipped when m is small. Without packing, a
+// k step of the kernel reads one element from each of NR columns of op(B):
+// with a unit k stride (op(B) = B) these are NR sequential streams, which
+// the caches handle well even for large m. Otherwise each k step reads a
+// different row of B; with a power-of-two leading dimension those rows map
+// to few L1 sets and evict each other, so this is limited to smaller m.
+// The kernels do not conjugate, so a conjugated op(B) is always packed.
 template <typename T>
-void BlockedGemm(const GemmProblem<T>& g) {
+HWY_INLINE bool UseDirectB(const GemmProblem<T>& g) {
+  if (g.b.structure != Structure::kGeneral || g.part != Part::kAll ||
+      (IsComplex<T>::value && g.b.conj)) {
+    return false;
+  }
+  return g.m <= (g.b.rs == 1 ? 256 : 64);
+}
+
+// The driver; kDirectB selects whether op(B) is read in place (see
+// UseDirectB). Separate instantiations keep each one's code small.
+template <bool kDirectB, typename T>
+HWY_NOINLINE void BlockedGemmImpl(const GemmProblem<T>& g) {
   using K = GemmKernel<T>;
   constexpr size_t MR = K::kMR, NR = K::kNR;
   constexpr size_t MC = K::kMC, KC = K::kKC, NC = K::kNC;
@@ -140,8 +163,10 @@ void BlockedGemm(const GemmProblem<T>& g) {
   const size_t nc_max = HWY_MIN(NC, hwy::RoundUpTo(g.n, NR));
   T* HWY_RESTRICT packed_a = static_cast<T*>(
       ScratchBuffer(kScratchPackA, mc_max * kc_max * sizeof(T)));
-  T* HWY_RESTRICT packed_b = static_cast<T*>(
-      ScratchBuffer(kScratchPackB, nc_max * kc_max * sizeof(T)));
+  T* HWY_RESTRICT packed_b =
+      kDirectB ? nullptr
+               : static_cast<T*>(
+                     ScratchBuffer(kScratchPackB, nc_max * kc_max * sizeof(T)));
   const Operand<T> bt = Transposed(g.b);
   HWY_ALIGN T tmp[MR * NR];  // for micro-tiles crossing the diagonal of C
 
@@ -153,7 +178,7 @@ void BlockedGemm(const GemmProblem<T>& g) {
       const T beta = (pc == 0) ? g.beta : T(1);
 
       // op(B)[pc:pc+kc, jc:jc+nc]: panel rows are columns of op(B).
-      PackOperand<NR>(bt, jc, nc, pc, kc, packed_b);
+      if constexpr (!kDirectB) PackOperand<NR>(bt, jc, nc, pc, kc, packed_b);
 
       for (size_t ic = 0; ic < g.m; ic += MC) {
         const size_t mc = HWY_MIN(MC, g.m - ic);
@@ -164,7 +189,7 @@ void BlockedGemm(const GemmProblem<T>& g) {
         for (size_t jr = 0; jr < nc; jr += NR) {
           const size_t nr = HWY_MIN(NR, nc - jr);
           const size_t j0 = jc + jr;  // global column
-          const T* panel_b = packed_b + jr * kc;
+          const T* panel_b = kDirectB ? nullptr : packed_b + jr * kc;
           T* c_col = g.c + j0 * g.ldc + ic;
 
           for (size_t ir = 0; ir < mc; ir += MR) {
@@ -183,9 +208,15 @@ void BlockedGemm(const GemmProblem<T>& g) {
             if (k_end == k_begin && pc != 0) continue;  // nothing to add
 
             const T* a_panel = packed_a + ir * kc + k_begin * MR;
-            const T* b_panel = panel_b + k_begin * NR;
+            const T* b_panel = kDirectB ? nullptr : panel_b + k_begin * NR;
             const size_t k_len = k_end - k_begin;
-            if (coverage == TileCoverage::kInside) {
+            if constexpr (kDirectB) {  // implies coverage == kInside
+              const T* b_block = g.b.data +
+                                 static_cast<ptrdiff_t>(pc + k_begin) * g.b.rs +
+                                 static_cast<ptrdiff_t>(j0) * g.b.cs;
+              K::RunDirectB(k_len, a_panel, b_block, g.b.rs, g.b.cs, g.alpha,
+                            beta, c_col + ir, g.ldc, mr, nr);
+            } else if (coverage == TileCoverage::kInside) {
               K::Run(k_len, a_panel, b_panel, g.alpha, beta, c_col + ir, g.ldc,
                      mr, nr);
             } else {
@@ -197,6 +228,16 @@ void BlockedGemm(const GemmProblem<T>& g) {
         }
       }
     }
+  }
+}
+
+// Requires m, n, k > 0 and alpha != 0 (callers handle the trivial cases).
+template <typename T>
+void BlockedGemm(const GemmProblem<T>& g) {
+  if (UseDirectB(g)) {
+    BlockedGemmImpl<true>(g);
+  } else {
+    BlockedGemmImpl<false>(g);
   }
 }
 

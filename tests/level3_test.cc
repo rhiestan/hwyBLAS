@@ -1,5 +1,6 @@
 // Tests for the level 3 routines besides GEMM: SYMM, HEMM, SYRK, HERK,
-// SYR2K, HER2K, GEMMTR, TRMM and TRSM, against dense reference products computed in double precision.
+// SYR2K, HER2K, GEMMTR, TRMM and TRSM, against dense reference products
+// computed in double precision.
 //
 // Structured input matrices have NaN wherever BLAS must not read (see
 // StructuredMatrix), so any such read shows up as a mismatch.
@@ -476,11 +477,14 @@ TYPED_TEST(Level3Test, Trmm) {
 }
 
 // Checks the solution X of a TRSM through the residual op(A) X - alpha B,
-// which is small relative to |op(A)| |X| for a backward stable solver.
+// which is small relative to |op(A)| |X| for a backward stable solver. ldb
+// defaults to m + 2.
 template <typename T>
-void CheckTrsm(const TriCase& tc, int m, int n, T alpha, uint64_t seed) {
+void CheckTrsm(const TriCase& tc, int m, int n, T alpha, uint64_t seed,
+               int ldb = 0) {
   const int ka = (tc.side == 'L') ? m : n;
-  const int lda = ka + 1, ldb = m + 2;
+  const int lda = ka + 1;
+  if (ldb == 0) ldb = m + 2;
   const Shape shape =
       (tc.diag == 'U') ? Shape::kUnitTriangular : Shape::kTriangular;
   Random<T> rng(seed);
@@ -524,6 +528,11 @@ TYPED_TEST(Level3Test, Trsm) {
         CheckTrsm<T>(tc, m, 17, MakeScalar<T>(1.5, -0.5), seed++);
         CheckTrsm<T>(tc, 13, m, MakeScalar<T>(1.0, 0.0), seed++);
       }
+      // Leading dimension a multiple of 1 KiB: the right side then solves on
+      // copies of blocks of rows.
+      const int unit = static_cast<int>(1024 / sizeof(T));
+      CheckTrsm<T>(tc, 300, 45, MakeScalar<T>(0.5, 1.0), seed++,
+                   (300 + unit - 1) / unit * unit);
     }
   });
 }

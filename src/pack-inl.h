@@ -15,6 +15,7 @@
 #include "common.h"
 #include "gemm.h"
 #include "hwy/highway.h"
+#include "src/transpose-inl.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace hwyblas {
@@ -55,7 +56,16 @@ HWY_INLINE void PackPanel(size_t r, size_t kc, const T* HWY_RESTRICT src,
       dst += kR;
     }
   } else if (r == kR && ks == 1) {
-    // Each row is contiguous along k: gather one element from each row.
+    // Each row is contiguous along k: the panel is the transpose of the
+    // kc x kR column-major matrix with leading dimension rs. The vectorized
+    // transpose handles 4 rows at a time and only pays off without leftover
+    // rows (e.g. not for 6-row panels of B).
+    if constexpr (!kConj && kR % 4 == 0) {
+      if (rs > 0) {
+        Transpose(kc, kR, src, static_cast<size_t>(rs), dst, kR);
+        return;
+      }
+    }
     for (size_t p = 0; p < kc; ++p) {
       for (size_t i = 0; i < kR; ++i) {
         dst[i] = load(src + static_cast<ptrdiff_t>(i) * rs + p);

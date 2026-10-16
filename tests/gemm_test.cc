@@ -120,15 +120,17 @@ using ScalarTypes =
     ::testing::Types<float, double, std::complex<float>, std::complex<double>>;
 TYPED_TEST_SUITE(GemmTest, ScalarTypes);
 
-// All small shapes: exercises every partial-tile combination.
+// Small shapes: every column count up to two 12-column tiles, and row counts
+// around vector and tile boundaries, so that every edge-tile variant of the
+// micro-kernels runs.
 TYPED_TEST(GemmTest, SmallShapes) {
   using T = TypeParam;
   ForEachTarget([] {
     uint64_t seed = 1;
     for (char ta : Ops<T>()) {
       for (char tb : Ops<T>()) {
-        for (int m = 1; m <= 19; m += 3) {
-          for (int n = 1; n <= 15; n += 2) {
+        for (int m : {1, 3, 4, 5, 7, 8, 9, 13, 16, 17, 19, 24, 31, 33}) {
+          for (int n = 1; n <= 25; ++n) {
             for (int k : {1, 2, 7, 16}) {
               CheckGemm<T>({ta, tb, m, n, k, 0}, MakeScalar<T>(1.5, -0.5),
                            MakeScalar<T>(0.75, 0.25), seed++);

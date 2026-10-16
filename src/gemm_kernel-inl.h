@@ -26,6 +26,7 @@
 
 #include <complex>
 #include <type_traits>
+#include <utility>
 
 #include "common.h"
 #include "hwy/highway.h"
@@ -51,6 +52,10 @@ constexpr size_t kVectorRegs = 16;
 //
 // Tile: MR = kMV vectors (along M) x NR columns. Per k step it loads kMV
 // vectors of A, broadcasts NR elements of B and issues kMV * NR FMAs.
+//
+// Edge tiles with fewer than MR rows or NR columns run a smaller
+// instantiation of the same loop, with only as many row vectors and columns
+// as needed, so that small matrices do not pay for a padded full tile.
 
 template <typename T>
 struct RealGemmKernel {
@@ -72,49 +77,123 @@ struct RealGemmKernel {
                              const T* HWY_RESTRICT b, T alpha, T beta,
                              T* HWY_RESTRICT c, size_t ldc, size_t m,
                              size_t n) {
+    Dispatch<false>(kc, a, b, 0, 0, alpha, beta, c, ldc, m, n);
+  }
+
+  // As Run, but B is read in place instead of from a packed panel: element
+  // (p, j) of the kc x n block of op(B) is b[p * b_ks + j * b_cs].
+  static HWY_INLINE void RunDirectB(size_t kc, const T* HWY_RESTRICT a,
+                                    const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                    ptrdiff_t b_cs, T alpha, T beta,
+                                    T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                    size_t n) {
+    // A unit k stride is common (op(B) = B) and worth a constant.
+    if (b_ks == 1) {
+      Dispatch<true>(kc, a, b, 1, b_cs, alpha, beta, c, ldc, m, n);
+    } else {
+      Dispatch<true>(kc, a, b, b_ks, b_cs, alpha, beta, c, ldc, m, n);
+    }
+  }
+
+ private:
+  // Runs the instantiation for an m x n tile (m <= kMR, n <= kNR).
+  template <bool kDirectB>
+  static HWY_INLINE void Dispatch(size_t kc, const T* HWY_RESTRICT a,
+                                  const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                  ptrdiff_t b_cs, T alpha, T beta,
+                                  T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                  size_t n) {
+    static_assert(kMV == 2, "Dispatch assumes two vectors per column");
+    const auto cols = std::make_index_sequence<kNR - 1>();
+    if (HWY_LIKELY(m > kN)) {
+      DispatchCols<kDirectB, 2>(cols, kc, a, b, b_ks, b_cs, alpha, beta, c, ldc,
+                                m, n);
+    } else {
+      DispatchCols<kDirectB, 1>(cols, kc, a, b, b_ks, b_cs, alpha, beta, c, ldc,
+                                m, n);
+    }
+  }
+
+  // Runs Tile<..., kCols = n>; kJ + 1 enumerates the partial column counts.
+  template <bool kDirectB, size_t kRowV, size_t... kJ>
+  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...>, size_t kc,
+                                      const T* HWY_RESTRICT a,
+                                      const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                      ptrdiff_t b_cs, T alpha, T beta,
+                                      T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                      size_t n) {
+    if (HWY_LIKELY(n == kNR)) {
+      return Tile<kDirectB, kRowV, kNR>(kc, a, b, b_ks, b_cs, alpha, beta, c,
+                                        ldc, m);
+    }
+    (void)((n == kJ + 1 && (Tile<kDirectB, kRowV, kJ + 1>(
+                                kc, a, b, b_ks, b_cs, alpha, beta, c, ldc, m),
+                            true)) ||
+           ...);
+  }
+
+  // Computes an m x kCols tile with kRowV vectors per column, where
+  // (kRowV - 1) * kN < m <= kRowV * kN. Panels of A have kMR rows; only the
+  // first kRowV vectors of each step are read.
+  template <bool kDirectB, size_t kRowV, size_t kCols>
+  static HWY_INLINE void Tile(size_t kc, const T* HWY_RESTRICT a,
+                              const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                              ptrdiff_t b_cs, T alpha, T beta,
+                              T* HWY_RESTRICT c, size_t ldc, size_t m) {
     const D d;
 
-    V acc[kNR][kMV];
-    HWY_UNROLL(16)
-    for (size_t j = 0; j < kNR; ++j) {
+    // Direct B: one pointer per column.
+    const T* HWY_RESTRICT b_col[kCols];
+    if constexpr (kDirectB) {
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) acc[j][v] = hn::Zero(d);
+      for (size_t j = 0; j < kCols; ++j) {
+        b_col[j] = b + static_cast<ptrdiff_t>(j) * b_cs;
+      }
+    }
+
+    V acc[kCols][kRowV];
+    HWY_UNROLL(16)
+    for (size_t j = 0; j < kCols; ++j) {
+      HWY_UNROLL(16)
+      for (size_t v = 0; v < kRowV; ++v) acc[j][v] = hn::Zero(d);
     }
 
     for (size_t p = 0; p < kc; ++p) {
-      V va[kMV];
+      V va[kRowV];
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) va[v] = hn::Load(d, a + v * kN);
+      for (size_t v = 0; v < kRowV; ++v) va[v] = hn::Load(d, a + v * kN);
       HWY_UNROLL(16)
-      for (size_t j = 0; j < kNR; ++j) {
-        const V vb = hn::Set(d, b[j]);
+      for (size_t j = 0; j < kCols; ++j) {
+        const V vb = hn::Set(
+            d, kDirectB ? b_col[j][static_cast<ptrdiff_t>(p) * b_ks] : b[j]);
         HWY_UNROLL(16)
-        for (size_t v = 0; v < kMV; ++v) {
+        for (size_t v = 0; v < kRowV; ++v) {
           acc[j][v] = hn::MulAdd(va[v], vb, acc[j][v]);
         }
       }
       a += kMR;
-      b += kNR;
+      if constexpr (!kDirectB) b += kNR;
     }
 
-    Store(d, acc, alpha, beta, c, ldc, m, n);
+    Store(d, acc, alpha, beta, c, ldc, m);
   }
 
-  // Writes C = alpha * acc + beta * C. beta == 0 must not read C.
-  static HWY_INLINE void Store(D d, const V (&acc)[kNR][kMV], T alpha, T beta,
-                               T* HWY_RESTRICT c, size_t ldc, size_t m,
-                               size_t n) {
+  // Writes C = alpha * acc + beta * C for m rows. beta == 0 must not read C.
+  template <size_t kRowV, size_t kCols>
+  static HWY_INLINE void Store(D d, const V (&acc)[kCols][kRowV], T alpha,
+                               T beta, T* HWY_RESTRICT c, size_t ldc,
+                               size_t m) {
     const V valpha = hn::Set(d, alpha);
     const V vbeta = hn::Set(d, beta);
     const bool beta_zero = IsZero(beta);
     const bool beta_one = IsOne(beta);
 
-    if (HWY_LIKELY(m == kMR && n == kNR)) {
+    if (HWY_LIKELY(m == kRowV * kN)) {
       HWY_UNROLL(16)
-      for (size_t j = 0; j < kNR; ++j) {
+      for (size_t j = 0; j < kCols; ++j) {
         T* HWY_RESTRICT cj = c + j * ldc;
         HWY_UNROLL(16)
-        for (size_t v = 0; v < kMV; ++v) {
+        for (size_t v = 0; v < kRowV; ++v) {
           V r = hn::Mul(acc[j][v], valpha);
           if (beta_one) {
             r = hn::Add(r, hn::LoadU(d, cj + v * kN));
@@ -127,15 +206,13 @@ struct RealGemmKernel {
       return;
     }
 
-    // Partial tile: masked loads/stores for the rows, skip excess columns.
+    // Partial last vector: masked loads/stores.
     HWY_UNROLL(16)
-    for (size_t j = 0; j < kNR; ++j) {
-      if (j >= n) break;
+    for (size_t j = 0; j < kCols; ++j) {
       T* HWY_RESTRICT cj = c + j * ldc;
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) {
+      for (size_t v = 0; v < kRowV; ++v) {
         const size_t row = v * kN;
-        if (row >= m) break;
         const size_t count = HWY_MIN(kN, m - row);
         V r = hn::Mul(acc[j][v], valpha);
         if (!beta_zero) {
@@ -179,52 +256,130 @@ struct ComplexGemmKernel {
   static constexpr size_t kMC = (sizeof(R) == 4 ? 96 : 64) / kMR * kMR;
   static constexpr size_t kNC = 2040 / kNR * kNR;
 
-  static HWY_INLINE void Run(size_t kc, const T* HWY_RESTRICT a_complex,
-                             const T* HWY_RESTRICT b_complex, T alpha, T beta,
-                             T* HWY_RESTRICT c_complex, size_t ldc, size_t m,
+  static HWY_INLINE void Run(size_t kc, const T* HWY_RESTRICT a,
+                             const T* HWY_RESTRICT b, T alpha, T beta,
+                             T* HWY_RESTRICT c, size_t ldc, size_t m,
                              size_t n) {
+    Dispatch<false>(kc, a, b, 0, 0, alpha, beta, c, ldc, m, n);
+  }
+
+  // As Run, but B is read in place instead of from a packed panel: element
+  // (p, j) of the kc x n block of op(B) is b[p * b_ks + j * b_cs]. op(B) must
+  // not be conjugated.
+  static HWY_INLINE void RunDirectB(size_t kc, const T* HWY_RESTRICT a,
+                                    const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                    ptrdiff_t b_cs, T alpha, T beta,
+                                    T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                    size_t n) {
+    // A unit k stride is common (op(B) = B) and worth a constant.
+    if (b_ks == 1) {
+      Dispatch<true>(kc, a, b, 1, b_cs, alpha, beta, c, ldc, m, n);
+    } else {
+      Dispatch<true>(kc, a, b, b_ks, b_cs, alpha, beta, c, ldc, m, n);
+    }
+  }
+
+ private:
+  // Runs the instantiation for an m x n tile (m <= kMR, n <= kNR).
+  template <bool kDirectB>
+  static HWY_INLINE void Dispatch(size_t kc, const T* HWY_RESTRICT a,
+                                  const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                  ptrdiff_t b_cs, T alpha, T beta,
+                                  T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                  size_t n) {
+    static_assert(kMV == 2, "Dispatch assumes two vectors per column");
+    const auto cols = std::make_index_sequence<kNR - 1>();
+    if (HWY_LIKELY(2 * m > kN)) {
+      DispatchCols<kDirectB, 2>(cols, kc, a, b, b_ks, b_cs, alpha, beta, c, ldc,
+                                m, n);
+    } else {
+      DispatchCols<kDirectB, 1>(cols, kc, a, b, b_ks, b_cs, alpha, beta, c, ldc,
+                                m, n);
+    }
+  }
+
+  // Runs Tile<..., kCols = n>; kJ + 1 enumerates the partial column counts.
+  template <bool kDirectB, size_t kRowV, size_t... kJ>
+  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...>, size_t kc,
+                                      const T* HWY_RESTRICT a,
+                                      const T* HWY_RESTRICT b, ptrdiff_t b_ks,
+                                      ptrdiff_t b_cs, T alpha, T beta,
+                                      T* HWY_RESTRICT c, size_t ldc, size_t m,
+                                      size_t n) {
+    if (HWY_LIKELY(n == kNR)) {
+      return Tile<kDirectB, kRowV, kNR>(kc, a, b, b_ks, b_cs, alpha, beta, c,
+                                        ldc, m);
+    }
+    (void)((n == kJ + 1 && (Tile<kDirectB, kRowV, kJ + 1>(
+                                kc, a, b, b_ks, b_cs, alpha, beta, c, ldc, m),
+                            true)) ||
+           ...);
+  }
+
+  // Computes an m x kCols tile with kRowV vectors per column (m complex rows
+  // span at most kRowV vectors). Panels of A have kMR rows; only the first
+  // kRowV vectors of each step are read.
+  template <bool kDirectB, size_t kRowV, size_t kCols>
+  static HWY_INLINE void Tile(size_t kc, const T* HWY_RESTRICT a_complex,
+                              const T* HWY_RESTRICT b_complex, ptrdiff_t b_ks,
+                              ptrdiff_t b_cs, T alpha, T beta,
+                              T* HWY_RESTRICT c_complex, size_t ldc, size_t m) {
     const D d;
     // Work on the underlying reals: a k step of a panel spans 2 * kMR reals.
     const R* HWY_RESTRICT a = reinterpret_cast<const R*>(a_complex);
     const R* HWY_RESTRICT b = reinterpret_cast<const R*>(b_complex);
 
-    V acc_re[kNR][kMV];
-    V acc_im[kNR][kMV];
-    HWY_UNROLL(16)
-    for (size_t j = 0; j < kNR; ++j) {
+    // Direct B: one pointer per column; strides in reals.
+    const R* HWY_RESTRICT b_col[kCols];
+    if constexpr (kDirectB) {
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) {
+      for (size_t j = 0; j < kCols; ++j) {
+        b_col[j] = b + 2 * static_cast<ptrdiff_t>(j) * b_cs;
+      }
+    }
+    // Returns the real (part 0) or imaginary (part 1) part of B(p, j).
+    const auto b_at = [&](size_t p, size_t j, size_t part) HWY_ATTR {
+      return kDirectB ? b_col[j][2 * static_cast<ptrdiff_t>(p) * b_ks + part]
+                      : b[2 * j + part];
+    };
+
+    V acc_re[kCols][kRowV];
+    V acc_im[kCols][kRowV];
+    HWY_UNROLL(16)
+    for (size_t j = 0; j < kCols; ++j) {
+      HWY_UNROLL(16)
+      for (size_t v = 0; v < kRowV; ++v) {
         acc_re[j][v] = hn::Zero(d);
         acc_im[j][v] = hn::Zero(d);
       }
     }
 
     for (size_t p = 0; p < kc; ++p) {
-      V va[kMV];
+      V va[kRowV];
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) va[v] = hn::Load(d, a + v * kN);
+      for (size_t v = 0; v < kRowV; ++v) va[v] = hn::Load(d, a + v * kN);
       // Real and imaginary parts are processed one after the other so that
       // only one broadcast register is live: with 16 registers the tile
       // uses 12 accumulators + kMV for A + 1 for B.
       HWY_UNROLL(16)
-      for (size_t j = 0; j < kNR; ++j) {
-        const V b_re = hn::Set(d, b[2 * j]);
+      for (size_t j = 0; j < kCols; ++j) {
+        const V b_re = hn::Set(d, b_at(p, j, 0));
         HWY_UNROLL(16)
-        for (size_t v = 0; v < kMV; ++v) {
+        for (size_t v = 0; v < kRowV; ++v) {
           acc_re[j][v] = hn::MulAdd(va[v], b_re, acc_re[j][v]);
         }
-        const V b_im = hn::Set(d, b[2 * j + 1]);
+        const V b_im = hn::Set(d, b_at(p, j, 1));
         HWY_UNROLL(16)
-        for (size_t v = 0; v < kMV; ++v) {
+        for (size_t v = 0; v < kRowV; ++v) {
           acc_im[j][v] = hn::MulAdd(va[v], b_im, acc_im[j][v]);
         }
       }
       a += 2 * kMR;
-      b += 2 * kNR;
+      if constexpr (!kDirectB) b += 2 * kNR;
     }
 
     Store(d, acc_re, acc_im, alpha, beta, reinterpret_cast<R*>(c_complex), ldc,
-          m, n);
+          m);
   }
 
   // Returns the complex product of each (re, im) lane pair of v with the
@@ -234,24 +389,23 @@ struct ComplexGemmKernel {
                       hn::Mul(hn::Reverse2(d, v), hn::Set(d, s.imag())));
   }
 
-  // Writes C = alpha * (A * B) + beta * C, where c points to the reals of C
-  // (column j starts at c + 2 * j * ldc). beta == 0 must not read C.
-  static HWY_INLINE void Store(D d, const V (&acc_re)[kNR][kMV],
-                               const V (&acc_im)[kNR][kMV], T alpha, T beta,
-                               R* HWY_RESTRICT c, size_t ldc, size_t m,
-                               size_t n) {
+  // Writes C = alpha * (A * B) + beta * C for m rows, where c points to the
+  // reals of C (column j starts at c + 2 * j * ldc). beta == 0 must not read
+  // C.
+  template <size_t kRowV, size_t kCols>
+  static HWY_INLINE void Store(D d, const V (&acc_re)[kCols][kRowV],
+                               const V (&acc_im)[kCols][kRowV], T alpha, T beta,
+                               R* HWY_RESTRICT c, size_t ldc, size_t m) {
     const bool beta_zero = IsZero(beta);
     const bool beta_one = IsOne(beta);
     const size_t m_reals = 2 * m;
 
     HWY_UNROLL(16)
-    for (size_t j = 0; j < kNR; ++j) {
-      if (j >= n) break;
+    for (size_t j = 0; j < kCols; ++j) {
       R* HWY_RESTRICT cj = c + 2 * j * ldc;
       HWY_UNROLL(16)
-      for (size_t v = 0; v < kMV; ++v) {
+      for (size_t v = 0; v < kRowV; ++v) {
         const size_t row = v * kN;  // in reals
-        if (row >= m_reals) break;
         const size_t count = HWY_MIN(kN, m_reals - row);
         const V ab = hn::AddSub(acc_re[j][v], hn::Reverse2(d, acc_im[j][v]));
         V r = MulScalar(d, ab, alpha);
