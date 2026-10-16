@@ -131,8 +131,10 @@ class CblasScope {
 // Returns false and reports an invalid layout (argument 1).
 bool ValidLayout(const char* name, CBLAS_LAYOUT layout) {
   if (layout == CblasRowMajor || layout == CblasColMajor) return true;
-  cblas_xerbla(1, name, "Illegal layout setting, %d\n",
-               static_cast<int>(layout));
+  if (!hwyblas::CallErrorHandler(name, 1)) {
+    cblas_xerbla(1, name, "Illegal layout setting, %d\n",
+                 static_cast<int>(layout));
+  }
   return false;
 }
 

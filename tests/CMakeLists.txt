@@ -41,3 +41,44 @@ if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
 else()
   message(STATUS "Eigen not found at ${HWYBLAS_EIGEN_DIR}: skipping Eigen test")
 endif()
+
+# Netlib CBLAS testers (C versions, from OpenBLAS's ctest/ directory), if an
+# OpenBLAS source checkout is available. They test all CBLAS routines in
+# column- and row-major storage, and the error exits.
+set(HWYBLAS_NETLIB_CBLAS_TESTS_DIR "${PROJECT_SOURCE_DIR}/../OpenBLAS/ctest"
+    CACHE PATH "Path to OpenBLAS's ctest/ directory (Netlib CBLAS testers)")
+if(EXISTS "${HWYBLAS_NETLIB_CBLAS_TESTS_DIR}/c_dblat3c.c")
+  set(_dir "${HWYBLAS_NETLIB_CBLAS_TESTS_DIR}")
+  foreach(t s d c z)
+    foreach(level 1 2 3)
+      set(_exe hwyblas_netlib_${t}cblat${level})
+      set(_sources "${_dir}/c_${t}blat${level}c.c" "${_dir}/c_${t}blas${level}.c")
+      if(NOT level EQUAL 1)
+        list(APPEND _sources "${_dir}/c_${t}${level}chke.c" "${_dir}/auxiliary.c"
+             "${_dir}/constant.c" netlib/xerbla_hook.c)
+      endif()
+      add_executable(${_exe} ${_sources})
+      # netlib/ provides the common.h and cblas.h the testers include.
+      target_include_directories(${_exe} PRIVATE netlib "${_dir}")
+      # ADD_: Fortran-style names with a trailing underscore.
+      target_compile_definitions(${_exe} PRIVATE ADD_ CBLAS _CRT_SECURE_NO_WARNINGS)
+      if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        # Machine-translated Fortran: silence its warnings.
+        target_compile_options(${_exe} PRIVATE -w)
+      elseif(MSVC)
+        target_compile_options(${_exe} PRIVATE /w)
+      endif()
+      target_link_libraries(${_exe} PRIVATE hwyblas::hwyblas)
+      set(_run -DEXE=$<TARGET_FILE:${_exe}>)
+      if(NOT level EQUAL 1)
+        list(APPEND _run "-DINPUT=${_dir}/${t}in${level}")
+      endif()
+      add_test(NAME NetlibCblas_${t}blat${level}
+               COMMAND ${CMAKE_COMMAND} ${_run}
+                       -P "${CMAKE_CURRENT_SOURCE_DIR}/netlib/run_tester.cmake")
+    endforeach()
+  endforeach()
+else()
+  message(STATUS "Netlib CBLAS testers not found at "
+                 "${HWYBLAS_NETLIB_CBLAS_TESTS_DIR}: skipping them")
+endif()

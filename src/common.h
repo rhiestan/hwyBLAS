@@ -88,8 +88,13 @@ inline bool DecodeOp(char c, Op* op) {
 }
 
 // Reports an invalid argument via xerbla_ (`info` is the 1-based position),
-// or via cblas_xerbla while a CBLAS function runs (see CblasContext).
+// or via cblas_xerbla while a CBLAS function runs (see CblasContext); or via
+// the handler installed with hwyblas_set_error_handler.
 void ReportError(const char* routine, blasint info);
+
+// Calls the handler installed with hwyblas_set_error_handler, if any, and
+// returns whether there was one.
+bool CallErrorHandler(const char* name, blasint position);
 
 // Set while a CBLAS function calls a Fortran-style routine, so that errors
 // are reported with the CBLAS name and argument positions: Fortran argument

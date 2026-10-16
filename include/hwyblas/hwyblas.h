@@ -886,6 +886,19 @@ HWYBLAS_API void zimatcopy_(const char* order, const char* trans,
 HWYBLAS_API void xerbla_(const char* srname, const hwyblas_int* info,
                          size_t srname_len);
 
+/* Handler for invalid arguments: `name` is the routine name, NUL-terminated
+ * ("DGEMM" for the Fortran-style routines, "cblas_dgemm" for the CBLAS
+ * functions), and `position` the 1-based position of the first invalid
+ * argument in that routine's argument list. */
+typedef void (*hwyblas_error_handler)(const char* name, hwyblas_int position);
+
+/* Installs a handler that is called instead of xerbla_ and cblas_xerbla,
+ * and returns the previous one. NULL restores the default (xerbla_ and
+ * cblas_xerbla). Useful where xerbla_ cannot be replaced at link time, e.g.
+ * with a DLL. */
+HWYBLAS_API hwyblas_error_handler
+hwyblas_set_error_handler(hwyblas_error_handler handler);
+
 /* ------------------------------------------------------------------------ */
 /* Introspection                                                             */
 

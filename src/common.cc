@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <atomic>
+
 #include "hwy/aligned_allocator.h"
 #include "hwy/targets.h"
 #include "hwyblas/cblas.h"
@@ -13,16 +15,30 @@ namespace hwyblas {
 
 namespace {
 thread_local const CblasContext* g_cblas_context = nullptr;
+std::atomic<hwyblas_error_handler> g_error_handler{nullptr};
 }  // namespace
 
 void SetCblasContext(const CblasContext* context) { g_cblas_context = context; }
 
+bool CallErrorHandler(const char* name, blasint position) {
+  const hwyblas_error_handler handler =
+      g_error_handler.load(std::memory_order_acquire);
+  if (handler == nullptr) return false;
+  handler(name, position);
+  return true;
+}
+
 void ReportError(const char* routine, blasint info) {
   if (const CblasContext* c = g_cblas_context) {
-    cblas_xerbla(c->positions[info - 1], c->name, "");
+    const blasint position = c->positions[info - 1];
+    if (!CallErrorHandler(c->name, position)) {
+      cblas_xerbla(position, c->name, "");
+    }
     return;
   }
-  xerbla_(routine, &info, strlen(routine));
+  if (!CallErrorHandler(routine, info)) {
+    xerbla_(routine, &info, strlen(routine));
+  }
 }
 
 void* ScratchBuffer(size_t slot, size_t bytes) {
@@ -58,6 +74,11 @@ extern "C" HWYBLAS_API void xerbla_(const char* srname, const hwyblas_int* info,
   fprintf(stderr,
           " ** On entry to %.*s parameter number %d had an illegal value\n",
           static_cast<int>(len), srname, static_cast<int>(*info));
+}
+
+extern "C" HWYBLAS_API hwyblas_error_handler
+hwyblas_set_error_handler(hwyblas_error_handler handler) {
+  return hwyblas::g_error_handler.exchange(handler, std::memory_order_acq_rel);
 }
 
 extern "C" HWYBLAS_API int64_t hwyblas_available_targets(void) {

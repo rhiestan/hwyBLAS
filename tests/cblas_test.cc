@@ -1131,5 +1131,37 @@ TEST(CblasErrors, Positions) {
             std::string::npos);
 }
 
+// An installed handler replaces xerbla_ and cblas_xerbla, for both the
+// Fortran-style routines and the CBLAS functions.
+std::vector<std::string> g_errors;
+void RecordError(const char* name, hwyblas_int position) {
+  g_errors.push_back(std::string(name) + ":" + std::to_string(position));
+}
+
+TEST(CblasErrors, Handler) {
+  static double a[16], b[16], c[16];
+  g_errors.clear();
+  EXPECT_EQ(hwyblas_set_error_handler(RecordError), nullptr);
+  const std::string printed = ErrorOf([] {
+    const int m = -1, n = 2;
+    const double one = 1;
+    dgemm_("N", "N", &m, &n, &n, &one, a, &n, b, &n, &one, c, &n);
+    cblas_dgemm(static_cast<CBLAS_LAYOUT>(0), CblasNoTrans, CblasNoTrans, 2, 2,
+                2, 1.0, a, 2, b, 2, 0.0, c, 2);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 4, 3, 2, 1.0, a, 1,
+                b, 3, 0.0, c, 3);
+  });
+  EXPECT_EQ(hwyblas_set_error_handler(nullptr), &RecordError);
+  EXPECT_EQ(printed, "");  // nothing went to the default handlers
+  EXPECT_EQ(g_errors, (std::vector<std::string>{"DGEMM:3", "cblas_dgemm:1",
+                                                "cblas_dgemm:9"}));
+  // The default handlers are back.
+  EXPECT_NE(ErrorOf([] {
+              cblas_dgemm(static_cast<CBLAS_LAYOUT>(0), CblasNoTrans,
+                          CblasNoTrans, 2, 2, 2, 1.0, a, 2, b, 2, 0.0, c, 2);
+            }).find("Parameter 1 to routine cblas_dgemm"),
+            std::string::npos);
+}
+
 }  // namespace
 }  // namespace hwyblas_test
