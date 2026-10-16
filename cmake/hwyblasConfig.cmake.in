@@ -1,0 +1,17 @@
+# CMake package configuration of hwyBLAS:
+#
+#   find_package(hwyblas 0.1 REQUIRED)
+#   target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
+
+@PACKAGE_INIT@
+
+# A static hwyBLAS built against an installed Highway package needs it at
+# link time. (Otherwise Highway is either inside the shared library or
+# installed with hwyBLAS as hwyblas::hwy.)
+if(@HWYBLAS_FIND_HWY_PACKAGE@)
+  include(CMakeFindDependencyMacro)
+  find_dependency(hwy)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/hwyblasTargets.cmake")
+check_required_components(hwyblas)

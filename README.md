@@ -58,7 +58,8 @@ Windows) is recommended**: MSVC works, but its code is 10-35% slower.
 
 Highway is taken from a sibling checkout `../highway` if present (override with
 `-DHWYBLAS_HWY_SOURCE_DIR=...`), otherwise from an installed package, otherwise
-it is downloaded. GoogleTest is downloaded for the tests.
+Highway 1.4.0 is downloaded. It is always linked statically into hwyBLAS.
+GoogleTest is downloaded for the tests.
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
@@ -72,6 +73,61 @@ static library.
 
 Supported SIMD targets on x86: SSE2, SSE4, AVX2, AVX-512 and AVX-512 (Zen 4).
 Scalable-vector targets (SVE, RVV) are not supported yet.
+
+## Installing
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \
+      -DCMAKE_INSTALL_PREFIX=/path/to/prefix
+cmake --build build
+cmake --install build
+```
+
+This installs the library (`bin/hwyblas.dll` and `lib/hwyblas.lib` on
+Windows, `lib/libhwyblas.so` elsewhere), the headers (`include/hwyblas/`), a
+CMake package (`lib/cmake/hwyblas/`) and a pkg-config file
+(`lib/pkgconfig/hwyblas.pc`). The shared library contains Highway. A static
+build (`-DBUILD_SHARED_LIBS=OFF`) also installs the Highway it was built
+with, as `hwyblas_hwy`, unless it was built against an installed Highway
+package; consumers link it automatically through the CMake package. Install
+rules are generated when hwyBLAS is the top-level project
+(`-DHWYBLAS_INSTALL=ON|OFF` to override).
+
+## Using hwyBLAS from another project
+
+With CMake, either use an installed hwyBLAS:
+
+```cmake
+find_package(hwyblas 0.1 REQUIRED)  # with CMAKE_PREFIX_PATH=/path/to/prefix
+target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
+```
+
+or build it as part of the project (tests, benchmarks and install rules are
+then off by default):
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(hwyblas GIT_REPOSITORY <hwyBLAS repository> GIT_TAG main)
+FetchContent_MakeAvailable(hwyblas)  # or add_subdirectory(path/to/hwyBLAS)
+target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
+```
+
+On Windows, the DLL must be found at run time, e.g. by copying it next to the
+executable (CMake 3.26 or newer; this does nothing for a static hwyBLAS):
+
+```cmake
+add_custom_command(TARGET my_app POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy -t $<TARGET_FILE_DIR:my_app>
+          $<TARGET_RUNTIME_DLLS:my_app>
+  COMMAND_EXPAND_LISTS)
+```
+
+Without CMake, use `pkg-config --cflags --libs hwyblas`, or add
+`<prefix>/include` to the include path and link `hwyblas`.
+
+If the project uses Highway itself, note that a static hwyBLAS, or one built
+as part of a project that defines `hwy::hwy`, shares that Highway: then
+`hwyblas_force_target` also restricts the project's own dynamic dispatch.
 
 ## Using hwyBLAS with Eigen
 

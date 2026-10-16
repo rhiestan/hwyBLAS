@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: hwyblas
+Description: BLAS and CBLAS built on Google Highway
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lhwyblas
+Libs.private: @HWYBLAS_PC_LIBS_PRIVATE@
+Cflags: -I${includedir}

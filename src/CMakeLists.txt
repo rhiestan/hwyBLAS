@@ -14,10 +14,14 @@ add_library(hwyblas::hwyblas ALIAS hwyblas)
 
 target_include_directories(hwyblas
   PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   # Highway's foreach_target re-includes sources as "src/<file>".
   PRIVATE ${PROJECT_SOURCE_DIR}
 )
-target_link_libraries(hwyblas PRIVATE hwy::hwy hwyblas_options)
+# hwyblas_options only applies to building hwyblas, not to its users (and
+# is not exported).
+target_link_libraries(hwyblas PRIVATE hwy::hwy
+                                      $<BUILD_INTERFACE:hwyblas_options>)
 target_compile_definitions(hwyblas
   PRIVATE HWYBLAS_BUILDING
   # Skip SIMD targets that bring no benefit for floating-point BLAS (they

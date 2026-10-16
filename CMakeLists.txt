@@ -14,6 +14,9 @@ endif()
 option(HWYBLAS_BUILD_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(HWYBLAS_BUILD_BENCH "Build the benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(BUILD_SHARED_LIBS "Build hwyblas as a shared library" ON)
+option(HWYBLAS_INSTALL "Generate the install target" ${PROJECT_IS_TOP_LEVEL})
+
+include(GNUInstallDirs)
 
 # Put all executables and DLLs in one directory so that tests and benchmarks
 # find hwyblas.dll on Windows.
@@ -52,7 +55,7 @@ if(NOT TARGET hwy::hwy)
       set(HWY_FORCE_STATIC_LIBS ON CACHE BOOL "" FORCE)
       FetchContent_Declare(highway
         GIT_REPOSITORY https://github.com/google/highway.git
-        GIT_TAG 1.3.0)
+        GIT_TAG 1.4.0)
       FetchContent_MakeAvailable(highway)
     endif()
   endif()
@@ -82,4 +85,64 @@ endif()
 
 if(HWYBLAS_BUILD_BENCH)
   add_subdirectory(bench)
+endif()
+
+# ---------------------------------------------------------------------------
+# Installation: the library, its headers, a CMake package (find_package(
+# hwyblas), target hwyblas::hwyblas) and a pkg-config file (hwyblas.pc).
+if(HWYBLAS_INSTALL)
+  include(CMakePackageConfigHelpers)
+  set(HWYBLAS_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/hwyblas")
+
+  install(TARGETS hwyblas EXPORT hwyblasTargets
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+  install(DIRECTORY include/hwyblas
+          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  install(FILES LICENSE DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/hwyblas")
+
+  # A shared hwyblas contains Highway. A static one needs it at link time:
+  # either the installed Highway package it was built against, or the
+  # Highway built here, installed as hwyblas_hwy so that it cannot clash
+  # with another Highway installation.
+  get_target_property(_hwy_imported hwy::hwy IMPORTED)
+  set(HWYBLAS_FIND_HWY_PACKAGE FALSE)
+  set(HWYBLAS_PC_LIBS_PRIVATE "")
+  if(NOT BUILD_SHARED_LIBS)
+    if(_hwy_imported)
+      set(HWYBLAS_FIND_HWY_PACKAGE TRUE)
+      set(HWYBLAS_PC_LIBS_PRIVATE "-lhwy")
+    else()
+      get_target_property(_hwy_target hwy::hwy ALIASED_TARGET)
+      if(NOT _hwy_target)
+        set(_hwy_target hwy)
+      endif()
+      set_target_properties(${_hwy_target} PROPERTIES
+        OUTPUT_NAME hwyblas_hwy EXPORT_NAME hwy)
+      install(TARGETS ${_hwy_target} EXPORT hwyblasTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+      set(HWYBLAS_PC_LIBS_PRIVATE "-lhwyblas_hwy")
+    endif()
+    if(NOT MSVC)
+      string(APPEND HWYBLAS_PC_LIBS_PRIVATE " -lstdc++ -lm")
+    endif()
+  endif()
+
+  install(EXPORT hwyblasTargets NAMESPACE hwyblas::
+          DESTINATION "${HWYBLAS_CMAKE_DIR}")
+  configure_package_config_file(cmake/hwyblasConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/hwyblasConfig.cmake"
+    INSTALL_DESTINATION "${HWYBLAS_CMAKE_DIR}")
+  # 0.x: minor versions may be incompatible.
+  write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/hwyblasConfigVersion.cmake"
+    COMPATIBILITY SameMinorVersion)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/hwyblasConfig.cmake"
+                "${CMAKE_CURRENT_BINARY_DIR}/hwyblasConfigVersion.cmake"
+          DESTINATION "${HWYBLAS_CMAKE_DIR}")
+  configure_file(cmake/hwyblas.pc.in "${CMAKE_CURRENT_BINARY_DIR}/hwyblas.pc"
+                 @ONLY)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/hwyblas.pc"
+          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 endif()
