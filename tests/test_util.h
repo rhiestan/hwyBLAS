@@ -175,6 +175,20 @@ inline const double* P(const std::complex<double>* p) {
     }                                                              \
   } while (0)
 
+// result = i##T-prefix##NAME##_(args...), e.g. isamax_ for float.
+#define HWYBLAS_CALL_RESULT(T, result, NAME, ...)                  \
+  do {                                                             \
+    if constexpr (std::is_same_v<T, float>) {                      \
+      result = is##NAME##_(__VA_ARGS__);                           \
+    } else if constexpr (std::is_same_v<T, double>) {              \
+      result = id##NAME##_(__VA_ARGS__);                           \
+    } else if constexpr (std::is_same_v<T, std::complex<float>>) { \
+      result = ic##NAME##_(__VA_ARGS__);                           \
+    } else {                                                       \
+      result = iz##NAME##_(__VA_ARGS__);                           \
+    }                                                              \
+  } while (0)
+
 // As HWYBLAS_CALL for routines that only exist for complex types (c/z).
 #define HWYBLAS_CALL_COMPLEX(T, NAME, ...)                          \
   do {                                                              \
@@ -357,6 +371,44 @@ void ReferenceProduct(const Dense<T>& a, const Dense<T>& b, T alpha, T beta,
     }
   }
 }
+
+// Strided vector with n elements and increment inc (inc < 0: stored
+// backwards). Gaps between elements hold a sentinel to detect stray writes.
+template <typename T>
+struct StridedVector {
+  size_t n;
+  int inc;
+  std::vector<T> data;
+
+  StridedVector(size_t n_, int inc_, Random<T>& rng)
+      : n(n_),
+        inc(inc_),
+        data(n_ == 0 ? 0 : 1 + (n_ - 1) * std::abs(inc_), Sentinel()) {
+    for (size_t i = 0; i < n; ++i) (*this)[i] = rng.Next();
+  }
+  static T Sentinel() { return MakeScalar<T>(7.0, 7.0); }
+  T& operator()(size_t i) { return (*this)[i]; }
+  T& operator[](size_t i) {
+    return data[inc > 0 ? i * inc : (n - 1 - i) * static_cast<size_t>(-inc)];
+  }
+  // Dense n x 1 copy in double precision.
+  Dense<T> ToDense() {
+    Dense<T> d(n, 1);
+    for (size_t i = 0; i < n; ++i) d(i, 0) = static_cast<RefT<T>>((*this)[i]);
+    return d;
+  }
+  // Checks that only the elements were modified, then returns them.
+  std::vector<T> Elements() {
+    std::vector<bool> is_element(data.size(), false);
+    for (size_t i = 0; i < n; ++i) is_element[&(*this)[i] - data.data()] = true;
+    for (size_t i = 0; i < data.size(); ++i) {
+      if (!is_element[i]) EXPECT_EQ(data[i], Sentinel()) << "gap " << i;
+    }
+    std::vector<T> e(n);
+    for (size_t i = 0; i < n; ++i) e[i] = (*this)[i];
+    return e;
+  }
+};
 
 // Runs `test` once for every SIMD target that the CPU supports and that the
 // library might dispatch to, so all compiled code paths get exercised.

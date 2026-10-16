@@ -5,7 +5,9 @@
 //   blas_bench <routine> [options] [name=path/to/blas.dll ...]
 //
 // Routines: gemm, gemv, symm (hemm for complex), syrk, trmm, trsm,
-// symv (hemv for complex), trmv. A square size n means m = n = k; for
+// symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
+// syr2 (her2), and level 1: axpy, scal, dot (dotu for complex), nrm2, asum,
+// iamax, rot. A square size n means m = n = k; for
 // syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -96,17 +98,25 @@ std::vector<T> RandomVector(size_t n, std::mt19937& rng) {
 
 using Clock = std::chrono::steady_clock;
 
-// Returns the best time in seconds of repeated calls, running at least
-// `min_time` seconds in total (and at least 2 repetitions).
+// Returns the best time in seconds of one call, from repeated samples
+// running at least `min_time` seconds in total (and at least 2 samples).
+// Fast calls are batched so that each sample is well above the clock
+// resolution.
 template <class Func>
 double BestTime(const Func& func, double min_time) {
-  func();  // warm-up: page faults, library initialization, caches
-  double best = 1e30, total = 0;
-  for (int reps = 0; reps < 2 || total < min_time; ++reps) {
+  const auto time = [&func](int calls) {
     const auto t0 = Clock::now();
-    func();
-    const double t = std::chrono::duration<double>(Clock::now() - t0).count();
-    best = std::min(best, t);
+    for (int i = 0; i < calls; ++i) func();
+    return std::chrono::duration<double>(Clock::now() - t0).count();
+  };
+  func();  // warm-up: page faults, library initialization, caches
+  int calls = 1;
+  while (calls < (1 << 24) && time(calls) < 1e-4) calls *= 2;
+
+  double best = 1e30, total = 0;
+  for (int samples = 0; samples < 2 || total < min_time; ++samples) {
+    const double t = time(calls);
+    best = std::min(best, t / calls);
     total += t;
   }
   return best;
@@ -391,10 +401,11 @@ void BenchSymv(const Options& opt, const Libraries& libs) {
   }
 }
 
+// TRMV and TRSV.
 template <typename T>
-void BenchTrmv(const Options& opt, const Libraries& libs) {
+void BenchTrmv(const Options& opt, const Libraries& libs, const char* name) {
   const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
-  const std::string symbol = Symbol<T>("trmv");
+  const std::string symbol = Symbol<T>(name);
   PrintHeader<T>(
       libs,
       symbol + "  uplo=" + opt.uplo + " trans=" + trans + " diag=" + opt.diag,
@@ -412,11 +423,176 @@ void BenchTrmv(const Options& opt, const Libraries& libs) {
     c.call = [=](void* fn, T* out) {
       using Fn = void (*)(const char*, const char*, const char*, const int*,
                           const T*, const int*, T*, const int*);
-      // Restart from x0 so that repeated products stay bounded.
+      // Restart from x0 so that repeated calls stay bounded.
       std::copy(x0->begin(), x0->end(), out);
       reinterpret_cast<Fn>(fn)(&uplo, &trans, &diag, &n, a->data(), &n, out,
                                &inc);
     };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+// Rank-1 and rank-2 updates of an m x n (ger) or n x n (syr, syr2) matrix.
+template <typename T>
+void BenchRankUpdate(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const std::string& routine = opt.routine;
+  std::string symbol;
+  if (routine == "ger") {
+    symbol = Symbol<T>(kIsComplex<T> ? "geru" : "ger");
+  } else if (routine == "syr") {
+    symbol = Symbol<T>(kIsComplex<T> ? "her" : "syr");
+  } else {
+    symbol = Symbol<T>(kIsComplex<T> ? "her2" : "syr2");
+  }
+  PrintHeader<T>(libs,
+                 routine == "ger" ? symbol : symbol + "  uplo=" + opt.uplo,
+                 routine == "ger" ? "m x n" : "n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int m = s.m, n = (routine == "ger") ? s.n : s.m, inc = 1;
+    const auto x = std::make_shared<std::vector<T>>(RandomVector<T>(m, rng));
+    const auto y = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+    Case<T> c;
+    c.label = (routine == "ger") ? std::to_string(m) + "x" + std::to_string(n)
+                                 : std::to_string(n);
+    // Multiply-adds per element: 1 (ger), 1/2 (syr), 1 (syr2).
+    const double elements = (routine == "ger")   ? double(m) * n
+                            : (routine == "syr") ? 0.5 * n * n
+                                                 : 1.0 * n * n;
+    c.flops = (kIsComplex<T> ? 8.0 : 2.0) * elements;
+    c.initial_out = RandomVector<T>(static_cast<size_t>(m) * n, rng);
+    const char uplo = opt.uplo;
+    // Small alpha keeps the repeatedly updated matrix bounded.
+    if (routine == "ger") {
+      c.call = [=](void* fn, T* out) {
+        const T alpha = T(R(1e-3));
+        reinterpret_cast<void (*)(const int*, const int*, const T*, const T*,
+                                  const int*, const T*, const int*, T*,
+                                  const int*)>(fn)(
+            &m, &n, &alpha, x->data(), &inc, y->data(), &inc, out, &m);
+      };
+    } else if (routine == "syr") {
+      c.call = [=](void* fn, T* out) {
+        const R alpha = R(1e-3);
+        reinterpret_cast<void (*)(const char*, const int*, const R*, const T*,
+                                  const int*, T*, const int*)>(fn)(
+            &uplo, &n, &alpha, x->data(), &inc, out, &n);
+      };
+    } else {
+      c.call = [=](void* fn, T* out) {
+        const T alpha = T(R(1e-3));
+        reinterpret_cast<void (*)(const char*, const int*, const T*, const T*,
+                                  const int*, const T*, const int*, T*,
+                                  const int*)>(fn)(
+            &uplo, &n, &alpha, x->data(), &inc, y->data(), &inc, out, &n);
+      };
+    }
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+// Level 1 routines on vectors of length n (from the m of each shape). Scalar
+// results are written to out[0] so that they take part in the cross-library
+// comparison; this also checks that complex results are returned with the
+// same calling convention as the other libraries.
+template <typename T>
+void BenchLevel1(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  struct Complex {
+    R re, im;
+  };
+  const std::string& routine = opt.routine;
+  // dot means dotu for complex types; nrm2/asum/iamax have special names.
+  std::string symbol;
+  if (routine == "nrm2" || routine == "asum") {
+    symbol = std::is_same_v<T, std::complex<float>> ? "sc" + routine + "_"
+             : std::is_same_v<T, std::complex<double>>
+                 ? "dz" + routine + "_"
+                 : Symbol<T>(routine.c_str());
+  } else if (routine == "iamax") {
+    symbol = "i" + Symbol<T>("amax");
+  } else if (routine == "rot" && kIsComplex<T>) {
+    // Complex vectors with real c and s: csrot/zdrot (crot/zrot in LAPACK
+    // have a complex s).
+    symbol = std::is_same_v<T, std::complex<float>> ? "csrot_" : "zdrot_";
+  } else {
+    symbol = Symbol<T>((routine == "dot" && kIsComplex<T>) ? "dotu"
+                                                           : routine.c_str());
+  }
+  PrintHeader<T>(libs, symbol, "n");
+
+  // Flops per element (real; complex counts the real operations).
+  double flops_per_element = 2;  // axpy, dot, nrm2
+  if (routine == "scal" || routine == "asum" || routine == "iamax") {
+    flops_per_element = 1;
+  } else if (routine == "rot") {
+    flops_per_element = 6;
+  }
+  if (kIsComplex<T>) {
+    flops_per_element *= (routine == "axpy" || routine == "dot") ? 4 : 2;
+  }
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.m, inc = 1;
+    const auto x = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+    Case<T> c;
+    c.label = std::to_string(n);
+    c.flops = flops_per_element * n;
+    c.initial_out = RandomVector<T>(n, rng);
+    if (routine == "axpy") {
+      c.call = [=](void* fn, T* out) {
+        const T alpha = T(0.5);
+        reinterpret_cast<void (*)(const int*, const T*, const T*, const int*,
+                                  T*, const int*)>(fn)(&n, &alpha, x->data(),
+                                                       &inc, out, &inc);
+      };
+    } else if (routine == "scal") {
+      c.call = [=](void* fn, T* out) {
+        // Close to 1, so that repeated calls keep the values bounded.
+        const T alpha = T(static_cast<R>(0.9999999));
+        reinterpret_cast<void (*)(const int*, const T*, T*, const int*)>(fn)(
+            &n, &alpha, out, &inc);
+      };
+    } else if (routine == "rot") {
+      c.call = [=](void* fn, T* out) {
+        // y is rotated in place too; start from the same y in every call.
+        const R cs = R(0.6), sn = R(0.8);
+        std::vector<T> y = *x;
+        reinterpret_cast<void (*)(const int*, T*, const int*, T*, const int*,
+                                  const R*, const R*)>(fn)(
+            &n, out, &inc, y.data(), &inc, &cs, &sn);
+      };
+    } else if (routine == "dot") {
+      const auto y = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+      c.call = [=](void* fn, T* out) {
+        if constexpr (kIsComplex<T>) {
+          const Complex r = reinterpret_cast<Complex (*)(
+              const int*, const T*, const int*, const T*, const int*)>(fn)(
+              &n, x->data(), &inc, y->data(), &inc);
+          out[0] = T(r.re, r.im);
+        } else {
+          out[0] = reinterpret_cast<T (*)(const int*, const T*, const int*,
+                                          const T*, const int*)>(fn)(
+              &n, x->data(), &inc, y->data(), &inc);
+        }
+      };
+    } else if (routine == "nrm2" || routine == "asum") {
+      c.call = [=](void* fn, T* out) {
+        out[0] = T(reinterpret_cast<R (*)(const int*, const T*, const int*)>(
+            fn)(&n, x->data(), &inc));
+      };
+    } else if (routine == "iamax") {
+      c.call = [=](void* fn, T* out) {
+        out[0] = T(static_cast<R>(
+            reinterpret_cast<int (*)(const int*, const T*, const int*)>(fn)(
+                &n, x->data(), &inc)));
+      };
+    } else {
+      fprintf(stderr, "Unknown routine: %s\n", routine.c_str());
+      return;
+    }
     RunCase(opt, libs, symbol, c);
   }
 }
@@ -435,8 +611,16 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchTriangular3<T>(opt, libs, opt.routine.c_str());
   } else if (opt.routine == "symv") {
     BenchSymv<T>(opt, libs);
-  } else if (opt.routine == "trmv") {
-    BenchTrmv<T>(opt, libs);
+  } else if (opt.routine == "trmv" || opt.routine == "trsv") {
+    BenchTrmv<T>(opt, libs, opt.routine.c_str());
+  } else if (opt.routine == "ger" || opt.routine == "syr" ||
+             opt.routine == "syr2") {
+    BenchRankUpdate<T>(opt, libs);
+  } else if (opt.routine == "axpy" || opt.routine == "scal" ||
+             opt.routine == "dot" || opt.routine == "nrm2" ||
+             opt.routine == "asum" || opt.routine == "iamax" ||
+             opt.routine == "rot") {
+    BenchLevel1<T>(opt, libs);
   } else {
     fprintf(stderr, "Unknown routine: %s\n", opt.routine.c_str());
     return false;

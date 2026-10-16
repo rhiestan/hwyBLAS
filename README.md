@@ -18,13 +18,21 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 
 | Level | Routines | Precisions |
 |-------|----------|------------|
-| 1 | `?axpy_` | s d c z |
-| 2 | `?gemv_`, `?trmv_` | s d c z |
+| 1 | `?axpy_`, `?scal_`, `?copy_`, `?swap_`, `i?amax_` | s d c z |
+| 1 | `?dot_` / `?dotu_`, `?dotc_`, `sdsdot_`, `dsdot_` | s d / c z |
+| 1 | `?nrm2_`, `?asum_` (`scnrm2_`, `dznrm2_`, `scasum_`, `dzasum_`) | s d c z |
+| 1 | `?rot_` (`csrot_`, `zdrot_`), `?rotg_`, `csscal_`, `zdscal_` | s d c z |
+| 1 | `?rotm_`, `?rotmg_`, `?cabs1_` | s d |
+| 2 | `?gemv_`, `?trmv_`, `?trsv_` | s d c z |
 | 2 | `?symv_` / `?hemv_` | s d / c z |
+| 2 | `?ger_` / `?geru_`, `?gerc_` | s d / c z |
+| 2 | `?syr_`, `?syr2_` / `?her_`, `?her2_` | s d / c z |
 | 3 | `?gemm_`, `?symm_`, `?syrk_`, `?trmm_`, `?trsm_` | s d c z |
 | 3 | `?hemm_`, `?herk_` | c z |
 
-This covers every BLAS routine that Eigen calls with `EIGEN_USE_BLAS`.
+This covers every BLAS routine that Eigen calls with `EIGEN_USE_BLAS`, and
+all of Level 1. Not yet implemented: banded and packed Level 2 routines,
+`?syr2k_`, `?her2k_` and `?gemmtr_`.
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
@@ -79,8 +87,11 @@ with OpenBLAS 0.3.34 and MKL, square matrices, `trans = NN`:
 | | 2048 | 63 | 59 | 58 |
 
 The other routines (`symm`, `syrk`, `trmm`, `trsm`, `gemv`, `symv`/`hemv`,
-`trmv`) perform on par with OpenBLAS at medium and large sizes, and mostly
-better than MKL on this AMD CPU. AOCL-BLAS, which has special code paths
+`trmv`, `trsv`) perform on par with OpenBLAS at medium and large sizes, and
+mostly better than MKL on this AMD CPU. From n = 256 up, the rank updates
+(`ger`, `syr`, `syr2`, `her`, `her2`) are mostly the fastest of the four
+libraries, up to 2x ahead of the next best (`cher2`); at n = 64, MKL or AOCL
+is sometimes ahead. AOCL-BLAS, which has special code paths
 for small matrices, is the fastest for small (n ≤ 128) GEMM and TRSM.
 
 To reproduce, pass other BLAS DLLs as `name=path`:
@@ -107,7 +118,9 @@ src/pack-inl.h              packing of (structured) operands into panels
 src/level3.cc               SYMM, HEMM, SYRK, HERK, TRMM on top of the driver
 src/trsm.cc, trsm-inl.h     recursive TRSM and its small-triangle kernels
 src/gemv.cc, gemv-inl.h     GEMV API and kernels
-src/level2.cc               SYMV, HEMV (symv-inl.h) and TRMV (trmv-inl.h)
+src/level2.cc               SYMV, HEMV (symv-inl.h), TRMV (trmv-inl.h),
+                            TRSV (trsv-inl.h), GER, SYR, SYR2, HER, HER2
+                            (rank_update-inl.h)
 src/level1.cc, level1-inl.h AXPY and the vector kernels shared by others
 tests/                      GoogleTest tests, Eigen integration test
 bench/                      benchmark comparing BLAS libraries at runtime
@@ -153,6 +166,15 @@ cover every target.
 ## Conventions
 
 - 32-bit integers (LP64) for dimensions and increments.
+- Complex-valued functions (`cdotu_`, `zdotc_`, ...) return their result by
+  value, like gfortran, OpenBLAS and AOCL. (MKL's Fortran interface instead
+  passes a hidden result pointer as the first argument.)
+- `?scal_` with `alpha = 0` multiplies, as in the reference BLAS, so NaN
+  stays NaN.
+- `?nrm2_` never overflows or underflows harmfully. Float is accumulated in
+  double; double uses a fast sum of squares, and the reference safe-scaling
+  algorithm only when that sum is out of range.
+- `?rotg_` follows the reference BLAS 3.10+ algorithms (as OpenBLAS does).
 - Error handling follows reference BLAS: invalid arguments call `xerbla_`,
   and the routine returns without side effects. Unlike the reference
   `xerbla_`, the default handler prints a message but does not terminate.
@@ -161,7 +183,11 @@ cover every target.
 - Elements that BLAS defines as not referenced are never read: the other
   triangle of structured matrices, the diagonal of unit triangular matrices
   and the imaginary parts of the diagonal of Hermitian matrices. The tests
-  fill all of them with NaN to verify this.
+  fill all of them with NaN to verify this. `?her_` and `?her2_` set the
+  imaginary parts of the diagonal to zero, as in the reference BLAS.
+- Unlike the reference BLAS, zero elements of x or y are not skipped
+  (e.g. in `?ger_` or `?trsv_`), as in OpenBLAS. This only makes a
+  difference when A contains Inf or NaN.
 
 ## License
 

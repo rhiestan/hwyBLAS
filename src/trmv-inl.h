@@ -38,10 +38,10 @@ HWY_INLINE void RectAxpy(size_t m, size_t cols, const T* r, size_t lda,
   }
 }
 
-// y[0:cols] += op(R)^T * x[0:m], where R is m x cols (dot form) and op
-// conjugates if conj.
+// y[0:cols] += alpha * op(R)^T * x[0:m], where R is m x cols (dot form)
+// and op conjugates if conj.
 template <typename T>
-HWY_INLINE void RectDot(bool conj, size_t m, size_t cols, const T* r,
+HWY_INLINE void RectDot(bool conj, size_t m, size_t cols, T alpha, const T* r,
                         size_t lda, const T* x, T* y) {
   if (m == 0) return;
   if constexpr (IsComplex<T>::value) {
@@ -50,12 +50,12 @@ HWY_INLINE void RectDot(bool conj, size_t m, size_t cols, const T* r,
     const R* xr = reinterpret_cast<const R*>(x);
     R* yr = reinterpret_cast<R*>(y);
     if (conj) {
-      GemvTComplex<true>(m, cols, T(1), rr, lda, xr, yr);
+      GemvTComplex<true>(m, cols, alpha, rr, lda, xr, yr);
     } else {
-      GemvTComplex<false>(m, cols, T(1), rr, lda, xr, yr);
+      GemvTComplex<false>(m, cols, alpha, rr, lda, xr, yr);
     }
   } else {
-    GemvTReal(m, cols, T(1), r, lda, x, y);
+    GemvTReal(m, cols, alpha, r, lda, x, y);
   }
 }
 
@@ -91,7 +91,7 @@ void TrmvContiguous(bool lower, Op op, bool unit, size_t n, const T* a,
     if (op == Op::kNoTrans) {
       RectAxpy(m, cols, r, lda, x + j, y + row0);
     } else {
-      RectDot(conj, m, cols, r, lda, x + row0, y + j);
+      RectDot(conj, m, cols, T(1), r, lda, x + row0, y + j);
     }
   }
   memcpy(x, y, n * sizeof(T));

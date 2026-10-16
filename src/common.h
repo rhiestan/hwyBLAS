@@ -35,6 +35,12 @@ struct RealOf<std::complex<T>> {
 template <typename T>
 using RealT = typename RealOf<T>::type;
 
+// Number of reals in n elements of T (2n for complex T).
+template <typename T>
+constexpr size_t RealCount(size_t n) {
+  return IsComplex<T>::value ? 2 * n : n;
+}
+
 template <typename T>
 inline T Conj(T x) {
   if constexpr (IsComplex<T>::value) {

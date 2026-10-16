@@ -36,20 +36,33 @@ inline c64* C64(double* p) { return reinterpret_cast<c64*>(p); }
   HWY_EXPORT(NAME##C32);             \
   HWY_EXPORT(NAME##C64)
 
-// Calls the per-target function NAME##<suffix of T>(args...).
+// Calls the per-target function NAME##<suffix of T>(args...) and evaluates
+// to its result. Usable as a statement or as an expression.
 #define HWYBLAS_DISPATCH_BY_TYPE(T, NAME, ...)                      \
-  do {                                                              \
+  ([&]() {                                                          \
     if constexpr (std::is_same_v<T, float>) {                       \
-      HWY_DYNAMIC_DISPATCH(NAME##F32)(__VA_ARGS__);                 \
+      return HWY_DYNAMIC_DISPATCH(NAME##F32)(__VA_ARGS__);          \
     } else if constexpr (std::is_same_v<T, double>) {               \
-      HWY_DYNAMIC_DISPATCH(NAME##F64)(__VA_ARGS__);                 \
+      return HWY_DYNAMIC_DISPATCH(NAME##F64)(__VA_ARGS__);          \
     } else if constexpr (std::is_same_v<T, ::hwyblas::c32>) {       \
-      HWY_DYNAMIC_DISPATCH(NAME##C32)(__VA_ARGS__);                 \
+      return HWY_DYNAMIC_DISPATCH(NAME##C32)(__VA_ARGS__);          \
     } else {                                                        \
       static_assert(std::is_same_v<T, ::hwyblas::c64>, "Bad type"); \
-      HWY_DYNAMIC_DISPATCH(NAME##C64)(__VA_ARGS__);                 \
+      return HWY_DYNAMIC_DISPATCH(NAME##C64)(__VA_ARGS__);          \
     }                                                               \
-  } while (0)
+  }())
+
+// As HWYBLAS_DISPATCH_BY_TYPE for functions defined only for the real types
+// (F32, F64); R is float or double.
+#define HWYBLAS_DISPATCH_BY_REAL(R, NAME, ...)              \
+  ([&]() {                                                  \
+    if constexpr (std::is_same_v<R, float>) {               \
+      return HWY_DYNAMIC_DISPATCH(NAME##F32)(__VA_ARGS__);  \
+    } else {                                                \
+      static_assert(std::is_same_v<R, double>, "Bad type"); \
+      return HWY_DYNAMIC_DISPATCH(NAME##F64)(__VA_ARGS__);  \
+    }                                                       \
+  }())
 
 // ---------------------------------------------------------------------------
 // Decoding of CHARACTER*1 arguments. Each returns false for invalid values.

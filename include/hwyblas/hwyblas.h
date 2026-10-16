@@ -41,6 +41,15 @@ extern "C" {
 /* Integer type of all dimension, stride and increment arguments (LP64). */
 typedef int hwyblas_int;
 
+/* Complex function results (layout-compatible with std::complex and
+ * C99 _Complex; returned by value like gfortran and OpenBLAS do). */
+typedef struct {
+  float real, imag;
+} hwyblas_complex_float;
+typedef struct {
+  double real, imag;
+} hwyblas_complex_double;
+
 /* ------------------------------------------------------------------------ */
 /* Level 1                                                                  */
 
@@ -57,6 +66,149 @@ HWYBLAS_API void caxpy_(const hwyblas_int* n, const float* alpha,
 HWYBLAS_API void zaxpy_(const hwyblas_int* n, const double* alpha,
                         const double* x, const hwyblas_int* incx, double* y,
                         const hwyblas_int* incy);
+
+/* x := alpha * x (alpha real for csscal_/zdscal_). As in the reference
+ * BLAS, incx <= 0 is a no-op. */
+HWYBLAS_API void sscal_(const hwyblas_int* n, const float* alpha, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dscal_(const hwyblas_int* n, const double* alpha, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void cscal_(const hwyblas_int* n, const float* alpha, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void zscal_(const hwyblas_int* n, const double* alpha, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void csscal_(const hwyblas_int* n, const float* alpha, float* x,
+                         const hwyblas_int* incx);
+HWYBLAS_API void zdscal_(const hwyblas_int* n, const double* alpha, double* x,
+                         const hwyblas_int* incx);
+
+/* y := x. */
+HWYBLAS_API void scopy_(const hwyblas_int* n, const float* x,
+                        const hwyblas_int* incx, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void dcopy_(const hwyblas_int* n, const double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void ccopy_(const hwyblas_int* n, const float* x,
+                        const hwyblas_int* incx, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zcopy_(const hwyblas_int* n, const double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+
+/* x <-> y. */
+HWYBLAS_API void sswap_(const hwyblas_int* n, float* x, const hwyblas_int* incx,
+                        float* y, const hwyblas_int* incy);
+HWYBLAS_API void dswap_(const hwyblas_int* n, double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void cswap_(const hwyblas_int* n, float* x, const hwyblas_int* incx,
+                        float* y, const hwyblas_int* incy);
+HWYBLAS_API void zswap_(const hwyblas_int* n, double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy);
+
+/* Dot products sum x_i * y_i (dotc: sum conj(x_i) * y_i). sdsdot_ returns
+ * sb + the dot product and dsdot_ the dot product, both accumulated in
+ * double precision. Complex results are returned by value. */
+HWYBLAS_API float sdot_(const hwyblas_int* n, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API double ddot_(const hwyblas_int* n, const double* x,
+                         const hwyblas_int* incx, const double* y,
+                         const hwyblas_int* incy);
+HWYBLAS_API float sdsdot_(const hwyblas_int* n, const float* sb, const float* x,
+                          const hwyblas_int* incx, const float* y,
+                          const hwyblas_int* incy);
+HWYBLAS_API double dsdot_(const hwyblas_int* n, const float* x,
+                          const hwyblas_int* incx, const float* y,
+                          const hwyblas_int* incy);
+HWYBLAS_API hwyblas_complex_float cdotu_(const hwyblas_int* n, const float* x,
+                                         const hwyblas_int* incx,
+                                         const float* y,
+                                         const hwyblas_int* incy);
+HWYBLAS_API hwyblas_complex_float cdotc_(const hwyblas_int* n, const float* x,
+                                         const hwyblas_int* incx,
+                                         const float* y,
+                                         const hwyblas_int* incy);
+HWYBLAS_API hwyblas_complex_double zdotu_(const hwyblas_int* n, const double* x,
+                                          const hwyblas_int* incx,
+                                          const double* y,
+                                          const hwyblas_int* incy);
+HWYBLAS_API hwyblas_complex_double zdotc_(const hwyblas_int* n, const double* x,
+                                          const hwyblas_int* incx,
+                                          const double* y,
+                                          const hwyblas_int* incy);
+
+/* Euclidean norm, without harmful overflow or underflow. */
+HWYBLAS_API float snrm2_(const hwyblas_int* n, const float* x,
+                         const hwyblas_int* incx);
+HWYBLAS_API double dnrm2_(const hwyblas_int* n, const double* x,
+                          const hwyblas_int* incx);
+HWYBLAS_API float scnrm2_(const hwyblas_int* n, const float* x,
+                          const hwyblas_int* incx);
+HWYBLAS_API double dznrm2_(const hwyblas_int* n, const double* x,
+                           const hwyblas_int* incx);
+
+/* Sum of |x_i| (|re| + |im| for complex vectors). */
+HWYBLAS_API float sasum_(const hwyblas_int* n, const float* x,
+                         const hwyblas_int* incx);
+HWYBLAS_API double dasum_(const hwyblas_int* n, const double* x,
+                          const hwyblas_int* incx);
+HWYBLAS_API float scasum_(const hwyblas_int* n, const float* x,
+                          const hwyblas_int* incx);
+HWYBLAS_API double dzasum_(const hwyblas_int* n, const double* x,
+                           const hwyblas_int* incx);
+
+/* 1-based index of the first element of largest |x_i| (|re| + |im| for
+ * complex vectors); 0 if n < 1 or incx <= 0. */
+HWYBLAS_API hwyblas_int isamax_(const hwyblas_int* n, const float* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int idamax_(const hwyblas_int* n, const double* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int icamax_(const hwyblas_int* n, const float* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int izamax_(const hwyblas_int* n, const double* x,
+                                const hwyblas_int* incx);
+
+/* Plane rotation: x := c x + s y, y := c y - s x (c, s real). */
+HWYBLAS_API void srot_(const hwyblas_int* n, float* x, const hwyblas_int* incx,
+                       float* y, const hwyblas_int* incy, const float* c,
+                       const float* s);
+HWYBLAS_API void drot_(const hwyblas_int* n, double* x, const hwyblas_int* incx,
+                       double* y, const hwyblas_int* incy, const double* c,
+                       const double* s);
+HWYBLAS_API void csrot_(const hwyblas_int* n, float* x, const hwyblas_int* incx,
+                        float* y, const hwyblas_int* incy, const float* c,
+                        const float* s);
+HWYBLAS_API void zdrot_(const hwyblas_int* n, double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy, const double* c,
+                        const double* s);
+
+/* Modified Givens transformation; param = (flag, h11, h21, h12, h22). */
+HWYBLAS_API void srotm_(const hwyblas_int* n, float* x, const hwyblas_int* incx,
+                        float* y, const hwyblas_int* incy, const float* param);
+HWYBLAS_API void drotm_(const hwyblas_int* n, double* x,
+                        const hwyblas_int* incx, double* y,
+                        const hwyblas_int* incy, const double* param);
+
+/* Constructs a Givens rotation such that [c s; -conj(s) c] [a; b] = [r; 0];
+ * a is overwritten by r (and, for real types, b by a reconstruction value). */
+HWYBLAS_API void srotg_(float* a, float* b, float* c, float* s);
+HWYBLAS_API void drotg_(double* a, double* b, double* c, double* s);
+HWYBLAS_API void crotg_(float* a, const float* b, float* c, float* s);
+HWYBLAS_API void zrotg_(double* a, const double* b, double* c, double* s);
+
+/* Constructs a modified Givens transformation. */
+HWYBLAS_API void srotmg_(float* d1, float* d2, float* x1, const float* y1,
+                         float* param);
+HWYBLAS_API void drotmg_(double* d1, double* d2, double* x1, const double* y1,
+                         double* param);
+
+/* |re(z)| + |im(z)|. */
+HWYBLAS_API float scabs1_(const float* z);
+HWYBLAS_API double dcabs1_(const double* z);
 
 /* ------------------------------------------------------------------------ */
 /* Level 2                                                                  */
@@ -124,6 +276,107 @@ HWYBLAS_API void ztrmv_(const char* uplo, const char* trans, const char* diag,
                         const hwyblas_int* n, const double* a,
                         const hwyblas_int* lda, double* x,
                         const hwyblas_int* incx);
+
+/* Solves op(A) * x = b for x, A triangular; x overwrites b. */
+HWYBLAS_API void strsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* a,
+                        const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtrsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* a,
+                        const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctrsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* a,
+                        const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztrsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* a,
+                        const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+
+/* A := alpha * x * y^T + A (m x n). */
+HWYBLAS_API void sger_(const hwyblas_int* m, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, const float* y,
+                       const hwyblas_int* incy, float* a,
+                       const hwyblas_int* lda);
+HWYBLAS_API void dger_(const hwyblas_int* m, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, const double* y,
+                       const hwyblas_int* incy, double* a,
+                       const hwyblas_int* lda);
+
+/* A := alpha * x * y^T + A (m x n). */
+HWYBLAS_API void cgeru_(const hwyblas_int* m, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* a,
+                        const hwyblas_int* lda);
+HWYBLAS_API void zgeru_(const hwyblas_int* m, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* a,
+                        const hwyblas_int* lda);
+
+/* A := alpha * x * y^H + A (m x n). */
+HWYBLAS_API void cgerc_(const hwyblas_int* m, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* a,
+                        const hwyblas_int* lda);
+HWYBLAS_API void zgerc_(const hwyblas_int* m, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* a,
+                        const hwyblas_int* lda);
+
+/* A := alpha * x * x^T + A, A symmetric (one triangle stored). */
+HWYBLAS_API void ssyr_(const char* uplo, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, float* a,
+                       const hwyblas_int* lda);
+HWYBLAS_API void dsyr_(const char* uplo, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, double* a,
+                       const hwyblas_int* lda);
+
+/* A := alpha * x * x^H + A, A Hermitian (one triangle stored), alpha real.
+ * The imaginary parts of the diagonal are set to zero. */
+HWYBLAS_API void cher_(const char* uplo, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, float* a,
+                       const hwyblas_int* lda);
+HWYBLAS_API void zher_(const char* uplo, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, double* a,
+                       const hwyblas_int* lda);
+
+/* A := alpha * x * y^T + alpha * y * x^T + A, A symmetric (one triangle
+ * stored). */
+HWYBLAS_API void ssyr2_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* a,
+                        const hwyblas_int* lda);
+HWYBLAS_API void dsyr2_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* a,
+                        const hwyblas_int* lda);
+
+/* A := alpha * x * y^H + conj(alpha) * y * x^H + A, A Hermitian (one
+ * triangle stored). The imaginary parts of the diagonal are set to zero. */
+HWYBLAS_API void cher2_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* a,
+                        const hwyblas_int* lda);
+HWYBLAS_API void zher2_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* a,
+                        const hwyblas_int* lda);
 
 /* ------------------------------------------------------------------------ */
 /* Level 3                                                                  */
