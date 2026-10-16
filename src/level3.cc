@@ -4,6 +4,9 @@
 //               Hermitian, read from one triangle while packing.
 //   SYRK, HERK  C := alpha * A * A^T + beta * C (or A^H, or A^T * A), only
 //               one triangle of C is computed.
+//   SYR2K, HER2K  C := alpha * A * B^T + alpha * B * A^T + beta * C (or with
+//               ^H and conj(alpha) for the second term), one triangle of C.
+//   GEMMTR      C := alpha * op(A) * op(B) + beta * C, one triangle of C.
 //   TRMM        B := alpha * op(A) * B          (or B * op(A)), A triangular.
 //
 // Each routine validates its arguments like the reference BLAS, handles the
@@ -132,6 +135,146 @@ void Syrk(const char* name, bool hermitian, const char* uplo_ptr,
   g.ldc = ldc;
   g.part = part;
   g.real_diagonal = hermitian;
+  RunGemm(g);
+}
+
+// ---------------------------------------------------------------------------
+// SYR2K / HER2K
+//
+// C := alpha * op(A) * op(B)' + alpha2 * op(B) * op(A)' + beta * C, where ' is
+// ^T and alpha2 = alpha (SYR2K), or ' is ^H and alpha2 = conj(alpha) (HER2K,
+// beta real: S is the type of beta). For trans = 'N' op(X) = X (n x k),
+// otherwise op(X) = X' (X is k x n).
+//
+// Computed as two GEMM passes over the triangle; the second adds to the
+// result of the first. For HER2K both passes drop the imaginary parts of the
+// diagonal, which cancel in the exact sum.
+
+template <typename T, typename S>
+void Syr2k(const char* name, bool hermitian, const char* uplo_ptr,
+           const char* trans_ptr, const blasint* n_ptr, const blasint* k_ptr,
+           const T* alpha_ptr, const T* a, const blasint* lda_ptr, const T* b,
+           const blasint* ldb_ptr, const S* beta_ptr, T* c,
+           const blasint* ldc_ptr) {
+  const blasint n = *n_ptr, k = *k_ptr;
+  const blasint lda = *lda_ptr, ldb = *ldb_ptr, ldc = *ldc_ptr;
+  bool lower;
+  const bool valid_uplo = DecodeUplo(*uplo_ptr, &lower);
+  Op op;
+  bool valid_trans = DecodeOp(*trans_ptr, &op);
+  // Allowed: N and C for HER2K; N and T for complex SYR2K; N, T, C for real.
+  if (IsComplex<T>::value) {
+    valid_trans &= (op != (hermitian ? Op::kTrans : Op::kConjTrans));
+  }
+  const bool no_trans = (op == Op::kNoTrans);
+  const blasint rows = no_trans ? n : k;  // rows of A and B
+
+  blasint info = 0;
+  if (!valid_uplo) {
+    info = 1;
+  } else if (!valid_trans) {
+    info = 2;
+  } else if (n < 0) {
+    info = 3;
+  } else if (k < 0) {
+    info = 4;
+  } else if (lda < HWY_MAX(1, rows)) {
+    info = 7;
+  } else if (ldb < HWY_MAX(1, rows)) {
+    info = 9;
+  } else if (ldc < HWY_MAX(1, n)) {
+    info = 12;
+  }
+  if (info != 0) return ReportError(name, info);
+
+  const T alpha = *alpha_ptr, beta = T(*beta_ptr);
+  const Part part = lower ? Part::kLower : Part::kUpper;
+  if (n == 0 || ((IsZero(alpha) || k == 0) && IsOne(beta))) return;
+  if (IsZero(alpha) || k == 0) {
+    return ScaleMatrix(n, n, beta, c, ldc, part, hermitian);
+  }
+
+  const Op second = hermitian ? Op::kConjTrans : Op::kTrans;
+  const Op op_first = no_trans ? Op::kNoTrans : second;
+  const Op op_second = no_trans ? second : Op::kNoTrans;
+  GemmProblem<T> g;
+  g.m = n;
+  g.n = n;
+  g.k = k;
+  g.c = c;
+  g.ldc = ldc;
+  g.part = part;
+  g.real_diagonal = hermitian;
+  // alpha * op(A) * op(B)' + beta * C
+  g.alpha = alpha;
+  g.beta = beta;
+  g.a = GeneralOperand(op_first, a, lda);
+  g.b = GeneralOperand(op_second, b, ldb);
+  RunGemm(g);
+  // + alpha2 * op(B) * op(A)'
+  g.alpha = hermitian ? Conj(alpha) : alpha;
+  g.beta = T(1);
+  g.a = GeneralOperand(op_first, b, ldb);
+  g.b = GeneralOperand(op_second, a, lda);
+  RunGemm(g);
+}
+
+// ---------------------------------------------------------------------------
+// GEMMTR: C := alpha * op(A) * op(B) + beta * C, where op(A) is n x k and
+// op(B) is k x n, updating only the uplo triangle of C.
+
+template <typename T>
+void Gemmtr(const char* name, const char* uplo_ptr, const char* transa_ptr,
+            const char* transb_ptr, const blasint* n_ptr, const blasint* k_ptr,
+            const T* alpha_ptr, const T* a, const blasint* lda_ptr, const T* b,
+            const blasint* ldb_ptr, const T* beta_ptr, T* c,
+            const blasint* ldc_ptr) {
+  const blasint n = *n_ptr, k = *k_ptr;
+  const blasint lda = *lda_ptr, ldb = *ldb_ptr, ldc = *ldc_ptr;
+  bool lower;
+  Op op_a, op_b;
+  const bool valid_uplo = DecodeUplo(*uplo_ptr, &lower);
+  const bool valid_a = DecodeOp(*transa_ptr, &op_a);
+  const bool valid_b = DecodeOp(*transb_ptr, &op_b);
+  const blasint rows_a = (op_a == Op::kNoTrans) ? n : k;
+  const blasint rows_b = (op_b == Op::kNoTrans) ? k : n;
+
+  blasint info = 0;
+  if (!valid_uplo) {
+    info = 1;
+  } else if (!valid_a) {
+    info = 2;
+  } else if (!valid_b) {
+    info = 3;
+  } else if (n < 0) {
+    info = 4;
+  } else if (k < 0) {
+    info = 5;
+  } else if (lda < HWY_MAX(1, rows_a)) {
+    info = 8;
+  } else if (ldb < HWY_MAX(1, rows_b)) {
+    info = 10;
+  } else if (ldc < HWY_MAX(1, n)) {
+    info = 13;
+  }
+  if (info != 0) return ReportError(name, info);
+
+  const T alpha = *alpha_ptr, beta = *beta_ptr;
+  const Part part = lower ? Part::kLower : Part::kUpper;
+  if (n == 0 || ((IsZero(alpha) || k == 0) && IsOne(beta))) return;
+  if (IsZero(alpha) || k == 0) return ScaleMatrix(n, n, beta, c, ldc, part);
+
+  GemmProblem<T> g;
+  g.m = n;
+  g.n = n;
+  g.k = k;
+  g.alpha = alpha;
+  g.beta = beta;
+  g.a = GeneralOperand(op_a, a, lda);
+  g.b = GeneralOperand(op_b, b, ldb);
+  g.c = c;
+  g.ldc = ldc;
+  g.part = part;
   RunGemm(g);
 }
 
@@ -306,6 +449,131 @@ HWYBLAS_API void zherk_(const char* uplo, const char* trans, const blasint* n,
                         const blasint* ldc) {
   hwyblas::Syrk("ZHERK", true, uplo, trans, n, k, alpha, C64(a), lda, beta,
                 C64(c), ldc);
+}
+
+// SYR2K
+
+HWYBLAS_API void ssyr2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const float* alpha, const float* a,
+                         const blasint* lda, const float* b, const blasint* ldb,
+                         const float* beta, float* c, const blasint* ldc) {
+  hwyblas::Syr2k("SSYR2K", false, uplo, trans, n, k, alpha, a, lda, b, ldb,
+                 beta, c, ldc);
+}
+HWYBLAS_API void dsyr2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const double* alpha, const double* a,
+                         const blasint* lda, const double* b,
+                         const blasint* ldb, const double* beta, double* c,
+                         const blasint* ldc) {
+  hwyblas::Syr2k("DSYR2K", false, uplo, trans, n, k, alpha, a, lda, b, ldb,
+                 beta, c, ldc);
+}
+HWYBLAS_API void csyr2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const float* alpha, const float* a,
+                         const blasint* lda, const float* b, const blasint* ldb,
+                         const float* beta, float* c, const blasint* ldc) {
+  hwyblas::Syr2k("CSYR2K", false, uplo, trans, n, k, C32(alpha), C32(a), lda,
+                 C32(b), ldb, C32(beta), C32(c), ldc);
+}
+HWYBLAS_API void zsyr2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const double* alpha, const double* a,
+                         const blasint* lda, const double* b,
+                         const blasint* ldb, const double* beta, double* c,
+                         const blasint* ldc) {
+  hwyblas::Syr2k("ZSYR2K", false, uplo, trans, n, k, C64(alpha), C64(a), lda,
+                 C64(b), ldb, C64(beta), C64(c), ldc);
+}
+
+// HER2K: beta is real.
+
+HWYBLAS_API void cher2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const float* alpha, const float* a,
+                         const blasint* lda, const float* b, const blasint* ldb,
+                         const float* beta, float* c, const blasint* ldc) {
+  hwyblas::Syr2k("CHER2K", true, uplo, trans, n, k, C32(alpha), C32(a), lda,
+                 C32(b), ldb, beta, C32(c), ldc);
+}
+HWYBLAS_API void zher2k_(const char* uplo, const char* trans, const blasint* n,
+                         const blasint* k, const double* alpha, const double* a,
+                         const blasint* lda, const double* b,
+                         const blasint* ldb, const double* beta, double* c,
+                         const blasint* ldc) {
+  hwyblas::Syr2k("ZHER2K", true, uplo, trans, n, k, C64(alpha), C64(a), lda,
+                 C64(b), ldb, beta, C64(c), ldc);
+}
+
+// GEMMTR, and GEMMT: the name used by OpenBLAS and MKL for the same
+// routine.
+
+HWYBLAS_API void sgemmtr_(const char* uplo, const char* transa,
+                          const char* transb, const blasint* n,
+                          const blasint* k, const float* alpha, const float* a,
+                          const blasint* lda, const float* b,
+                          const blasint* ldb, const float* beta, float* c,
+                          const blasint* ldc) {
+  hwyblas::Gemmtr("SGEMMTR", uplo, transa, transb, n, k, alpha, a, lda, b, ldb,
+                  beta, c, ldc);
+}
+HWYBLAS_API void dgemmtr_(const char* uplo, const char* transa,
+                          const char* transb, const blasint* n,
+                          const blasint* k, const double* alpha,
+                          const double* a, const blasint* lda, const double* b,
+                          const blasint* ldb, const double* beta, double* c,
+                          const blasint* ldc) {
+  hwyblas::Gemmtr("DGEMMTR", uplo, transa, transb, n, k, alpha, a, lda, b, ldb,
+                  beta, c, ldc);
+}
+HWYBLAS_API void cgemmtr_(const char* uplo, const char* transa,
+                          const char* transb, const blasint* n,
+                          const blasint* k, const float* alpha, const float* a,
+                          const blasint* lda, const float* b,
+                          const blasint* ldb, const float* beta, float* c,
+                          const blasint* ldc) {
+  hwyblas::Gemmtr("CGEMMTR", uplo, transa, transb, n, k, C32(alpha), C32(a),
+                  lda, C32(b), ldb, C32(beta), C32(c), ldc);
+}
+HWYBLAS_API void zgemmtr_(const char* uplo, const char* transa,
+                          const char* transb, const blasint* n,
+                          const blasint* k, const double* alpha,
+                          const double* a, const blasint* lda, const double* b,
+                          const blasint* ldb, const double* beta, double* c,
+                          const blasint* ldc) {
+  hwyblas::Gemmtr("ZGEMMTR", uplo, transa, transb, n, k, C64(alpha), C64(a),
+                  lda, C64(b), ldb, C64(beta), C64(c), ldc);
+}
+HWYBLAS_API void sgemmt_(const char* uplo, const char* transa,
+                         const char* transb, const blasint* n, const blasint* k,
+                         const float* alpha, const float* a, const blasint* lda,
+                         const float* b, const blasint* ldb, const float* beta,
+                         float* c, const blasint* ldc) {
+  hwyblas::Gemmtr("SGEMMT", uplo, transa, transb, n, k, alpha, a, lda, b, ldb,
+                  beta, c, ldc);
+}
+HWYBLAS_API void dgemmt_(const char* uplo, const char* transa,
+                         const char* transb, const blasint* n, const blasint* k,
+                         const double* alpha, const double* a,
+                         const blasint* lda, const double* b,
+                         const blasint* ldb, const double* beta, double* c,
+                         const blasint* ldc) {
+  hwyblas::Gemmtr("DGEMMT", uplo, transa, transb, n, k, alpha, a, lda, b, ldb,
+                  beta, c, ldc);
+}
+HWYBLAS_API void cgemmt_(const char* uplo, const char* transa,
+                         const char* transb, const blasint* n, const blasint* k,
+                         const float* alpha, const float* a, const blasint* lda,
+                         const float* b, const blasint* ldb, const float* beta,
+                         float* c, const blasint* ldc) {
+  hwyblas::Gemmtr("CGEMMT", uplo, transa, transb, n, k, C32(alpha), C32(a), lda,
+                  C32(b), ldb, C32(beta), C32(c), ldc);
+}
+HWYBLAS_API void zgemmt_(const char* uplo, const char* transa,
+                         const char* transb, const blasint* n, const blasint* k,
+                         const double* alpha, const double* a,
+                         const blasint* lda, const double* b,
+                         const blasint* ldb, const double* beta, double* c,
+                         const blasint* ldc) {
+  hwyblas::Gemmtr("ZGEMMT", uplo, transa, transb, n, k, C64(alpha), C64(a), lda,
+                  C64(b), ldb, C64(beta), C64(c), ldc);
 }
 
 // TRMM

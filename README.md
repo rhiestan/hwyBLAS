@@ -27,12 +27,13 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 | 2 | `?symv_` / `?hemv_` | s d / c z |
 | 2 | `?ger_` / `?geru_`, `?gerc_` | s d / c z |
 | 2 | `?syr_`, `?syr2_` / `?her_`, `?her2_` | s d / c z |
-| 3 | `?gemm_`, `?symm_`, `?syrk_`, `?trmm_`, `?trsm_` | s d c z |
-| 3 | `?hemm_`, `?herk_` | c z |
+| 3 | `?gemm_`, `?symm_`, `?syrk_`, `?syr2k_`, `?trmm_`, `?trsm_` | s d c z |
+| 3 | `?gemmtr_` (also as `?gemmt_`) | s d c z |
+| 3 | `?hemm_`, `?herk_`, `?her2k_` | c z |
 
 This covers every BLAS routine that Eigen calls with `EIGEN_USE_BLAS`, and
-all of Level 1. Not yet implemented: banded and packed Level 2 routines,
-`?syr2k_`, `?her2k_` and `?gemmtr_`.
+all of Level 1 and Level 3. Not yet implemented: the banded and packed
+Level 2 routines.
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
@@ -86,8 +87,8 @@ with OpenBLAS 0.3.34 and MKL, square matrices, `trans = NN`:
 | zgemm | 128 | 62 | 61 | 64 |
 | | 2048 | 63 | 59 | 58 |
 
-The other routines (`symm`, `syrk`, `trmm`, `trsm`, `gemv`, `symv`/`hemv`,
-`trmv`, `trsv`) perform on par with OpenBLAS at medium and large sizes, and
+The other routines (`symm`, `syrk`, `syr2k`, `gemmt`, `trmm`, `trsm`, `gemv`,
+`symv`/`hemv`, `trmv`, `trsv`) perform on par with OpenBLAS at medium and large sizes, and
 mostly better than MKL on this AMD CPU. From n = 256 up, the rank updates
 (`ger`, `syr`, `syr2`, `her`, `her2`) are mostly the fastest of the four
 libraries, up to 2x ahead of the next best (`cher2`); at n = 64, MKL or AOCL
@@ -115,7 +116,8 @@ src/gemm.cc                 GEMM API and the dispatched GEMM driver
 src/gemm-inl.h              GEMM driver: cache blocking (Goto/BLIS algorithm)
 src/gemm_kernel-inl.h       GEMM micro-kernels (real and complex)
 src/pack-inl.h              packing of (structured) operands into panels
-src/level3.cc               SYMM, HEMM, SYRK, HERK, TRMM on top of the driver
+src/level3.cc               SYMM, HEMM, SYRK, HERK, SYR2K, HER2K, GEMMTR and
+                            TRMM on top of the driver
 src/trsm.cc, trsm-inl.h     recursive TRSM and its small-triangle kernels
 src/gemv.cc, gemv-inl.h     GEMV API and kernels
 src/level2.cc               SYMV, HEMV (symv-inl.h), TRMV (trmv-inl.h),

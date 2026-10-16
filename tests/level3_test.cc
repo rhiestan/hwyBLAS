@@ -1,11 +1,12 @@
-// Tests for the level 3 routines besides GEMM: SYMM, HEMM, SYRK, HERK, TRMM
-// and TRSM, against dense reference products computed in double precision.
+// Tests for the level 3 routines besides GEMM: SYMM, HEMM, SYRK, HERK,
+// SYR2K, HER2K, GEMMTR, TRMM and TRSM, against dense reference products computed in double precision.
 //
 // Structured input matrices have NaN wherever BLAS must not read (see
 // StructuredMatrix), so any such read shows up as a mismatch.
 #include <stddef.h>
 
 #include <complex>
+#include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -219,6 +220,196 @@ TYPED_TEST(Level3Test, Herk) {
       }
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// SYR2K / HER2K / GEMMTR: products that update one triangle of C.
+
+enum class TriangleRoutine { kSyr2k, kHer2k, kGemmtr };
+
+// Dense op(X)' (n x k) for op(X) given as a dense n x k matrix, where ' is
+// ^H if conj, else ^T.
+template <typename T>
+Dense<T> Transposed(const Dense<T>& x, bool conj) {
+  Dense<T> t(x.cols, x.rows);
+  for (size_t j = 0; j < x.rows; ++j) {
+    for (size_t p = 0; p < x.cols; ++p) {
+      t(p, j) = conj ? Conj(x(j, p)) : x(j, p);
+    }
+  }
+  return t;
+}
+
+// For SYR2K/HER2K, trans_a is TRANS and trans_b is ignored.
+template <typename T>
+void CheckTriangle(TriangleRoutine routine, char uplo, char trans_a,
+                   char trans_b, int n, int k, T alpha, T beta, uint64_t seed) {
+  const bool her2k = (routine == TriangleRoutine::kHer2k);
+  if (routine != TriangleRoutine::kGemmtr) trans_b = trans_a;
+  if (her2k) beta = T(std::real(beta));
+  // op(A) is n x k. For GEMMTR op(B) is k x n; for SYR2K/HER2K op(B) has the
+  // shape of op(A).
+  const bool ta = (trans_a != 'N'), tb = (trans_b != 'N');
+  const bool b_like_a = (routine != TriangleRoutine::kGemmtr);
+  const int rows_a = ta ? k : n, cols_a = ta ? n : k;
+  const int rows_b = b_like_a ? rows_a : (tb ? n : k);
+  const int cols_b = b_like_a ? cols_a : (tb ? k : n);
+  const int lda = rows_a + 1, ldb = rows_b + 3, ldc = n + 2;
+
+  Random<T> rng(seed);
+  const std::vector<T> a = rng.Vector(static_cast<size_t>(lda) * cols_a);
+  const std::vector<T> b = rng.Vector(static_cast<size_t>(ldb) * cols_b);
+  std::vector<T> c = rng.Vector(static_cast<size_t>(ldc) * n);
+  const auto in_triangle = [&](int i, int j) {
+    return uplo == 'L' ? (i >= j) : (i <= j);
+  };
+  // The other triangle must stay untouched; for HER2K the imaginary parts of
+  // the diagonal of C must not be read; for beta = 0, C must not be read.
+  const T sentinel = MakeScalar<T>(7.0, 7.0);
+  for (int j = 0; j < n; ++j) {
+    for (int i = 0; i < n; ++i) {
+      T& cij = c[i + static_cast<size_t>(j) * ldc];
+      if (!in_triangle(i, j)) cij = sentinel;
+      if (i == j && her2k) cij = MakeScalar<T>(std::real(cij), NaN<double>());
+      if (beta == T(0) && in_triangle(i, j)) cij = NaN<T>();
+    }
+  }
+  std::vector<T> c0 = c;
+  if (her2k && !(beta == T(0))) {
+    for (int j = 0; j < n; ++j) {
+      T& cjj = c0[j + static_cast<size_t>(j) * ldc];
+      cjj = T(std::real(cjj));
+    }
+  }
+
+  std::vector<RefT<T>> expected, expected2;
+  std::vector<double> bound, bound2;
+  const Dense<T> da = DenseOp(trans_a, a, rows_a, cols_a, lda);
+  if (routine == TriangleRoutine::kGemmtr) {
+    const Dense<T> db = DenseOp(trans_b, b, rows_b, cols_b, ldb);
+    ReferenceProduct(da, db, alpha, beta, c0, ldc, &expected, &bound);
+  } else {
+    // op(B) has the shape of op(A); ' is ^H for HER2K, ^T for SYR2K.
+    const Dense<T> db = DenseOp(trans_a, b, rows_b, cols_b, ldb);
+    const T alpha2 = her2k ? Conj(alpha) : alpha;
+    ReferenceProduct(da, Transposed(db, her2k), alpha, beta, c0, ldc, &expected,
+                     &bound);
+    ReferenceProduct(db, Transposed(da, her2k), alpha2, T(0), c0, ldc,
+                     &expected2, &bound2);
+    for (size_t i = 0; i < expected.size(); ++i) {
+      expected[i] += expected2[i];
+      bound[i] += bound2[i];
+    }
+  }
+
+  switch (routine) {
+    case TriangleRoutine::kSyr2k:
+      HWYBLAS_CALL(T, syr2k, &uplo, &trans_a, &n, &k, P(&alpha), P(a.data()),
+                   &lda, P(b.data()), &ldb, P(&beta), P(c.data()), &ldc);
+      break;
+    case TriangleRoutine::kHer2k: {
+      const RealT<T> real_beta = std::real(beta);
+      HWYBLAS_CALL_COMPLEX(T, her2k, &uplo, &trans_a, &n, &k, P(&alpha),
+                           P(a.data()), &lda, P(b.data()), &ldb, &real_beta,
+                           P(c.data()), &ldc);
+      break;
+    }
+    case TriangleRoutine::kGemmtr:
+      HWYBLAS_CALL(T, gemmtr, &uplo, &trans_a, &trans_b, &n, &k, P(&alpha),
+                   P(a.data()), &lda, P(b.data()), &ldb, P(&beta), P(c.data()),
+                   &ldc);
+      break;
+  }
+
+  const double tol = 4.0 * (2 * k + 2) * Eps<T>();
+  size_t failures = 0;
+  for (int j = 0; j < n; ++j) {
+    for (int i = 0; i < n; ++i) {
+      const size_t idx = i + static_cast<size_t>(j) * ldc;
+      if (!in_triangle(i, j)) {
+        if (!(c[idx] == sentinel)) ++failures;
+        continue;
+      }
+      const RefT<T> got = static_cast<RefT<T>>(c[idx]);
+      const double err = std::abs(got - expected[idx]);
+      if (!(err <= tol * bound[idx])) ++failures;
+      if (her2k && i == j && std::imag(c[idx]) != 0) ++failures;
+    }
+  }
+  EXPECT_EQ(failures, 0u) << "routine=" << static_cast<int>(routine)
+                          << " uplo=" << uplo << " trans=" << trans_a << trans_b
+                          << " n=" << n << " k=" << k << " alpha=" << alpha
+                          << " beta=" << beta;
+}
+
+TYPED_TEST(Level3Test, Syr2kHer2k) {
+  using T = TypeParam;
+  // SYR2K for all types; HER2K (trans N or C) for complex types.
+  std::vector<std::pair<TriangleRoutine, char>> cases = {
+      {TriangleRoutine::kSyr2k, 'N'}, {TriangleRoutine::kSyr2k, 'T'}};
+  if constexpr (IsComplex<T>::value) {
+    cases.push_back({TriangleRoutine::kHer2k, 'N'});
+    cases.push_back({TriangleRoutine::kHer2k, 'C'});
+  } else {
+    cases.push_back({TriangleRoutine::kSyr2k, 'C'});  // same as T
+  }
+  ForEachTarget([&] {
+    uint64_t seed = 1;
+    for (const auto& [routine, trans] : cases) {
+      for (char uplo : {'L', 'U'}) {
+        for (int n : kSizes) {
+          for (int k : {1, 9, 300}) {
+            CheckTriangle<T>(routine, uplo, trans, 'N', n, k,
+                             MakeScalar<T>(1.5, 0.5), MakeScalar<T>(0.5, -1),
+                             seed++);
+          }
+          CheckTriangle<T>(routine, uplo, trans, 'N', n, 20,
+                           MakeScalar<T>(-1.0, 0.25), T(0), seed++);
+          CheckTriangle<T>(routine, uplo, trans, 'N', n, 20, T(0),
+                           MakeScalar<T>(2.0, 0.0), seed++);
+          CheckTriangle<T>(routine, uplo, trans, 'N', n, 0, T(1),
+                           MakeScalar<T>(0.5, 0.0), seed++);
+        }
+      }
+    }
+  });
+}
+
+TYPED_TEST(Level3Test, Gemmtr) {
+  using T = TypeParam;
+  ForEachTarget([] {
+    uint64_t seed = 1;
+    for (char uplo : {'L', 'U'}) {
+      for (char ta : Ops<T>()) {
+        for (char tb : Ops<T>()) {
+          for (int n : kSizes) {
+            CheckTriangle<T>(TriangleRoutine::kGemmtr, uplo, ta, tb, n, 37,
+                             MakeScalar<T>(1.5, 0.5), MakeScalar<T>(0.5, -1),
+                             seed++);
+          }
+          CheckTriangle<T>(TriangleRoutine::kGemmtr, uplo, ta, tb, 100, 300,
+                           MakeScalar<T>(-1.0, 0.0), T(0), seed++);
+          CheckTriangle<T>(TriangleRoutine::kGemmtr, uplo, ta, tb, 13, 0, T(1),
+                           MakeScalar<T>(2.0, 1.0), seed++);
+        }
+      }
+    }
+  });
+}
+
+TYPED_TEST(Level3Test, GemmtIsGemmtr) {
+  using T = TypeParam;
+  const int n = 5, k = 3;
+  Random<T> rng(7);
+  const std::vector<T> a = rng.Vector(n * k), b = rng.Vector(k * n);
+  std::vector<T> c1 = rng.Vector(n * n), c2 = c1;
+  const T alpha = MakeScalar<T>(1.5, 0.5), beta = MakeScalar<T>(0.5, 0.0);
+  const char uplo = 'U', tn = 'N';
+  HWYBLAS_CALL(T, gemmtr, &uplo, &tn, &tn, &n, &k, P(&alpha), P(a.data()), &n,
+               P(b.data()), &k, P(&beta), P(c1.data()), &n);
+  HWYBLAS_CALL(T, gemmt, &uplo, &tn, &tn, &n, &k, P(&alpha), P(a.data()), &n,
+               P(b.data()), &k, P(&beta), P(c2.data()), &n);
+  EXPECT_EQ(c1, c2);
 }
 
 // ---------------------------------------------------------------------------

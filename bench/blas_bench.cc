@@ -4,7 +4,8 @@
 // Usage:
 //   blas_bench <routine> [options] [name=path/to/blas.dll ...]
 //
-// Routines: gemm, gemv, symm (hemm for complex), syrk, trmm, trsm,
+// Routines: gemm, gemv, symm (hemm for complex), syrk, syr2k (her2k for
+// complex), gemmt (C := A * B for one triangle of C), trmm, trsm,
 // symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
 // syr2 (her2), and level 1: axpy, scal, dot (dotu for complex), nrm2, asum,
 // iamax, rot. A square size n means m = n = k; for
@@ -340,6 +341,58 @@ void BenchSyrk(const Options& opt, const Libraries& libs) {
   }
 }
 
+// SYR2K (HER2K for complex types) and GEMMT, which update the uplo triangle
+// of the n x n matrix C. For gemmt, op(A) is n x k and op(B) k x n; for
+// syr2k, A and B are n x k (trans = N) or k x n.
+template <typename T>
+void BenchTriangleUpdate(const Options& opt, const Libraries& libs) {
+  const bool gemmt = (opt.routine == "gemmt");
+  const char ta = opt.trans.empty() ? 'N' : opt.trans[0];
+  const char tb = opt.trans.size() > 1 ? opt.trans[1] : 'N';
+  const std::string symbol =
+      Symbol<T>(gemmt ? "gemmt" : (kIsComplex<T> ? "her2k" : "syr2k"));
+  const std::string trans = gemmt ? std::string{ta, tb} : std::string{ta};
+  PrintHeader<T>(libs, symbol + "  uplo=" + opt.uplo + " trans=" + trans,
+                 "n x k");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.m, k = s.k;
+    const int lda = (ta == 'N') ? n : k;
+    const int ldb = gemmt ? ((tb == 'N') ? k : n) : lda;
+    const auto a =
+        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
+    const auto b =
+        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
+    Case<T> c;
+    c.label = Label(n, k);
+    // gemmt: half of a GEMM; syr2k: two halves.
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * n * (n + 1.0) * k * (gemmt ? 1 : 2);
+    c.initial_out = RandomVector<T>(size_t(n) * n, rng);
+    const char uplo = opt.uplo;
+    if (gemmt) {
+      c.call = [=](void* fn, T* out) {
+        using Fn = void (*)(const char*, const char*, const char*, const int*,
+                            const int*, const T*, const T*, const int*,
+                            const T*, const int*, const T*, T*, const int*);
+        const T alpha = T(1), beta = T(0.5);
+        reinterpret_cast<Fn>(fn)(&uplo, &ta, &tb, &n, &k, &alpha, a->data(),
+                                 &lda, b->data(), &ldb, &beta, out, &n);
+      };
+    } else {
+      c.call = [=](void* fn, T* out) {
+        // For her2k, beta is real: its pointer reads the real part.
+        using Fn = void (*)(const char*, const char*, const int*, const int*,
+                            const T*, const T*, const int*, const T*,
+                            const int*, const T*, T*, const int*);
+        const T alpha = T(1), beta = T(0.5);
+        reinterpret_cast<Fn>(fn)(&uplo, &ta, &n, &k, &alpha, a->data(), &lda,
+                                 b->data(), &ldb, &beta, out, &n);
+      };
+    }
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // TRMM and TRSM. Both overwrite B, so every call starts from a fresh copy of
 // the input (the copy is cheap compared to the O(m^2 n) work).
 template <typename T>
@@ -607,6 +660,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchSymm<T>(opt, libs);
   } else if (opt.routine == "syrk") {
     BenchSyrk<T>(opt, libs);
+  } else if (opt.routine == "syr2k" || opt.routine == "gemmt") {
+    BenchTriangleUpdate<T>(opt, libs);
   } else if (opt.routine == "trmm" || opt.routine == "trsm") {
     BenchTriangular3<T>(opt, libs, opt.routine.c_str());
   } else if (opt.routine == "symv") {
