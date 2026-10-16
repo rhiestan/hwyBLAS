@@ -140,7 +140,9 @@ HWYBLAS_API hwyblas_complex_double zdotc_(const hwyblas_int* n, const double* x,
                                           const double* y,
                                           const hwyblas_int* incy);
 
-/* Euclidean norm, without harmful overflow or underflow. */
+/* Euclidean norm, without harmful overflow or underflow. As in the current
+ * reference BLAS, a negative incx gives the norm for |incx|, and incx == 0
+ * gives sqrt(n) * |x[0]|. */
 HWYBLAS_API float snrm2_(const hwyblas_int* n, const float* x,
                          const hwyblas_int* incx);
 HWYBLAS_API double dnrm2_(const hwyblas_int* n, const double* x,

@@ -310,11 +310,19 @@ R BlueNorm(size_t n, size_t reals, const R* x, size_t stride) {
   return scl * std::sqrt(sumsq);
 }
 
-// Euclidean norm of n elements of T.
+// Euclidean norm of n elements of T. As in the current reference BLAS (and
+// OpenBLAS, MKL, AOCL), unlike the other level 1 routines, a negative
+// increment is not a no-op: the norm does not depend on the order of the
+// elements, so it is the norm for |incx|; incx == 0 repeats x[0] n times.
 template <typename T>
 RealT<T> Nrm2(blasint n, const T* x, blasint incx) {
   using R = RealT<T>;
-  if (n < 1 || incx < 1) return 0;
+  if (n < 1) return 0;
+  if (incx == 0) {
+    return static_cast<R>(std::sqrt(static_cast<double>(n)) *
+                          static_cast<double>(Nrm2(1, x, 1)));
+  }
+  if (incx < 0) incx = -incx;
   const R* xr = reinterpret_cast<const R*>(x);
   const size_t reals = RealCount<T>(1);
   const size_t stride = reals * static_cast<size_t>(incx);  // in reals
@@ -589,6 +597,19 @@ void RotgComplex(std::complex<R>* a, const std::complex<R>* b, R* c,
 
 // Modified Givens rotation (reference BLAS ROTMG): computes H such that
 // H [sqrt(d1) x1; sqrt(d2) y1] has a zero second component.
+// Turns the implicit form of H (flag 0: h11 = h22 = 1; flag 1: h12 = 1,
+// h21 = -1) into the explicit one (flag -1).
+template <typename R>
+void MakeExplicit(R* flag, R* h11, R* h12, R* h21, R* h22) {
+  if (*flag == 0) {
+    *h11 = *h22 = 1;
+  } else if (*flag == 1) {
+    *h21 = -1;
+    *h12 = 1;
+  }
+  *flag = -1;
+}
+
 template <typename R>
 void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
   const R gam = 4096, gamsq = R(16777216), rgamsq = R(5.9604645e-8);
@@ -635,16 +656,14 @@ void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
       *d1 = temp;
       *x1 = y1 * u;
     }
-    // Rescale d1 and d2 into [rgamsq, gamsq].
+    // Rescale d1 and d2 into [rgamsq, gamsq]. Rescaling needs the full H
+    // (flag -1). The reference sets the implicit elements of H in every
+    // iteration of the loops below, which also overwrites elements that an
+    // earlier iteration has scaled; here, as in OpenBLAS and gonum (Hopkins'
+    // correction), only once.
     if (*d1 != 0) {
       while (*d1 <= rgamsq || *d1 >= gamsq) {
-        if (flag == 0) {
-          h11 = h22 = 1;
-        } else {
-          h21 = -1;
-          h12 = 1;
-        }
-        flag = -1;
+        MakeExplicit(&flag, &h11, &h12, &h21, &h22);
         if (*d1 <= rgamsq) {
           *d1 *= gam * gam;
           *x1 /= gam;
@@ -660,13 +679,7 @@ void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
     }
     if (*d2 != 0) {
       while (std::abs(*d2) <= rgamsq || std::abs(*d2) >= gamsq) {
-        if (flag == 0) {
-          h11 = h22 = 1;
-        } else {
-          h21 = -1;
-          h12 = 1;
-        }
-        flag = -1;
+        MakeExplicit(&flag, &h11, &h12, &h21, &h22);
         if (std::abs(*d2) <= rgamsq) {
           *d2 *= gam * gam;
           h21 /= gam;

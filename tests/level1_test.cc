@@ -254,7 +254,7 @@ TYPED_TEST(Level1Test, Nrm2) {
     const R lim_big = std::numeric_limits<R>::max() / R(64);
     const R lim_small = std::numeric_limits<R>::min() * R(64);
     for (int n : kLengths) {
-      for (int inc : {1, 3}) {
+      for (int inc : {1, 3, -1, -2}) {
         for (R scale : {R(1), lim_big, lim_small}) {
           Random<T> rng(seed++);
           StridedVector<T> x(n, inc, rng);
@@ -267,14 +267,25 @@ TYPED_TEST(Level1Test, Nrm2) {
         }
       }
     }
-    // Mixed magnitudes, and the reference no-op rules.
+    // Mixed magnitudes, and a zero increment (x[0] repeated n times).
     Random<T> rng(seed);
     StridedVector<T> x(5, 1, rng);
     x[0] = T(lim_big);
     x[3] = T(lim_small);
     EXPECT_NEAR(Nrm2(5, x) / RefNorm(x), 1.0, 4 * Eps<T>());
     x.inc = 0;
-    EXPECT_EQ(Nrm2(5, x), 0.0);
+    EXPECT_NEAR(Nrm2(5, x) / (std::sqrt(5.0) * Abs(x.data[0])), 1.0,
+                4 * Eps<T>());
+    if constexpr (std::is_same_v<R, double>) {
+      // Sums of squares below the range of the fast double path: medium
+      // elements together with tiny ones, or medium ones only.
+      StridedVector<T> y(2, 1, rng);
+      for (double tiny : {1e-160, 0.0}) {
+        y[0] = T(1e-152);
+        y[1] = T(tiny);
+        EXPECT_NEAR(Nrm2(2, y) / RefNorm(y), 1.0, 4 * Eps<T>()) << tiny;
+      }
+    }
   });
 }
 
@@ -448,7 +459,14 @@ TYPED_TEST(Level1Test, Rotg) {
   using R = RealT<T>;
   const R big = std::numeric_limits<R>::max() / R(8);
   const R small = std::numeric_limits<R>::min() * R(8);
-  const R values[] = {0, 1, -2, R(0.5), big, -big, small, -small};
+  // Near the square roots of the limits: the unscaled algorithm with
+  // |f| << |g| and |f|^2 below its thresholds; with big, the scaled one with
+  // a tiny |f / u|^2.
+  const R sqrt_max = std::sqrt(std::numeric_limits<R>::max());
+  const R sqrt_big = sqrt_max / R(64);
+  const R sqrt_small = std::sqrt(std::numeric_limits<R>::min()) * R(64);
+  const R values[] = {0,     1,      -2,       R(0.5),   big,       -big,
+                      small, -small, sqrt_max, sqrt_big, sqrt_small};
   for (R are : values) {
     for (R bre : values) {
       for (R aim : {R(0), R(0.75)}) {
@@ -504,10 +522,11 @@ TYPED_TEST(Level1Test, Rotmg) {
   using T = TypeParam;
   if constexpr (!IsComplex<T>::value) {
     Random<T> rng(1);
-    for (int iter = 0; iter < 200; ++iter) {
-      // Includes scaling: d1, d2 over many orders of magnitude.
-      const T d1_in = std::abs(rng.Next()) * std::pow(T(10), T(iter % 13 - 6));
-      const T d2_in = rng.Next() * std::pow(T(10), T(iter % 7 - 3));
+    for (int iter = 0; iter < 625; ++iter) {
+      // d1 and d2 over many orders of magnitude, independently, so that the
+      // rescaling of either or both runs, possibly several times.
+      const T d1_in = std::abs(rng.Next()) * std::pow(T(10), T(iter % 25 - 12));
+      const T d2_in = rng.Next() * std::pow(T(10), T(iter / 25 - 12));
       const T x1_in = rng.Next(), y1 = rng.Next();
       T d1 = d1_in, d2 = d2_in, x1 = x1_in, param[5] = {};
       HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);
