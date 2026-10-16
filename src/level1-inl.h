@@ -129,6 +129,55 @@ HWY_INLINE void ScalContiguous(size_t n, T alpha, T* HWY_RESTRICT x) {
   }
 }
 
+// y[0:n] := alpha * op(x[0:n]) + beta * y[0:n], where op conjugates if
+// kConj (complex T only). If !kReadY, y is not read and beta is ignored
+// (y := alpha * op(x), for beta == 0).
+template <bool kConj, bool kReadY, typename T>
+HWY_INLINE void AxpbyContiguous(size_t n, T alpha, const T* HWY_RESTRICT x,
+                                T beta, T* HWY_RESTRICT y) {
+  using R = RealT<T>;
+  const hn::ScalableTag<R> d;
+  using V = hn::Vec<decltype(d)>;
+  const size_t N = hn::Lanes(d);
+  const R* HWY_RESTRICT xr = reinterpret_cast<const R*>(x);
+  R* HWY_RESTRICT yr = reinterpret_cast<R*>(y);
+  const size_t len = RealCount<T>(n);
+  constexpr bool kComplex = IsComplex<T>::value;
+
+  R a_re, a_im = 0, b_re, b_im = 0;
+  if constexpr (kComplex) {
+    a_re = alpha.real();
+    a_im = alpha.imag();
+    b_re = beta.real();
+    b_im = beta.imag();
+  } else {
+    a_re = alpha;
+    b_re = beta;
+  }
+  const V va_re = hn::Set(d, a_re), va_im = hn::Set(d, a_im);
+  const V vb_re = hn::Set(d, b_re), vb_im = hn::Set(d, b_im);
+
+  size_t i = 0;
+  for (; i < len; i += N) {
+    const size_t count = HWY_MIN(N, len - i);
+    V xv = (count == N) ? hn::LoadU(d, xr + i) : hn::LoadN(d, xr + i, count);
+    if constexpr (kComplex && kConj) {
+      xv = hn::OddEven(hn::Neg(xv), xv);  // negate the imaginary parts
+    }
+    V r = ScaleByBroadcast<kComplex>(d, xv, va_re, va_im);
+    if constexpr (kReadY) {
+      const V yv =
+          (count == N) ? hn::LoadU(d, yr + i) : hn::LoadN(d, yr + i, count);
+      r = hn::Add(r, ScaleByBroadcast<kComplex>(d, yv, vb_re, vb_im));
+    }
+    if (count == N) {
+      hn::StoreU(r, d, yr + i);
+    } else {
+      hn::StoreN(r, d, yr + i, count);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Reductions. They use four independent accumulators so that the FMA latency
 // does not limit throughput, and work on the underlying reals (a complex

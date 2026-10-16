@@ -38,8 +38,16 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 This is the complete reference BLAS, with both the Fortran interface
 (`hwyblas/hwyblas.h`) and the CBLAS interface (`hwyblas/cblas.h`, row- and
 column-major), and includes every routine that Eigen calls with
-`EIGEN_USE_BLAS`. Not yet implemented: the common extensions (`?axpby`,
-`?omatcopy`, `?imatcopy`, `i?amin`).
+`EIGEN_USE_BLAS`. In addition, both interfaces provide these extensions, as
+in OpenBLAS:
+
+| Routine | Operation | Precisions |
+|---------|-----------|------------|
+| `?axpby` | y := alpha * x + beta * y | s d c z |
+| `i?amin` | index of the first element of smallest \|x_i\| | s d c z |
+| `?omatcopy` | B := alpha * op(A), op = N, T, R (conjugate) or C, row- or column-major | s d c z |
+| `?imatcopy` | A := alpha * op(A) in place | s d c z |
+
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
@@ -155,6 +163,7 @@ src/band_packed.cc          banded and packed Level 2 routines; storage
                             layouts in band_packed.h, kernels in
                             band_packed-inl.h
 src/level1.cc, level1-inl.h AXPY and the vector kernels shared by others
+src/matcopy.cc              ?OMATCOPY, ?IMATCOPY
 tests/                      GoogleTest tests, Eigen integration test
 bench/                      benchmark comparing BLAS libraries at runtime
 ```
@@ -215,6 +224,10 @@ cover every target.
   CBLAS argument (the layout being argument 1), as the reference CBLAS does;
   it does not terminate either.
 - `cblas_i?amax` returns a 0-based index, and 0 if `n <= 0` or `incx <= 0`.
+- Extensions: `?axpby` reads neither x if `alpha = 0` nor y if `beta = 0`,
+  and `?omatcopy`/`?imatcopy` with `alpha = 0` set the result to zero without
+  reading A. `CblasConjNoTrans` is accepted by `cblas_?omatcopy` and
+  `cblas_?imatcopy` only.
 - `beta == 0` means the output is not read, so NaN/Inf in it do not
   propagate. This is the reference BLAS semantics.
 - Elements that BLAS defines as not referenced are never read: the other

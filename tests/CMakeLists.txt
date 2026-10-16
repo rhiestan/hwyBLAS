@@ -17,6 +17,7 @@ add_executable(hwyblas_tests
   level1_test.cc
   band_packed_test.cc
   cblas_test.cc
+  extensions_test.cc
   level2_test.cc
   level3_test.cc
 )

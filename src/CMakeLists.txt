@@ -7,6 +7,7 @@ add_library(hwyblas
   level1.cc
   level2.cc
   level3.cc
+  matcopy.cc
   trsm.cc
 )
 add_library(hwyblas::hwyblas ALIAS hwyblas)

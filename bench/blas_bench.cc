@@ -686,6 +686,37 @@ void BenchBandPacked(const Options& opt, const Libraries& libs) {
   }
 }
 
+// OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
+// G elements per second in the GFLOP/s columns.
+template <typename T>
+void BenchOmatcopy(const Options& opt, const Libraries& libs) {
+  const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
+  const std::string symbol = Symbol<T>("omatcopy");
+  PrintHeader<T>(libs,
+                 symbol + "  trans=" + trans + "  (G elements/s, not GFLOP/s)",
+                 "m x n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int m = s.m, n = s.n;
+    const int ldb = (trans == 'N' || trans == 'R') ? m : n;
+    const auto a =
+        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(m) * n, rng));
+    Case<T> c;
+    c.label = std::to_string(m) + "x" + std::to_string(n);
+    c.flops = double(m) * n;
+    c.initial_out = std::vector<T>(size_t(m) * n);
+    c.call = [=](void* fn, T* out) {
+      const char order = 'C';
+      const T alpha = T(2);
+      reinterpret_cast<void (*)(const char*, const char*, const int*,
+                                const int*, const T*, const T*, const int*, T*,
+                                const int*)>(fn)(&order, &trans, &m, &n, &alpha,
+                                                 a->data(), &m, out, &ldb);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // Level 1 routines on vectors of length n (from the m of each shape). Scalar
 // results are written to out[0] so that they take part in the cross-library
 // comparison; this also checks that complex results are returned with the
@@ -718,13 +749,15 @@ void BenchLevel1(const Options& opt, const Libraries& libs) {
 
   // Flops per element (real; complex counts the real operations).
   double flops_per_element = 2;  // axpy, dot, nrm2
+  if (routine == "axpby") flops_per_element = 3;
   if (routine == "scal" || routine == "asum" || routine == "iamax") {
     flops_per_element = 1;
   } else if (routine == "rot") {
     flops_per_element = 6;
   }
   if (kIsComplex<T>) {
-    flops_per_element *= (routine == "axpy" || routine == "dot") ? 4 : 2;
+    flops_per_element *=
+        (routine == "axpy" || routine == "axpby" || routine == "dot") ? 4 : 2;
   }
 
   std::mt19937 rng(42);
@@ -735,7 +768,15 @@ void BenchLevel1(const Options& opt, const Libraries& libs) {
     c.label = std::to_string(n);
     c.flops = flops_per_element * n;
     c.initial_out = RandomVector<T>(n, rng);
-    if (routine == "axpy") {
+    if (routine == "axpby") {
+      c.call = [=](void* fn, T* out) {
+        // beta close to 1 keeps the values bounded over repeated calls.
+        const T alpha = T(0.5), beta = T(0.75);
+        reinterpret_cast<void (*)(const int*, const T*, const T*, const int*,
+                                  const T*, T*, const int*)>(fn)(
+            &n, &alpha, x->data(), &inc, &beta, out, &inc);
+      };
+    } else if (routine == "axpy") {
       c.call = [=](void* fn, T* out) {
         const T alpha = T(0.5);
         reinterpret_cast<void (*)(const int*, const T*, const T*, const int*,
@@ -818,10 +859,12 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
   } else if (opt.routine == "ger" || opt.routine == "syr" ||
              opt.routine == "syr2") {
     BenchRankUpdate<T>(opt, libs);
-  } else if (opt.routine == "axpy" || opt.routine == "scal" ||
-             opt.routine == "dot" || opt.routine == "nrm2" ||
-             opt.routine == "asum" || opt.routine == "iamax" ||
-             opt.routine == "rot") {
+  } else if (opt.routine == "omatcopy") {
+    BenchOmatcopy<T>(opt, libs);
+  } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
+             opt.routine == "scal" || opt.routine == "dot" ||
+             opt.routine == "nrm2" || opt.routine == "asum" ||
+             opt.routine == "iamax" || opt.routine == "rot") {
     BenchLevel1<T>(opt, libs);
   } else {
     fprintf(stderr, "Unknown routine: %s\n", opt.routine.c_str());

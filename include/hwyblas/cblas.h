@@ -30,7 +30,8 @@ typedef enum CBLAS_LAYOUT {
 typedef enum CBLAS_TRANSPOSE {
   CblasNoTrans = 111,
   CblasTrans = 112,
-  CblasConjTrans = 113
+  CblasConjTrans = 113,
+  CblasConjNoTrans = 114 /* OpenBLAS extension: cblas_?omatcopy/imatcopy */
 } CBLAS_TRANSPOSE;
 typedef enum CBLAS_UPLO { CblasUpper = 121, CblasLower = 122 } CBLAS_UPLO;
 typedef enum CBLAS_DIAG { CblasNonUnit = 131, CblasUnit = 132 } CBLAS_DIAG;
@@ -882,6 +883,85 @@ HWYBLAS_API void cblas_ztrsm(const CBLAS_LAYOUT layout, const CBLAS_SIDE side,
                              const hwyblas_int n, const void* alpha,
                              const void* a, const hwyblas_int lda, void* b,
                              const hwyblas_int ldb);
+/* ------------------------------------------------------------------------ */
+/* Extensions (as in OpenBLAS)                                              */
+
+/* y := alpha * x + beta * y (see ?axpby_). */
+HWYBLAS_API void cblas_saxpby(const hwyblas_int n, const float alpha,
+                              const float* x, const hwyblas_int incx,
+                              const float beta, float* y,
+                              const hwyblas_int incy);
+HWYBLAS_API void cblas_daxpby(const hwyblas_int n, const double alpha,
+                              const double* x, const hwyblas_int incx,
+                              const double beta, double* y,
+                              const hwyblas_int incy);
+HWYBLAS_API void cblas_caxpby(const hwyblas_int n, const void* alpha,
+                              const void* x, const hwyblas_int incx,
+                              const void* beta, void* y,
+                              const hwyblas_int incy);
+HWYBLAS_API void cblas_zaxpby(const hwyblas_int n, const void* alpha,
+                              const void* x, const hwyblas_int incx,
+                              const void* beta, void* y,
+                              const hwyblas_int incy);
+
+/* 0-based index of the first element of smallest |x_i|; 0 if n <= 0 or
+ * incx <= 0. */
+HWYBLAS_API CBLAS_INDEX cblas_isamin(const hwyblas_int n, const float* x,
+                                     const hwyblas_int incx);
+HWYBLAS_API CBLAS_INDEX cblas_idamin(const hwyblas_int n, const double* x,
+                                     const hwyblas_int incx);
+HWYBLAS_API CBLAS_INDEX cblas_icamin(const hwyblas_int n, const void* x,
+                                     const hwyblas_int incx);
+HWYBLAS_API CBLAS_INDEX cblas_izamin(const hwyblas_int n, const void* x,
+                                     const hwyblas_int incx);
+
+/* B := alpha * op(A) (see ?omatcopy_); CblasConjNoTrans conjugates. */
+HWYBLAS_API void cblas_somatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const float alpha, const float* a,
+                                 const hwyblas_int lda, float* b,
+                                 const hwyblas_int ldb);
+HWYBLAS_API void cblas_domatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const double alpha, const double* a,
+                                 const hwyblas_int lda, double* b,
+                                 const hwyblas_int ldb);
+HWYBLAS_API void cblas_comatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, const void* a,
+                                 const hwyblas_int lda, void* b,
+                                 const hwyblas_int ldb);
+HWYBLAS_API void cblas_zomatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, const void* a,
+                                 const hwyblas_int lda, void* b,
+                                 const hwyblas_int ldb);
+
+/* A := alpha * op(A) in place (see ?imatcopy_). */
+HWYBLAS_API void cblas_simatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const float alpha, float* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb);
+HWYBLAS_API void cblas_dimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const double alpha, double* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb);
+HWYBLAS_API void cblas_cimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, void* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb);
+HWYBLAS_API void cblas_zimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, void* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb);
 
 #ifdef __cplusplus
 } /* extern "C" */

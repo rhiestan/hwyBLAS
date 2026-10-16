@@ -76,6 +76,14 @@ char SideChar(CBLAS_SIDE s) {
   return s == CblasLeft ? 'L' : s == CblasRight ? 'R' : '?';
 }
 
+// ORDER and TRANS of ?omatcopy_/?imatcopy_ ('?' if invalid).
+char MatcopyOrder(CBLAS_LAYOUT layout) {
+  return layout == CblasColMajor ? 'C' : layout == CblasRowMajor ? 'R' : '?';
+}
+char MatcopyTrans(CBLAS_TRANSPOSE t) {
+  return t == CblasConjNoTrans ? 'R' : TransChar(t);
+}
+
 // The opposite triangle or side (for row-major storage).
 char FlipUplo(char c) { return c == 'U' ? 'L' : c == 'L' ? 'U' : c; }
 char FlipSide(char c) { return c == 'L' ? 'R' : c == 'R' ? 'L' : c; }
@@ -1942,6 +1950,147 @@ HWYBLAS_API void cblas_ztrsm(const CBLAS_LAYOUT layout, const CBLAS_SIDE side,
   hwyblas::Trmm<hwyblas::c64>("cblas_ztrsm", true, layout, side, uplo, transa,
                               diag, m, n, hwyblas::Scalar<hwyblas::c64>(alpha),
                               a, lda, b, ldb);
+}
+
+// Extensions (as in OpenBLAS)
+
+HWYBLAS_API void cblas_saxpby(const hwyblas_int n, const float alpha,
+                              const float* x, const hwyblas_int incx,
+                              const float beta, float* y,
+                              const hwyblas_int incy) {
+  saxpby_(&n, &alpha, x, &incx, &beta, y, &incy);
+}
+HWYBLAS_API void cblas_daxpby(const hwyblas_int n, const double alpha,
+                              const double* x, const hwyblas_int incx,
+                              const double beta, double* y,
+                              const hwyblas_int incy) {
+  daxpby_(&n, &alpha, x, &incx, &beta, y, &incy);
+}
+HWYBLAS_API void cblas_caxpby(const hwyblas_int n, const void* alpha,
+                              const void* x, const hwyblas_int incx,
+                              const void* beta, void* y,
+                              const hwyblas_int incy) {
+  caxpby_(&n, hwyblas::F<hwyblas::c32>(alpha), hwyblas::F<hwyblas::c32>(x),
+          &incx, hwyblas::F<hwyblas::c32>(beta), hwyblas::F<hwyblas::c32>(y),
+          &incy);
+}
+HWYBLAS_API void cblas_zaxpby(const hwyblas_int n, const void* alpha,
+                              const void* x, const hwyblas_int incx,
+                              const void* beta, void* y,
+                              const hwyblas_int incy) {
+  zaxpby_(&n, hwyblas::F<hwyblas::c64>(alpha), hwyblas::F<hwyblas::c64>(x),
+          &incx, hwyblas::F<hwyblas::c64>(beta), hwyblas::F<hwyblas::c64>(y),
+          &incy);
+}
+HWYBLAS_API CBLAS_INDEX cblas_isamin(const hwyblas_int n, const float* x,
+                                     const hwyblas_int incx) {
+  const hwyblas_int i = isamin_(&n, x, &incx);
+  return i > 0 ? static_cast<CBLAS_INDEX>(i - 1) : 0;
+}
+HWYBLAS_API CBLAS_INDEX cblas_idamin(const hwyblas_int n, const double* x,
+                                     const hwyblas_int incx) {
+  const hwyblas_int i = idamin_(&n, x, &incx);
+  return i > 0 ? static_cast<CBLAS_INDEX>(i - 1) : 0;
+}
+HWYBLAS_API CBLAS_INDEX cblas_icamin(const hwyblas_int n, const void* x,
+                                     const hwyblas_int incx) {
+  const hwyblas_int i = icamin_(&n, hwyblas::F<hwyblas::c32>(x), &incx);
+  return i > 0 ? static_cast<CBLAS_INDEX>(i - 1) : 0;
+}
+HWYBLAS_API CBLAS_INDEX cblas_izamin(const hwyblas_int n, const void* x,
+                                     const hwyblas_int incx) {
+  const hwyblas_int i = izamin_(&n, hwyblas::F<hwyblas::c64>(x), &incx);
+  return i > 0 ? static_cast<CBLAS_INDEX>(i - 1) : 0;
+}
+HWYBLAS_API void cblas_somatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const float alpha, const float* a,
+                                 const hwyblas_int lda, float* b,
+                                 const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_somatcopy", {1, 2, 3, 4, 5, 6, 7, 8, 9});
+  somatcopy_(&order, &tc, &rows, &cols, &alpha, a, &lda, b, &ldb);
+}
+HWYBLAS_API void cblas_domatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const double alpha, const double* a,
+                                 const hwyblas_int lda, double* b,
+                                 const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_domatcopy", {1, 2, 3, 4, 5, 6, 7, 8, 9});
+  domatcopy_(&order, &tc, &rows, &cols, &alpha, a, &lda, b, &ldb);
+}
+HWYBLAS_API void cblas_comatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, const void* a,
+                                 const hwyblas_int lda, void* b,
+                                 const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_comatcopy", {1, 2, 3, 4, 5, 6, 7, 8, 9});
+  comatcopy_(&order, &tc, &rows, &cols, hwyblas::F<hwyblas::c32>(alpha),
+             hwyblas::F<hwyblas::c32>(a), &lda, hwyblas::F<hwyblas::c32>(b),
+             &ldb);
+}
+HWYBLAS_API void cblas_zomatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, const void* a,
+                                 const hwyblas_int lda, void* b,
+                                 const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_zomatcopy", {1, 2, 3, 4, 5, 6, 7, 8, 9});
+  zomatcopy_(&order, &tc, &rows, &cols, hwyblas::F<hwyblas::c64>(alpha),
+             hwyblas::F<hwyblas::c64>(a), &lda, hwyblas::F<hwyblas::c64>(b),
+             &ldb);
+}
+HWYBLAS_API void cblas_simatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const float alpha, float* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_simatcopy", {1, 2, 3, 4, 5, 6, 7, 8});
+  simatcopy_(&order, &tc, &rows, &cols, &alpha, a, &lda, &ldb);
+}
+HWYBLAS_API void cblas_dimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const double alpha, double* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_dimatcopy", {1, 2, 3, 4, 5, 6, 7, 8});
+  dimatcopy_(&order, &tc, &rows, &cols, &alpha, a, &lda, &ldb);
+}
+HWYBLAS_API void cblas_cimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, void* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_cimatcopy", {1, 2, 3, 4, 5, 6, 7, 8});
+  cimatcopy_(&order, &tc, &rows, &cols, hwyblas::F<hwyblas::c32>(alpha),
+             hwyblas::F<hwyblas::c32>(a), &lda, &ldb);
+}
+HWYBLAS_API void cblas_zimatcopy(const CBLAS_LAYOUT layout,
+                                 const CBLAS_TRANSPOSE trans,
+                                 const hwyblas_int rows, const hwyblas_int cols,
+                                 const void* alpha, void* a,
+                                 const hwyblas_int lda, const hwyblas_int ldb) {
+  const char order = hwyblas::MatcopyOrder(layout),
+             tc = hwyblas::MatcopyTrans(trans);
+  hwyblas::CblasScope scope("cblas_zimatcopy", {1, 2, 3, 4, 5, 6, 7, 8});
+  zimatcopy_(&order, &tc, &rows, &cols, hwyblas::F<hwyblas::c64>(alpha),
+             hwyblas::F<hwyblas::c64>(a), &lda, &ldb);
 }
 
 }  // extern "C"

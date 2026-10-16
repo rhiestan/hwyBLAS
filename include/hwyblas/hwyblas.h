@@ -804,6 +804,80 @@ HWYBLAS_API void ztrsm_(const char* side, const char* uplo, const char* transa,
                         const hwyblas_int* ldb);
 
 /* ------------------------------------------------------------------------ */
+/* Extensions (as in OpenBLAS)                                              */
+
+/* y := alpha * x + beta * y. x is not read if alpha == 0, y is not read if
+ * beta == 0. */
+HWYBLAS_API void saxpby_(const hwyblas_int* n, const float* alpha,
+                         const float* x, const hwyblas_int* incx,
+                         const float* beta, float* y, const hwyblas_int* incy);
+HWYBLAS_API void daxpby_(const hwyblas_int* n, const double* alpha,
+                         const double* x, const hwyblas_int* incx,
+                         const double* beta, double* y,
+                         const hwyblas_int* incy);
+HWYBLAS_API void caxpby_(const hwyblas_int* n, const float* alpha,
+                         const float* x, const hwyblas_int* incx,
+                         const float* beta, float* y, const hwyblas_int* incy);
+HWYBLAS_API void zaxpby_(const hwyblas_int* n, const double* alpha,
+                         const double* x, const hwyblas_int* incx,
+                         const double* beta, double* y,
+                         const hwyblas_int* incy);
+
+/* 1-based index of the first element of smallest |x_i| (|re| + |im| for
+ * complex vectors); 0 if n < 1 or incx <= 0. */
+HWYBLAS_API hwyblas_int isamin_(const hwyblas_int* n, const float* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int idamin_(const hwyblas_int* n, const double* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int icamin_(const hwyblas_int* n, const float* x,
+                                const hwyblas_int* incx);
+HWYBLAS_API hwyblas_int izamin_(const hwyblas_int* n, const double* x,
+                                const hwyblas_int* incx);
+
+/* B := alpha * op(A), A rows x cols. order: 'C' (column-major) or 'R'
+ * (row-major); trans: 'N', 'T', 'R' (conjugate) or 'C' (conjugate
+ * transpose). alpha == 0 sets B to zero without reading A. */
+HWYBLAS_API void somatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const float* alpha, const float* a,
+                            const hwyblas_int* lda, float* b,
+                            const hwyblas_int* ldb);
+HWYBLAS_API void domatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const double* alpha, const double* a,
+                            const hwyblas_int* lda, double* b,
+                            const hwyblas_int* ldb);
+HWYBLAS_API void comatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const float* alpha, const float* a,
+                            const hwyblas_int* lda, float* b,
+                            const hwyblas_int* ldb);
+HWYBLAS_API void zomatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const double* alpha, const double* a,
+                            const hwyblas_int* lda, double* b,
+                            const hwyblas_int* ldb);
+
+/* A := alpha * op(A) in place, as ?omatcopy_; the result has leading
+ * dimension ldb. */
+HWYBLAS_API void simatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const float* alpha, float* a,
+                            const hwyblas_int* lda, const hwyblas_int* ldb);
+HWYBLAS_API void dimatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const double* alpha, double* a,
+                            const hwyblas_int* lda, const hwyblas_int* ldb);
+HWYBLAS_API void cimatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const float* alpha, float* a,
+                            const hwyblas_int* lda, const hwyblas_int* ldb);
+HWYBLAS_API void zimatcopy_(const char* order, const char* trans,
+                            const hwyblas_int* rows, const hwyblas_int* cols,
+                            const double* alpha, double* a,
+                            const hwyblas_int* lda, const hwyblas_int* ldb);
+
+/* ------------------------------------------------------------------------ */
 /* Error handling                                                            */
 
 /* Called with the routine name and the 1-based position of the first invalid

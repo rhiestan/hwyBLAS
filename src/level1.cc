@@ -26,6 +26,13 @@ namespace HWY_NAMESPACE {
   }                                                                           \
   size_t Iamin##SUFFIX(size_t n, const T* x) {                                \
     return ArgAbsExtremum<false>(n, x);                                       \
+  }                                                                           \
+  void Axpby##SUFFIX(size_t n, T alpha, const T* x, T beta, T* y) {           \
+    if (IsZero(beta)) {                                                       \
+      AxpbyContiguous<false, false>(n, alpha, x, beta, y);                    \
+    } else {                                                                  \
+      AxpbyContiguous<false, true>(n, alpha, x, beta, y);                     \
+    }                                                                         \
   }
 HWYBLAS_LEVEL1(F32, float)
 HWYBLAS_LEVEL1(F64, double)
@@ -79,6 +86,7 @@ HWYBLAS_EXPORT_BY_TYPE(Axpy);
 HWYBLAS_EXPORT_BY_TYPE(Scal);
 HWYBLAS_EXPORT_BY_TYPE(Iamax);
 HWYBLAS_EXPORT_BY_TYPE(Iamin);
+HWYBLAS_EXPORT_BY_TYPE(Axpby);
 HWY_EXPORT(AsumF32);
 HWY_EXPORT(AsumF64);
 HWY_EXPORT(SumSquaresF32);
@@ -117,6 +125,32 @@ void Axpy(blasint n, T alpha, const T* x, blasint incx, T* y, blasint incy) {
   const T* xs = VectorStart(x, n, incx);
   T* ys = VectorStart(y, n, incy);
   for (blasint i = 0; i < n; ++i) At(ys, i, incy) += alpha * At(xs, i, incx);
+}
+
+// y := alpha * x + beta * y (AXPBY, an OpenBLAS extension). As in OpenBLAS,
+// x is not read if alpha == 0 and y is not read if beta == 0; there are no
+// argument checks, and negative increments are allowed.
+template <typename T>
+void Axpby(blasint n, T alpha, const T* x, blasint incx, T beta, T* y,
+           blasint incy) {
+  if (n <= 0) return;
+  T* ys = VectorStart(y, n, incy);
+  if (IsZero(alpha)) {
+    for (blasint i = 0; i < n; ++i) {
+      T& yi = At(ys, i, incy);
+      yi = IsZero(beta) ? T(0) : beta * yi;
+    }
+    return;
+  }
+  if (incx == 1 && incy == 1) {
+    return HWYBLAS_DISPATCH_BY_TYPE(T, Axpby, n, alpha, x, beta, y);
+  }
+  const T* xs = VectorStart(x, n, incx);
+  for (blasint i = 0; i < n; ++i) {
+    T& yi = At(ys, i, incy);
+    yi = IsZero(beta) ? alpha * At(xs, i, incx)
+                      : alpha * At(xs, i, incx) + beta * yi;
+  }
 }
 
 // x := alpha * x. Like the reference BLAS, alpha = 0 multiplies (so NaN
@@ -919,6 +953,45 @@ HWYBLAS_API float scabs1_(const float* z) {
 }
 HWYBLAS_API double dcabs1_(const double* z) {
   return std::abs(z[0]) + std::abs(z[1]);
+}
+
+// Extensions (as in OpenBLAS)
+
+HWYBLAS_API void saxpby_(const blasint* n, const float* alpha, const float* x,
+                         const blasint* incx, const float* beta, float* y,
+                         const blasint* incy) {
+  hwyblas::Axpby(*n, *alpha, x, *incx, *beta, y, *incy);
+}
+HWYBLAS_API void daxpby_(const blasint* n, const double* alpha, const double* x,
+                         const blasint* incx, const double* beta, double* y,
+                         const blasint* incy) {
+  hwyblas::Axpby(*n, *alpha, x, *incx, *beta, y, *incy);
+}
+HWYBLAS_API void caxpby_(const blasint* n, const float* alpha, const float* x,
+                         const blasint* incx, const float* beta, float* y,
+                         const blasint* incy) {
+  hwyblas::Axpby(*n, *C32(alpha), C32(x), *incx, *C32(beta), C32(y), *incy);
+}
+HWYBLAS_API void zaxpby_(const blasint* n, const double* alpha, const double* x,
+                         const blasint* incx, const double* beta, double* y,
+                         const blasint* incy) {
+  hwyblas::Axpby(*n, *C64(alpha), C64(x), *incx, *C64(beta), C64(y), *incy);
+}
+HWYBLAS_API blasint isamin_(const blasint* n, const float* x,
+                            const blasint* incx) {
+  return hwyblas::Iamax<false>(*n, x, *incx);
+}
+HWYBLAS_API blasint idamin_(const blasint* n, const double* x,
+                            const blasint* incx) {
+  return hwyblas::Iamax<false>(*n, x, *incx);
+}
+HWYBLAS_API blasint icamin_(const blasint* n, const float* x,
+                            const blasint* incx) {
+  return hwyblas::Iamax<false>(*n, C32(x), *incx);
+}
+HWYBLAS_API blasint izamin_(const blasint* n, const double* x,
+                            const blasint* incx) {
+  return hwyblas::Iamax<false>(*n, C64(x), *incx);
 }
 
 }  // extern "C"
