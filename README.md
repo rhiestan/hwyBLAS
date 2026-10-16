@@ -27,13 +27,18 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 | 2 | `?symv_` / `?hemv_` | s d / c z |
 | 2 | `?ger_` / `?geru_`, `?gerc_` | s d / c z |
 | 2 | `?syr_`, `?syr2_` / `?her_`, `?her2_` | s d / c z |
+| 2 | banded: `?gbmv_`, `?tbmv_`, `?tbsv_` | s d c z |
+| 2 | banded: `?sbmv_` / `?hbmv_` | s d / c z |
+| 2 | packed: `?tpmv_`, `?tpsv_` | s d c z |
+| 2 | packed: `?spmv_`, `?spr_`, `?spr2_` / `?hpmv_`, `?hpr_`, `?hpr2_` | s d / c z |
 | 3 | `?gemm_`, `?symm_`, `?syrk_`, `?syr2k_`, `?trmm_`, `?trsm_` | s d c z |
 | 3 | `?gemmtr_` (also as `?gemmt_`) | s d c z |
 | 3 | `?hemm_`, `?herk_`, `?her2k_` | c z |
 
-This covers every BLAS routine that Eigen calls with `EIGEN_USE_BLAS`, and
-all of Level 1 and Level 3. Not yet implemented: the banded and packed
-Level 2 routines.
+This is the complete reference BLAS (Fortran interface), which includes
+every routine that Eigen calls with `EIGEN_USE_BLAS`. Not yet implemented:
+the CBLAS interface and the common extensions (`?axpby_`, `?omatcopy_`,
+`?imatcopy_`, `i?amin_`).
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
@@ -88,12 +93,17 @@ with OpenBLAS 0.3.34 and MKL, square matrices, `trans = NN`:
 | | 2048 | 63 | 59 | 58 |
 
 The other routines (`symm`, `syrk`, `syr2k`, `gemmt`, `trmm`, `trsm`, `gemv`,
-`symv`/`hemv`, `trmv`, `trsv`) perform on par with OpenBLAS at medium and large sizes, and
-mostly better than MKL on this AMD CPU. From n = 256 up, the rank updates
+`symv`/`hemv`, `trmv`, `trsv`) perform on par with OpenBLAS at medium and
+large sizes, and mostly better than MKL on this AMD CPU. From n = 256 up, the rank updates
 (`ger`, `syr`, `syr2`, `her`, `her2`) are mostly the fastest of the four
 libraries, up to 2x ahead of the next best (`cher2`); at n = 64, MKL or AOCL
 is sometimes ahead. AOCL-BLAS, which has special code paths
 for small matrices, is the fastest for small (n ≤ 128) GEMM and TRSM.
+
+The packed routines and banded routines with wide bands are mostly the
+fastest of the four libraries (e.g. `dspmv` at n = 1000: 39 GFLOP/s vs. 22
+for MKL). For very narrow real bands (a few off-diagonals), MKL is up to 2x
+faster: there the columns are too short for the vector kernels to pay off.
 
 To reproduce, pass other BLAS DLLs as `name=path`:
 
@@ -123,6 +133,9 @@ src/gemv.cc, gemv-inl.h     GEMV API and kernels
 src/level2.cc               SYMV, HEMV (symv-inl.h), TRMV (trmv-inl.h),
                             TRSV (trsv-inl.h), GER, SYR, SYR2, HER, HER2
                             (rank_update-inl.h)
+src/band_packed.cc          banded and packed Level 2 routines; storage
+                            layouts in band_packed.h, kernels in
+                            band_packed-inl.h
 src/level1.cc, level1-inl.h AXPY and the vector kernels shared by others
 tests/                      GoogleTest tests, Eigen integration test
 bench/                      benchmark comparing BLAS libraries at runtime

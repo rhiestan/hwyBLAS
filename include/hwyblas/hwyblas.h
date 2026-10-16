@@ -378,6 +378,183 @@ HWYBLAS_API void zher2_(const char* uplo, const hwyblas_int* n,
                         const hwyblas_int* incy, double* a,
                         const hwyblas_int* lda);
 
+/* Banded and packed matrices. */
+
+/* y := alpha * op(A) * x + beta * y, A m x n banded with kl sub- and ku
+ * super-diagonals. */
+HWYBLAS_API void sgbmv_(const char* trans, const hwyblas_int* m,
+                        const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const float* alpha,
+                        const float* a, const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void dgbmv_(const char* trans, const hwyblas_int* m,
+                        const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const double* alpha,
+                        const double* a, const hwyblas_int* lda,
+                        const double* x, const hwyblas_int* incx,
+                        const double* beta, double* y, const hwyblas_int* incy);
+HWYBLAS_API void cgbmv_(const char* trans, const hwyblas_int* m,
+                        const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const float* alpha,
+                        const float* a, const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zgbmv_(const char* trans, const hwyblas_int* m,
+                        const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const double* alpha,
+                        const double* a, const hwyblas_int* lda,
+                        const double* x, const hwyblas_int* incx,
+                        const double* beta, double* y, const hwyblas_int* incy);
+
+/* y := alpha * A * x + beta * y, A symmetric banded with k off-diagonals
+ * (one triangle stored). */
+HWYBLAS_API void ssbmv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* k, const float* alpha,
+                        const float* a, const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void dsbmv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* k, const double* alpha,
+                        const double* a, const hwyblas_int* lda,
+                        const double* x, const hwyblas_int* incx,
+                        const double* beta, double* y, const hwyblas_int* incy);
+
+/* y := alpha * A * x + beta * y, A Hermitian banded with k off-diagonals
+ * (one triangle stored). */
+HWYBLAS_API void chbmv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* k, const float* alpha,
+                        const float* a, const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zhbmv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* k, const double* alpha,
+                        const double* a, const hwyblas_int* lda,
+                        const double* x, const hwyblas_int* incx,
+                        const double* beta, double* y, const hwyblas_int* incy);
+
+/* y := alpha * A * x + beta * y, A symmetric packed. */
+HWYBLAS_API void sspmv_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* ap, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void dspmv_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* ap, const double* x,
+                        const hwyblas_int* incx, const double* beta, double* y,
+                        const hwyblas_int* incy);
+
+/* y := alpha * A * x + beta * y, A Hermitian packed. */
+HWYBLAS_API void chpmv_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* ap, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zhpmv_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* ap, const double* x,
+                        const hwyblas_int* incx, const double* beta, double* y,
+                        const hwyblas_int* incy);
+
+/* x := op(A) * x, A triangular banded with k off-diagonals. */
+HWYBLAS_API void stbmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* a, const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtbmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* a, const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctbmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* a, const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztbmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* a, const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+
+/* Solves op(A) * x = b, A triangular banded with k off-diagonals. */
+HWYBLAS_API void stbsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* a, const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtbsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* a, const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctbsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const float* a, const hwyblas_int* lda, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztbsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const hwyblas_int* k,
+                        const double* a, const hwyblas_int* lda, double* x,
+                        const hwyblas_int* incx);
+
+/* x := op(A) * x, A triangular packed. */
+HWYBLAS_API void stpmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* ap, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtpmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* ap, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctpmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* ap, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztpmv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* ap, double* x,
+                        const hwyblas_int* incx);
+
+/* Solves op(A) * x = b, A triangular packed. */
+HWYBLAS_API void stpsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* ap, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void dtpsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* ap, double* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ctpsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const float* ap, float* x,
+                        const hwyblas_int* incx);
+HWYBLAS_API void ztpsv_(const char* uplo, const char* trans, const char* diag,
+                        const hwyblas_int* n, const double* ap, double* x,
+                        const hwyblas_int* incx);
+
+/* A := alpha * x * x^T + A, A symmetric packed. */
+HWYBLAS_API void sspr_(const char* uplo, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, float* ap);
+HWYBLAS_API void dspr_(const char* uplo, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, double* ap);
+
+/* A := alpha * x * x^H + A, A Hermitian packed, alpha real. The imaginary
+ * parts of the diagonal are set to zero. */
+HWYBLAS_API void chpr_(const char* uplo, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, float* ap);
+HWYBLAS_API void zhpr_(const char* uplo, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, double* ap);
+
+/* A := alpha * x * y^T + alpha * y * x^T + A, A symmetric packed. */
+HWYBLAS_API void sspr2_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* ap);
+HWYBLAS_API void dspr2_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* ap);
+
+/* A := alpha * x * y^H + conj(alpha) * y * x^H + A, A Hermitian packed. The
+ * imaginary parts of the diagonal are set to zero. */
+HWYBLAS_API void chpr2_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* x,
+                        const hwyblas_int* incx, const float* y,
+                        const hwyblas_int* incy, float* ap);
+HWYBLAS_API void zhpr2_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* x,
+                        const hwyblas_int* incx, const double* y,
+                        const hwyblas_int* incy, double* ap);
+
 /* ------------------------------------------------------------------------ */
 /* Level 3                                                                  */
 

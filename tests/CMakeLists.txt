@@ -15,6 +15,7 @@ add_executable(hwyblas_tests
   gemm_test.cc
   gemv_test.cc
   level1_test.cc
+  band_packed_test.cc
   level2_test.cc
   level3_test.cc
 )

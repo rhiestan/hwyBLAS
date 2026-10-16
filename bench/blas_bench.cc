@@ -7,9 +7,10 @@
 // Routines: gemm, gemv, symm (hemm for complex), syrk, syr2k (her2k for
 // complex), gemmt (C := A * B for one triangle of C), trmm, trsm,
 // symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
-// syr2 (her2), and level 1: axpy, scal, dot (dotu for complex), nrm2, asum,
-// iamax, rot. A square size n means m = n = k; for
-// syrk, C is m x m and A is m x k.
+// syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
+// tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
+// (dotu for complex), nrm2, asum, iamax, rot. A square size n means
+// m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
 //   --types=sdcz        precisions to run (default: d)
@@ -21,6 +22,8 @@
 //   --min-time=0.5      seconds per library and shape
 //   --rounds=3          libraries take turns this many times
 //   --pin=N             pin the benchmark thread to logical CPU N
+//   --band=K            banded routines: K off-diagonals (gbmv: kl = ku = K;
+//                       default: n - 1, i.e. a full band)
 //
 // hwyBLAS from the benchmark's own directory is always included first.
 #include <stdio.h>
@@ -54,6 +57,7 @@ struct Options {
   double min_time = 0.5;  // per library and shape, over all rounds
   int rounds = 3;
   int pin_cpu = -1;  // -1: no pinning
+  int band = -1;     // -1: n - 1
 };
 
 using Libraries = std::vector<std::unique_ptr<BlasLibrary>>;
@@ -545,6 +549,143 @@ void BenchRankUpdate(const Options& opt, const Libraries& libs) {
   }
 }
 
+// Banded and packed routines on n x n matrices (gbmv: m x n). The matrices
+// have a dominant diagonal, so that the triangular solves stay bounded.
+template <typename T>
+void BenchBandPacked(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const std::string& routine = opt.routine;
+  const bool packed = (routine[1] == 'p');  // spmv, tpmv, tpsv, spr, spr2
+  const bool triangular = (routine[0] == 't');
+  const bool update = (routine == "spr" || routine == "spr2");
+  // Hermitian names for complex types: sbmv -> hbmv, spmv -> hpmv, ...
+  std::string name = routine;
+  if (kIsComplex<T> && routine[0] == 's') name[0] = 'h';
+  const std::string symbol = Symbol<T>(name.c_str());
+  const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
+  std::string title = symbol;
+  if (routine != "gbmv") title += std::string("  uplo=") + opt.uplo;
+  if (routine == "gbmv" || triangular) title += std::string(" trans=") + trans;
+  if (!packed) {
+    title += " band=" +
+             (opt.band < 0 ? std::string("n-1") : std::to_string(opt.band));
+  }
+  PrintHeader<T>(libs, title, routine == "gbmv" ? "m x n" : "n");
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int m = (routine == "gbmv") ? s.m : s.n, n = s.n, inc = 1;
+    const int k = (opt.band < 0) ? std::max(m, n) - 1 : opt.band;
+    const char uplo = opt.uplo, diag = opt.diag;
+    const bool lower = (uplo == 'L' || uplo == 'l');
+    // Stored matrix: kl, ku for band storage.
+    const int kl = (routine == "gbmv") ? k : (lower ? k : 0);
+    const int ku = (routine == "gbmv") ? k : (lower ? 0 : k);
+    const int lda = kl + ku + 1;
+    const size_t size = packed ? size_t(n) * (n + 1) / 2 : size_t(lda) * n;
+    auto a = std::make_shared<std::vector<T>>(RandomVector<T>(size, rng));
+    // Scale the off-diagonals and make the diagonal dominant. Counts the
+    // elements that are part of the matrix.
+    double elements = 0;
+    const R scale = R(1) / R(std::min(k, std::max(m, n)) + 1);
+    for (int j = 0; j < n; ++j) {
+      int begin, end;
+      size_t offset;  // of element (begin, j)
+      if (packed) {
+        begin = lower ? j : 0;
+        end = lower ? n : j + 1;
+        offset =
+            lower ? size_t(j) * (2 * n - j + 1) / 2 : size_t(j) * (j + 1) / 2;
+      } else {
+        begin = std::max(0, j - ku);
+        end = std::max(begin, std::min(m, j + kl + 1));
+        offset = size_t(j) * lda + ku + begin - j;
+      }
+      elements += end - begin;
+      for (int i = begin; i < end; ++i) {
+        T& v = (*a)[offset + (i - begin)];
+        v = (i == j) ? T(R(2)) + v * R(0.5) : v * scale;
+      }
+    }
+    const auto x = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+    const auto y = std::make_shared<std::vector<T>>(RandomVector<T>(n, rng));
+
+    Case<T> c;
+    c.label = (routine == "gbmv") ? std::to_string(m) + "x" + std::to_string(n)
+                                  : std::to_string(n);
+    // Multiply-adds per stored element: 1, 2 for symmetric matrix-vector
+    // products (each off-diagonal element stands for two) and spr2.
+    const bool twice =
+        (routine == "sbmv" || routine == "spmv" || routine == "spr2");
+    c.flops = (kIsComplex<T> ? 8.0 : 2.0) * elements * (twice ? 2 : 1);
+    if (update) {
+      c.initial_out = *a;
+    } else {
+      c.initial_out =
+          RandomVector<T>(routine == "gbmv" && trans == 'N' ? m : n, rng);
+    }
+    const auto x0 = std::make_shared<std::vector<T>>(c.initial_out);
+    const T alpha = T(R(1e-3)), beta = T(R(0.5));
+    if (routine == "gbmv") {
+      const int len_x = (trans == 'N') ? n : m;
+      const auto xg =
+          std::make_shared<std::vector<T>>(RandomVector<T>(len_x, rng));
+      c.call = [=](void* fn, T* out) {
+        reinterpret_cast<void (*)(
+            const char*, const int*, const int*, const int*, const int*,
+            const T*, const T*, const int*, const T*, const int*, const T*, T*,
+            const int*)>(fn)(&trans, &m, &n, &kl, &ku, &alpha, a->data(), &lda,
+                             xg->data(), &inc, &beta, out, &inc);
+      };
+    } else if (routine == "sbmv") {
+      c.call = [=](void* fn, T* out) {
+        reinterpret_cast<void (*)(const char*, const int*, const int*, const T*,
+                                  const T*, const int*, const T*, const int*,
+                                  const T*, T*, const int*)>(fn)(
+            &uplo, &n, &k, &alpha, a->data(), &lda, x->data(), &inc, &beta, out,
+            &inc);
+      };
+    } else if (routine == "spmv") {
+      c.call = [=](void* fn, T* out) {
+        reinterpret_cast<void (*)(const char*, const int*, const T*, const T*,
+                                  const T*, const int*, const T*, T*,
+                                  const int*)>(fn)(
+            &uplo, &n, &alpha, a->data(), x->data(), &inc, &beta, out, &inc);
+      };
+    } else if (routine == "tbmv" || routine == "tbsv") {
+      c.call = [=](void* fn, T* out) {
+        // Restart from x0 so that repeated calls stay bounded.
+        std::copy(x0->begin(), x0->end(), out);
+        reinterpret_cast<void (*)(const char*, const char*, const char*,
+                                  const int*, const int*, const T*, const int*,
+                                  T*, const int*)>(fn)(
+            &uplo, &trans, &diag, &n, &k, a->data(), &lda, out, &inc);
+      };
+    } else if (routine == "tpmv" || routine == "tpsv") {
+      c.call = [=](void* fn, T* out) {
+        std::copy(x0->begin(), x0->end(), out);
+        reinterpret_cast<void (*)(const char*, const char*, const char*,
+                                  const int*, const T*, T*, const int*)>(fn)(
+            &uplo, &trans, &diag, &n, a->data(), out, &inc);
+      };
+    } else if (routine == "spr") {
+      c.call = [=](void* fn, T* out) {
+        const R real_alpha = R(1e-3);
+        reinterpret_cast<void (*)(const char*, const int*, const R*, const T*,
+                                  const int*, T*)>(fn)(&uplo, &n, &real_alpha,
+                                                       x->data(), &inc, out);
+      };
+    } else {  // spr2
+      c.call = [=](void* fn, T* out) {
+        reinterpret_cast<void (*)(const char*, const int*, const T*, const T*,
+                                  const int*, const T*, const int*, T*)>(fn)(
+            &uplo, &n, &alpha, x->data(), &inc, y->data(), &inc, out);
+      };
+    }
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // Level 1 routines on vectors of length n (from the m of each shape). Scalar
 // results are written to out[0] so that they take part in the cross-library
 // comparison; this also checks that complex results are returned with the
@@ -668,6 +809,12 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchSymv<T>(opt, libs);
   } else if (opt.routine == "trmv" || opt.routine == "trsv") {
     BenchTrmv<T>(opt, libs, opt.routine.c_str());
+  } else if (opt.routine == "gbmv" || opt.routine == "sbmv" ||
+             opt.routine == "spmv" || opt.routine == "tbmv" ||
+             opt.routine == "tbsv" || opt.routine == "tpmv" ||
+             opt.routine == "tpsv" || opt.routine == "spr" ||
+             opt.routine == "spr2") {
+    BenchBandPacked<T>(opt, libs);
   } else if (opt.routine == "ger" || opt.routine == "syr" ||
              opt.routine == "syr2") {
     BenchRankUpdate<T>(opt, libs);
@@ -745,6 +892,8 @@ int Main(int argc, char** argv) {
       opt.rounds = std::max(1, atoi(arg + 9));
     } else if (strncmp(arg, "--pin=", 6) == 0) {
       opt.pin_cpu = atoi(arg + 6);
+    } else if (strncmp(arg, "--band=", 7) == 0) {
+      opt.band = atoi(arg + 7);
     } else if (const char* eq = strchr(arg, '=')) {
       lib_specs.emplace_back(std::string(arg, eq), eq + 1);
     } else {

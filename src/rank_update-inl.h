@@ -33,9 +33,10 @@ namespace hn = hwy::HWY_NAMESPACE;
 // Columns updated together.
 constexpr size_t kRankUpdateCols = 4;
 
-// Columns [0, kCols) of A[0:m, :] += sum over t < kTerms of u_t * s_t^T.
+// Column c of A[0:m, 0:kCols] (stored at cols[c]) += sum over t < kTerms of
+// u_t * s_t[c].
 template <size_t kCols, size_t kTerms, typename T>
-HWY_INLINE void RankUpdateCols(size_t m, T* HWY_RESTRICT a, size_t lda,
+HWY_INLINE void RankUpdateCols(size_t m, T* HWY_RESTRICT const* cols,
                                const T* HWY_RESTRICT u0, const T* s0,
                                const T* HWY_RESTRICT u1, const T* s1) {
   using R = RealT<T>;
@@ -47,12 +48,12 @@ HWY_INLINE void RankUpdateCols(size_t m, T* HWY_RESTRICT a, size_t lda,
 
   const R* HWY_RESTRICT u[2] = {reinterpret_cast<const R*>(u0),
                                 reinterpret_cast<const R*>(u1)};
-  R* HWY_RESTRICT cols[kCols];
+  R* HWY_RESTRICT c_ptr[kCols];
   // Broadcast scales: s_re = re(s) (or s), s_im = (-im(s), im(s)) pairs.
   V s_re[kTerms][kCols], s_im[kTerms][kCols];
   HWY_UNROLL(16)
   for (size_t c = 0; c < kCols; ++c) {
-    cols[c] = reinterpret_cast<R*>(a + c * lda);
+    c_ptr[c] = reinterpret_cast<R*>(cols[c]);
     HWY_UNROLL(16)
     for (size_t t = 0; t < kTerms; ++t) {
       const T st = (t == 0 ? s0 : s1)[c];
@@ -76,13 +77,13 @@ HWY_INLINE void RankUpdateCols(size_t m, T* HWY_RESTRICT a, size_t lda,
     }
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      V av = hn::LoadU(d, cols[c] + i);
+      V av = hn::LoadU(d, c_ptr[c] + i);
       HWY_UNROLL(16)
       for (size_t t = 0; t < kTerms; ++t) {
         av = hn::MulAdd(uv[t], s_re[t][c], av);
         if constexpr (kComplex) av = hn::MulAdd(us[t], s_im[t][c], av);
       }
-      hn::StoreU(av, d, cols[c] + i);
+      hn::StoreU(av, d, c_ptr[c] + i);
     }
   }
   if (i < len) {
@@ -95,13 +96,13 @@ HWY_INLINE void RankUpdateCols(size_t m, T* HWY_RESTRICT a, size_t lda,
     }
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      V av = hn::LoadN(d, cols[c] + i, count);
+      V av = hn::LoadN(d, c_ptr[c] + i, count);
       HWY_UNROLL(16)
       for (size_t t = 0; t < kTerms; ++t) {
         av = hn::MulAdd(uv[t], s_re[t][c], av);
         if constexpr (kComplex) av = hn::MulAdd(us[t], s_im[t][c], av);
       }
-      hn::StoreN(av, d, cols[c] + i, count);
+      hn::StoreN(av, d, c_ptr[c] + i, count);
     }
   }
 }
@@ -115,11 +116,13 @@ HWY_NOINLINE void RankUpdate(size_t m, size_t n, T* HWY_RESTRICT a, size_t lda,
   if (m == 0) return;
   size_t j = 0;
   for (; j + kRankUpdateCols <= n; j += kRankUpdateCols) {
-    RankUpdateCols<kRankUpdateCols, kTerms>(m, a + j * lda, lda, u0, s0 + j, u1,
-                                            s1 + j);
+    T* cols[kRankUpdateCols];
+    for (size_t c = 0; c < kRankUpdateCols; ++c) cols[c] = a + (j + c) * lda;
+    RankUpdateCols<kRankUpdateCols, kTerms>(m, cols, u0, s0 + j, u1, s1 + j);
   }
   for (; j < n; ++j) {
-    RankUpdateCols<1, kTerms>(m, a + j * lda, lda, u0, s0 + j, u1, s1 + j);
+    T* col = a + j * lda;
+    RankUpdateCols<1, kTerms>(m, &col, u0, s0 + j, u1, s1 + j);
   }
 }
 

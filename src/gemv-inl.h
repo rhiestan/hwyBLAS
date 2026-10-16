@@ -5,9 +5,13 @@
 // loads and to touch x and y as rarely as possible:
 //
 //   - NoTrans: y += A[:, j:j+4] * (alpha * x[j:j+4]); four columns are
-//     combined per pass over y ("axpy" form).
+//     combined per pass over y ("axpy" form, AxpyCols).
 //   - Trans:   y[j] += alpha * dot(A[:, j], x); four columns share each load
-//     of x ("dot" form).
+//     of x ("dot" form, DotCols).
+//
+// AxpyCols and DotCols take the columns as an array of pointers rather than
+// a leading dimension, so that the banded and packed routines (whose columns
+// are not equally spaced) can use them too.
 //
 // Complex numbers are interleaved (re, im). Products are formed with the same
 // AddSub/Reverse2 identities as the GEMM micro-kernel (see gemm_kernel-inl.h).
@@ -47,139 +51,61 @@ HWY_INLINE void ScaleVector(size_t n, T beta, T* HWY_RESTRICT y) {
 }
 
 // ---------------------------------------------------------------------------
-// Real
+// Axpy form: y[0:m] += sum over c < kCols of cols[c][0:m] * t[c].
 
-// y[0:m] += A[0:m, 0:n] * t[0:n], A column-major.
-template <typename T>
-HWY_NOINLINE void GemvNReal(size_t m, size_t n, const T* HWY_RESTRICT a,
-                            size_t lda, const T* HWY_RESTRICT t,
-                            T* HWY_RESTRICT y) {
+template <size_t kCols, typename T>
+HWY_INLINE void AxpyColsReal(size_t m, const T* HWY_RESTRICT const* cols,
+                             const T* HWY_RESTRICT t, T* HWY_RESTRICT y) {
   const hn::ScalableTag<T> d;
   using V = hn::Vec<decltype(d)>;
   const size_t N = hn::Lanes(d);
 
-  size_t j = 0;
-  for (; j + kGemvCols <= n; j += kGemvCols) {
-    const T* HWY_RESTRICT a0 = a + (j + 0) * lda;
-    const T* HWY_RESTRICT a1 = a + (j + 1) * lda;
-    const T* HWY_RESTRICT a2 = a + (j + 2) * lda;
-    const T* HWY_RESTRICT a3 = a + (j + 3) * lda;
-    const V t0 = hn::Set(d, t[j + 0]), t1 = hn::Set(d, t[j + 1]);
-    const V t2 = hn::Set(d, t[j + 2]), t3 = hn::Set(d, t[j + 3]);
-    size_t i = 0;
-    for (; i + N <= m; i += N) {
-      V acc = hn::LoadU(d, y + i);
-      acc = hn::MulAdd(hn::LoadU(d, a0 + i), t0, acc);
-      acc = hn::MulAdd(hn::LoadU(d, a1 + i), t1, acc);
-      acc = hn::MulAdd(hn::LoadU(d, a2 + i), t2, acc);
-      acc = hn::MulAdd(hn::LoadU(d, a3 + i), t3, acc);
-      hn::StoreU(acc, d, y + i);
-    }
-    if (i < m) {
-      const size_t count = m - i;
-      V acc = hn::LoadN(d, y + i, count);
-      acc = hn::MulAdd(hn::LoadN(d, a0 + i, count), t0, acc);
-      acc = hn::MulAdd(hn::LoadN(d, a1 + i, count), t1, acc);
-      acc = hn::MulAdd(hn::LoadN(d, a2 + i, count), t2, acc);
-      acc = hn::MulAdd(hn::LoadN(d, a3 + i, count), t3, acc);
-      hn::StoreN(acc, d, y + i, count);
-    }
+  const T* HWY_RESTRICT c_ptr[kCols];
+  V vt[kCols];
+  HWY_UNROLL(16)
+  for (size_t c = 0; c < kCols; ++c) {
+    c_ptr[c] = cols[c];
+    vt[c] = hn::Set(d, t[c]);
   }
-  for (; j < n; ++j) {
-    const T* HWY_RESTRICT aj = a + j * lda;
-    const V tj = hn::Set(d, t[j]);
-    size_t i = 0;
-    for (; i + N <= m; i += N) {
-      hn::StoreU(hn::MulAdd(hn::LoadU(d, aj + i), tj, hn::LoadU(d, y + i)), d,
-                 y + i);
+
+  size_t i = 0;
+  for (; i + N <= m; i += N) {
+    V acc = hn::LoadU(d, y + i);
+    HWY_UNROLL(16)
+    for (size_t c = 0; c < kCols; ++c) {
+      acc = hn::MulAdd(hn::LoadU(d, c_ptr[c] + i), vt[c], acc);
     }
-    if (i < m) {
-      const size_t count = m - i;
-      hn::StoreN(hn::MulAdd(hn::LoadN(d, aj + i, count), tj,
-                            hn::LoadN(d, y + i, count)),
-                 d, y + i, count);
+    hn::StoreU(acc, d, y + i);
+  }
+  if (i < m) {
+    const size_t count = m - i;
+    V acc = hn::LoadN(d, y + i, count);
+    HWY_UNROLL(16)
+    for (size_t c = 0; c < kCols; ++c) {
+      acc = hn::MulAdd(hn::LoadN(d, c_ptr[c] + i, count), vt[c], acc);
     }
+    hn::StoreN(acc, d, y + i, count);
   }
 }
 
-// y[j] += alpha * dot(A[0:m, j], x[0:m]) for j in [0, n).
-template <typename T>
-HWY_NOINLINE void GemvTReal(size_t m, size_t n, T alpha,
-                            const T* HWY_RESTRICT a, size_t lda,
-                            const T* HWY_RESTRICT x, T* HWY_RESTRICT y) {
-  const hn::ScalableTag<T> d;
-  using V = hn::Vec<decltype(d)>;
-  const size_t N = hn::Lanes(d);
-
-  size_t j = 0;
-  for (; j + kGemvCols <= n; j += kGemvCols) {
-    const T* HWY_RESTRICT a0 = a + (j + 0) * lda;
-    const T* HWY_RESTRICT a1 = a + (j + 1) * lda;
-    const T* HWY_RESTRICT a2 = a + (j + 2) * lda;
-    const T* HWY_RESTRICT a3 = a + (j + 3) * lda;
-    V s0 = hn::Zero(d), s1 = hn::Zero(d), s2 = hn::Zero(d), s3 = hn::Zero(d);
-    size_t i = 0;
-    for (; i + N <= m; i += N) {
-      const V xv = hn::LoadU(d, x + i);
-      s0 = hn::MulAdd(hn::LoadU(d, a0 + i), xv, s0);
-      s1 = hn::MulAdd(hn::LoadU(d, a1 + i), xv, s1);
-      s2 = hn::MulAdd(hn::LoadU(d, a2 + i), xv, s2);
-      s3 = hn::MulAdd(hn::LoadU(d, a3 + i), xv, s3);
-    }
-    if (i < m) {
-      // LoadN zeroes the lanes past `count`, so they do not contribute.
-      const size_t count = m - i;
-      const V xv = hn::LoadN(d, x + i, count);
-      s0 = hn::MulAdd(hn::LoadN(d, a0 + i, count), xv, s0);
-      s1 = hn::MulAdd(hn::LoadN(d, a1 + i, count), xv, s1);
-      s2 = hn::MulAdd(hn::LoadN(d, a2 + i, count), xv, s2);
-      s3 = hn::MulAdd(hn::LoadN(d, a3 + i, count), xv, s3);
-    }
-    y[j + 0] += alpha * hn::ReduceSum(d, s0);
-    y[j + 1] += alpha * hn::ReduceSum(d, s1);
-    y[j + 2] += alpha * hn::ReduceSum(d, s2);
-    y[j + 3] += alpha * hn::ReduceSum(d, s3);
-  }
-  for (; j < n; ++j) {
-    const T* HWY_RESTRICT aj = a + j * lda;
-    V s = hn::Zero(d);
-    size_t i = 0;
-    for (; i + N <= m; i += N) {
-      s = hn::MulAdd(hn::LoadU(d, aj + i), hn::LoadU(d, x + i), s);
-    }
-    if (i < m) {
-      const size_t count = m - i;
-      s = hn::MulAdd(hn::LoadN(d, aj + i, count), hn::LoadN(d, x + i, count),
-                     s);
-    }
-    y[j] += alpha * hn::ReduceSum(d, s);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Complex. Pointers are to the underlying reals; lengths are in complex
-// elements.
-
-// y[0:m] += A[0:m, j:j+kCols] * t[j:j+kCols].
-//
+// Complex: pointers to interleaved reals, m in complex elements.
 // Accumulates A * re(t) and A * im(t) separately and combines them once per
 // vector of y: A*t = AddSub(A*re(t), Reverse2(A*im(t))).
 template <size_t kCols, typename R>
-HWY_INLINE void GemvNComplexCols(size_t m, size_t j, const R* HWY_RESTRICT a,
-                                 size_t lda, const R* HWY_RESTRICT t,
-                                 R* HWY_RESTRICT y) {
+HWY_INLINE void AxpyColsComplex(size_t m, const R* HWY_RESTRICT const* cols,
+                                const R* HWY_RESTRICT t, R* HWY_RESTRICT y) {
   const hn::ScalableTag<R> d;
   using V = hn::Vec<decltype(d)>;
   const size_t N = hn::Lanes(d);  // in reals
   const size_t m2 = 2 * m;
 
-  const R* HWY_RESTRICT cols[kCols];
+  const R* HWY_RESTRICT c_ptr[kCols];
   V t_re[kCols], t_im[kCols];
   HWY_UNROLL(16)
   for (size_t c = 0; c < kCols; ++c) {
-    cols[c] = a + 2 * (j + c) * lda;
-    t_re[c] = hn::Set(d, t[2 * (j + c)]);
-    t_im[c] = hn::Set(d, t[2 * (j + c) + 1]);
+    c_ptr[c] = cols[c];
+    t_re[c] = hn::Set(d, t[2 * c]);
+    t_im[c] = hn::Set(d, t[2 * c + 1]);
   }
 
   size_t i = 0;
@@ -187,7 +113,7 @@ HWY_INLINE void GemvNComplexCols(size_t m, size_t j, const R* HWY_RESTRICT a,
     V acc_re = hn::Zero(d), acc_im = hn::Zero(d);
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      const V av = hn::LoadU(d, cols[c] + i);
+      const V av = hn::LoadU(d, c_ptr[c] + i);
       acc_re = hn::MulAdd(av, t_re[c], acc_re);
       acc_im = hn::MulAdd(av, t_im[c], acc_im);
     }
@@ -199,7 +125,7 @@ HWY_INLINE void GemvNComplexCols(size_t m, size_t j, const R* HWY_RESTRICT a,
     V acc_re = hn::Zero(d), acc_im = hn::Zero(d);
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      const V av = hn::LoadN(d, cols[c] + i, count);
+      const V av = hn::LoadN(d, c_ptr[c] + i, count);
       acc_re = hn::MulAdd(av, t_re[c], acc_re);
       acc_im = hn::MulAdd(av, t_im[c], acc_im);
     }
@@ -208,39 +134,82 @@ HWY_INLINE void GemvNComplexCols(size_t m, size_t j, const R* HWY_RESTRICT a,
   }
 }
 
-// y[0:m] += A[0:m, 0:n] * t[0:n].
-template <typename R>
-HWY_NOINLINE void GemvNComplex(size_t m, size_t n, const R* HWY_RESTRICT a,
-                               size_t lda, const R* HWY_RESTRICT t,
-                               R* HWY_RESTRICT y) {
-  size_t j = 0;
-  for (; j + kGemvCols <= n; j += kGemvCols) {
-    GemvNComplexCols<kGemvCols>(m, j, a, lda, t, y);
+template <size_t kCols, typename T>
+HWY_INLINE void AxpyCols(size_t m, const T* HWY_RESTRICT const* cols,
+                         const T* HWY_RESTRICT t, T* HWY_RESTRICT y) {
+  if (m == 0) return;
+  if constexpr (IsComplex<T>::value) {
+    using R = RealT<T>;
+    const R* rcols[kCols];
+    for (size_t c = 0; c < kCols; ++c) {
+      rcols[c] = reinterpret_cast<const R*>(cols[c]);
+    }
+    AxpyColsComplex<kCols>(m, rcols, reinterpret_cast<const R*>(t),
+                           reinterpret_cast<R*>(y));
+  } else {
+    AxpyColsReal<kCols>(m, cols, t, y);
   }
-  for (; j < n; ++j) GemvNComplexCols<1>(m, j, a, lda, t, y);
 }
 
-// y[j+c] += alpha * dot(op(A[0:m, j+c]), x[0:m]) for c in [0, kCols), where
-// op conjugates if kConj.
-//
-// With P = a * x and Q = a * Reverse2(x) (lane-wise products), the complex
-// dot products follow from lane sums:
+// ---------------------------------------------------------------------------
+// Dot form: y[c] += alpha * sum over i < m of op(cols[c][i]) * x[i] for
+// c < kCols, where op conjugates if kConj.
+
+template <size_t kCols, typename T>
+HWY_INLINE void DotColsReal(size_t m, const T* HWY_RESTRICT const* cols,
+                            T alpha, const T* HWY_RESTRICT x,
+                            T* HWY_RESTRICT y) {
+  const hn::ScalableTag<T> d;
+  using V = hn::Vec<decltype(d)>;
+  const size_t N = hn::Lanes(d);
+
+  const T* HWY_RESTRICT c_ptr[kCols];
+  V s[kCols];
+  HWY_UNROLL(16)
+  for (size_t c = 0; c < kCols; ++c) {
+    c_ptr[c] = cols[c];
+    s[c] = hn::Zero(d);
+  }
+
+  size_t i = 0;
+  for (; i + N <= m; i += N) {
+    const V xv = hn::LoadU(d, x + i);
+    HWY_UNROLL(16)
+    for (size_t c = 0; c < kCols; ++c) {
+      s[c] = hn::MulAdd(hn::LoadU(d, c_ptr[c] + i), xv, s[c]);
+    }
+  }
+  if (i < m) {
+    // LoadN zeroes the lanes past `count`, so they do not contribute.
+    const size_t count = m - i;
+    const V xv = hn::LoadN(d, x + i, count);
+    HWY_UNROLL(16)
+    for (size_t c = 0; c < kCols; ++c) {
+      s[c] = hn::MulAdd(hn::LoadN(d, c_ptr[c] + i, count), xv, s[c]);
+    }
+  }
+  HWY_UNROLL(16)
+  for (size_t c = 0; c < kCols; ++c) y[c] += alpha * hn::ReduceSum(d, s[c]);
+}
+
+// Complex. With P = a * x and Q = a * Reverse2(x) (lane-wise products), the
+// complex dot products follow from lane sums:
 //   sum a * x       = (sum P_even - sum P_odd, sum Q)
 //   sum conj(a) * x = (sum P, sum Q_even - sum Q_odd)
 template <size_t kCols, bool kConj, typename R>
-HWY_INLINE void GemvTComplexCols(size_t m, size_t j, std::complex<R> alpha,
-                                 const R* HWY_RESTRICT a, size_t lda,
-                                 const R* HWY_RESTRICT x, R* HWY_RESTRICT y) {
+HWY_INLINE void DotColsComplex(size_t m, const R* HWY_RESTRICT const* cols,
+                               std::complex<R> alpha, const R* HWY_RESTRICT x,
+                               R* HWY_RESTRICT y) {
   const hn::ScalableTag<R> d;
   using V = hn::Vec<decltype(d)>;
   const size_t N = hn::Lanes(d);  // in reals
   const size_t m2 = 2 * m;
 
-  const R* HWY_RESTRICT cols[kCols];
+  const R* HWY_RESTRICT c_ptr[kCols];
   V p[kCols], q[kCols];
   HWY_UNROLL(16)
   for (size_t c = 0; c < kCols; ++c) {
-    cols[c] = a + 2 * (j + c) * lda;
+    c_ptr[c] = cols[c];
     p[c] = hn::Zero(d);
     q[c] = hn::Zero(d);
   }
@@ -251,7 +220,7 @@ HWY_INLINE void GemvTComplexCols(size_t m, size_t j, std::complex<R> alpha,
     const V xs = hn::Reverse2(d, xv);
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      const V av = hn::LoadU(d, cols[c] + i);
+      const V av = hn::LoadU(d, c_ptr[c] + i);
       p[c] = hn::MulAdd(av, xv, p[c]);
       q[c] = hn::MulAdd(av, xs, q[c]);
     }
@@ -263,7 +232,7 @@ HWY_INLINE void GemvTComplexCols(size_t m, size_t j, std::complex<R> alpha,
     const V xs = hn::Reverse2(d, xv);
     HWY_UNROLL(16)
     for (size_t c = 0; c < kCols; ++c) {
-      const V av = hn::LoadN(d, cols[c] + i, count);
+      const V av = hn::LoadN(d, c_ptr[c] + i, count);
       p[c] = hn::MulAdd(av, xv, p[c]);
       q[c] = hn::MulAdd(av, xs, q[c]);
     }
@@ -282,21 +251,62 @@ HWY_INLINE void GemvTComplexCols(size_t m, size_t j, std::complex<R> alpha,
              hn::ReduceSum(d, q[c])};
     }
     const std::complex<R> r = alpha * dot;
-    y[2 * (j + c)] += r.real();
-    y[2 * (j + c) + 1] += r.imag();
+    y[2 * c] += r.real();
+    y[2 * c + 1] += r.imag();
   }
 }
 
-// y[0:n] += alpha * op(A[0:m, 0:n])^T * x[0:m].
-template <bool kConj, typename R>
-HWY_NOINLINE void GemvTComplex(size_t m, size_t n, std::complex<R> alpha,
-                               const R* HWY_RESTRICT a, size_t lda,
-                               const R* HWY_RESTRICT x, R* HWY_RESTRICT y) {
+template <size_t kCols, bool kConj, typename T>
+HWY_INLINE void DotCols(size_t m, const T* HWY_RESTRICT const* cols, T alpha,
+                        const T* HWY_RESTRICT x, T* HWY_RESTRICT y) {
+  if (m == 0) return;
+  if constexpr (IsComplex<T>::value) {
+    using R = RealT<T>;
+    const R* rcols[kCols];
+    for (size_t c = 0; c < kCols; ++c) {
+      rcols[c] = reinterpret_cast<const R*>(cols[c]);
+    }
+    DotColsComplex<kCols, kConj>(m, rcols, alpha, reinterpret_cast<const R*>(x),
+                                 reinterpret_cast<R*>(y));
+  } else {
+    DotColsReal<kCols>(m, cols, alpha, x, y);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rectangles A[0:m, 0:n] with leading dimension lda.
+
+// y[0:m] += A * t[0:n].
+template <typename T>
+HWY_NOINLINE void GemvN(size_t m, size_t n, const T* HWY_RESTRICT a, size_t lda,
+                        const T* HWY_RESTRICT t, T* HWY_RESTRICT y) {
   size_t j = 0;
   for (; j + kGemvCols <= n; j += kGemvCols) {
-    GemvTComplexCols<kGemvCols, kConj>(m, j, alpha, a, lda, x, y);
+    const T* cols[kGemvCols];
+    for (size_t c = 0; c < kGemvCols; ++c) cols[c] = a + (j + c) * lda;
+    AxpyCols<kGemvCols>(m, cols, t + j, y);
   }
-  for (; j < n; ++j) GemvTComplexCols<1, kConj>(m, j, alpha, a, lda, x, y);
+  for (; j < n; ++j) {
+    const T* col = a + j * lda;
+    AxpyCols<1>(m, &col, t + j, y);
+  }
+}
+
+// y[0:n] += alpha * op(A)^T * x[0:m], op conjugating if kConj.
+template <bool kConj, typename T>
+HWY_NOINLINE void GemvT(size_t m, size_t n, T alpha, const T* HWY_RESTRICT a,
+                        size_t lda, const T* HWY_RESTRICT x,
+                        T* HWY_RESTRICT y) {
+  size_t j = 0;
+  for (; j + kGemvCols <= n; j += kGemvCols) {
+    const T* cols[kGemvCols];
+    for (size_t c = 0; c < kGemvCols; ++c) cols[c] = a + (j + c) * lda;
+    DotCols<kGemvCols, kConj>(m, cols, alpha, x, y + j);
+  }
+  for (; j < n; ++j) {
+    const T* col = a + j * lda;
+    DotCols<1, kConj>(m, &col, alpha, x, y + j);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -310,29 +320,15 @@ void GemvContiguous(Op op, size_t m, size_t n, T alpha, const T* a, size_t lda,
   ScaleVector(len_y, beta, y);
   if (IsZero(alpha)) return;
 
-  if constexpr (!IsComplex<T>::value) {
-    if (op == Op::kNoTrans) {
-      // t = alpha * x, so the inner loop is a pure multiply-add.
-      T* t = static_cast<T*>(ScratchBuffer(kScratchTemp, n * sizeof(T)));
-      for (size_t j = 0; j < n; ++j) t[j] = alpha * x[j];
-      GemvNReal(m, n, a, lda, t, y);
-    } else {
-      GemvTReal(m, n, alpha, a, lda, x, y);
-    }
+  if (op == Op::kNoTrans) {
+    // t = alpha * x, so the inner loop is a pure multiply-add.
+    T* t = static_cast<T*>(ScratchBuffer(kScratchTemp, n * sizeof(T)));
+    for (size_t j = 0; j < n; ++j) t[j] = alpha * x[j];
+    GemvN(m, n, a, lda, t, y);
+  } else if (op == Op::kTrans) {
+    GemvT<false>(m, n, alpha, a, lda, x, y);
   } else {
-    using R = RealT<T>;
-    const R* ar = reinterpret_cast<const R*>(a);
-    const R* xr = reinterpret_cast<const R*>(x);
-    R* yr = reinterpret_cast<R*>(y);
-    if (op == Op::kNoTrans) {
-      T* t = static_cast<T*>(ScratchBuffer(kScratchTemp, n * sizeof(T)));
-      for (size_t j = 0; j < n; ++j) t[j] = alpha * x[j];
-      GemvNComplex(m, n, ar, lda, reinterpret_cast<const R*>(t), yr);
-    } else if (op == Op::kTrans) {
-      GemvTComplex<false>(m, n, alpha, ar, lda, xr, yr);
-    } else {
-      GemvTComplex<true>(m, n, alpha, ar, lda, xr, yr);
-    }
+    GemvT<true>(m, n, alpha, a, lda, x, y);
   }
 }
 

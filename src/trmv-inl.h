@@ -28,14 +28,7 @@ namespace HWY_NAMESPACE {
 template <typename T>
 HWY_INLINE void RectAxpy(size_t m, size_t cols, const T* r, size_t lda,
                          const T* t, T* y) {
-  if (m == 0) return;
-  if constexpr (IsComplex<T>::value) {
-    using R = RealT<T>;
-    GemvNComplex(m, cols, reinterpret_cast<const R*>(r), lda,
-                 reinterpret_cast<const R*>(t), reinterpret_cast<R*>(y));
-  } else {
-    GemvNReal(m, cols, r, lda, t, y);
-  }
+  if (m != 0) GemvN(m, cols, r, lda, t, y);
 }
 
 // y[0:cols] += alpha * op(R)^T * x[0:m], where R is m x cols (dot form)
@@ -44,18 +37,10 @@ template <typename T>
 HWY_INLINE void RectDot(bool conj, size_t m, size_t cols, T alpha, const T* r,
                         size_t lda, const T* x, T* y) {
   if (m == 0) return;
-  if constexpr (IsComplex<T>::value) {
-    using R = RealT<T>;
-    const R* rr = reinterpret_cast<const R*>(r);
-    const R* xr = reinterpret_cast<const R*>(x);
-    R* yr = reinterpret_cast<R*>(y);
-    if (conj) {
-      GemvTComplex<true>(m, cols, alpha, rr, lda, xr, yr);
-    } else {
-      GemvTComplex<false>(m, cols, alpha, rr, lda, xr, yr);
-    }
+  if (conj) {
+    GemvT<true>(m, cols, alpha, r, lda, x, y);
   } else {
-    GemvTReal(m, cols, alpha, r, lda, x, y);
+    GemvT<false>(m, cols, alpha, r, lda, x, y);
   }
 }
 
