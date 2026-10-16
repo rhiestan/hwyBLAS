@@ -1,5 +1,6 @@
 add_library(hwyblas
   band_packed.cc
+  cblas.cc
   common.cc
   gemm.cc
   gemv.cc

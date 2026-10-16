@@ -35,10 +35,11 @@ hwyBLAS is an independent project. It is not affiliated with Google.
 | 3 | `?gemmtr_` (also as `?gemmt_`) | s d c z |
 | 3 | `?hemm_`, `?herk_`, `?her2k_` | c z |
 
-This is the complete reference BLAS (Fortran interface), which includes
-every routine that Eigen calls with `EIGEN_USE_BLAS`. Not yet implemented:
-the CBLAS interface and the common extensions (`?axpby_`, `?omatcopy_`,
-`?imatcopy_`, `i?amin_`).
+This is the complete reference BLAS, with both the Fortran interface
+(`hwyblas/hwyblas.h`) and the CBLAS interface (`hwyblas/cblas.h`, row- and
+column-major), and includes every routine that Eigen calls with
+`EIGEN_USE_BLAS`. Not yet implemented: the common extensions (`?axpby`,
+`?omatcopy`, `?imatcopy`, `i?amin`).
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
@@ -75,6 +76,22 @@ target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
 
 `tests/eigen_test.cc` checks the integration: products, triangular and
 self-adjoint views, rank updates and the LLT, LDLT and LU decompositions.
+
+## Using the CBLAS interface
+
+```c
+#include "hwyblas/cblas.h"
+
+cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, a, k,
+            b, n, 0.0, c, n);
+```
+
+`cblas.h` declares the reference CBLAS API, plus `cblas_?gemmt` (the OpenBLAS
+and MKL name of `cblas_?gemmtr`) and the by-value complex dot products
+`cblas_?dotu`/`cblas_?dotc` of OpenBLAS. Row-major calls are mapped onto the
+column-major routines; there is no extra cost except for row-major
+`ConjTrans` in the matrix-vector routines and the row-major Hermitian Level 2
+routines, which conjugate a copy of the vectors as the reference CBLAS does.
 
 ## Performance
 
@@ -119,6 +136,7 @@ libraries over several rounds and reports each one's best time.
 
 ```
 include/hwyblas/hwyblas.h   public C API (Fortran calling convention)
+include/hwyblas/cblas.h     public CBLAS API (src/cblas.cc)
 src/common.h, common.cc     scalar traits, scratch buffers, xerbla_
 src/api.h                   argument decoding and dispatch helpers
 src/gemm.h                  GemmProblem: the description of any level 3 product
@@ -193,6 +211,10 @@ cover every target.
 - Error handling follows reference BLAS: invalid arguments call `xerbla_`,
   and the routine returns without side effects. Unlike the reference
   `xerbla_`, the default handler prints a message but does not terminate.
+  CBLAS functions report through `cblas_xerbla` with the position of the
+  CBLAS argument (the layout being argument 1), as the reference CBLAS does;
+  it does not terminate either.
+- `cblas_i?amax` returns a 0-based index, and 0 if `n <= 0` or `incx <= 0`.
 - `beta == 0` means the output is not read, so NaN/Inf in it do not
   propagate. This is the reference BLAS semantics.
 - Elements that BLAS defines as not referenced are never read: the other

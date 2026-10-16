@@ -87,8 +87,20 @@ inline bool DecodeOp(char c, Op* op) {
   }
 }
 
-// Reports an invalid argument via xerbla_ (`info` is the 1-based position).
+// Reports an invalid argument via xerbla_ (`info` is the 1-based position),
+// or via cblas_xerbla while a CBLAS function runs (see CblasContext).
 void ReportError(const char* routine, blasint info);
+
+// Set while a CBLAS function calls a Fortran-style routine, so that errors
+// are reported with the CBLAS name and argument positions: Fortran argument
+// i (1-based) is CBLAS argument positions[i - 1].
+struct CblasContext {
+  const char* name = nullptr;
+  const int* positions = nullptr;
+};
+
+// Sets the context of the calling thread (nullptr: none).
+void SetCblasContext(const CblasContext* context);
 
 // ---------------------------------------------------------------------------
 // Scratch memory

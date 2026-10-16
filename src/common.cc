@@ -7,10 +7,21 @@
 
 #include "hwy/aligned_allocator.h"
 #include "hwy/targets.h"
+#include "hwyblas/cblas.h"
 
 namespace hwyblas {
 
+namespace {
+thread_local const CblasContext* g_cblas_context = nullptr;
+}  // namespace
+
+void SetCblasContext(const CblasContext* context) { g_cblas_context = context; }
+
 void ReportError(const char* routine, blasint info) {
+  if (const CblasContext* c = g_cblas_context) {
+    cblas_xerbla(c->positions[info - 1], c->name, "");
+    return;
+  }
   xerbla_(routine, &info, strlen(routine));
 }
 

@@ -16,12 +16,18 @@ add_executable(hwyblas_tests
   gemv_test.cc
   level1_test.cc
   band_packed_test.cc
+  cblas_test.cc
   level2_test.cc
   level3_test.cc
 )
 target_link_libraries(hwyblas_tests PRIVATE hwyblas::hwyblas GTest::gtest_main hwyblas_options)
 
 gtest_discover_tests(hwyblas_tests DISCOVERY_MODE PRE_TEST)
+
+# The public headers must also work from C.
+add_executable(hwyblas_cblas_c_test cblas_c_test.c)
+target_link_libraries(hwyblas_cblas_c_test PRIVATE hwyblas::hwyblas)
+add_test(NAME CblasFromC COMMAND hwyblas_cblas_c_test)
 
 # Eigen integration test (EIGEN_USE_BLAS), if an Eigen checkout is available.
 set(HWYBLAS_EIGEN_DIR "${PROJECT_SOURCE_DIR}/../eigen"
