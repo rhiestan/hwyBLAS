@@ -445,9 +445,12 @@ TYPED_TEST(Semantics, ResultsAreReproducible) {
   };
   std::vector<Case> cases;
   for (int n : {37, 150}) {
-    const auto a = std::make_shared<std::vector<T>>(rng.Vector(size_t(n) * n));
-    const auto b = std::make_shared<std::vector<T>>(rng.Vector(size_t(n) * n));
-    const auto c = std::make_shared<std::vector<T>>(rng.Vector(size_t(n) * n));
+    const auto a = std::make_shared<std::vector<T>>(
+        rng.Vector(static_cast<size_t>(n) * n));
+    const auto b = std::make_shared<std::vector<T>>(
+        rng.Vector(static_cast<size_t>(n) * n));
+    const auto c = std::make_shared<std::vector<T>>(
+        rng.Vector(static_cast<size_t>(n) * n));
     const auto tri =
         std::make_shared<std::vector<T>>(DominantTriangle(n, 'U', rng));
     cases.push_back(
@@ -574,16 +577,17 @@ class SparseMatrix {
     if (!memory_.ok()) return;
     for (int j = 0; j < cols; ++j) {
       memory_.Commit(j * ld * sizeof(T), rows * sizeof(T));
-      memcpy(data() + j * ld, compact.data() + size_t(j) * rows,
+      memcpy(data() + j * ld, compact.data() + static_cast<size_t>(j) * rows,
              rows * sizeof(T));
     }
   }
   bool ok() const { return memory_.ok(); }
   T* data() const { return reinterpret_cast<T*>(memory_.base()); }
   std::vector<T> Compact() const {
-    std::vector<T> v(size_t(rows_) * cols_);
+    std::vector<T> v(static_cast<size_t>(rows_) * cols_);
     for (int j = 0; j < cols_; ++j) {
-      memcpy(v.data() + size_t(j) * rows_, data() + j * ld_, rows_ * sizeof(T));
+      memcpy(v.data() + static_cast<size_t>(j) * rows_, data() + j * ld_,
+             rows_ * sizeof(T));
     }
     return v;
   }

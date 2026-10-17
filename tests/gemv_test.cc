@@ -106,7 +106,7 @@ void CheckGemv(const GemvCase& tc, T alpha, T beta, uint64_t seed) {
   for (size_t i = 0; i < len_y; ++i) {
     actual[i] = y[VectorIndex(i, len_y, tc.incy)];
   }
-  const double tol = 4.0 * (len_x + 2) * Eps<T>();
+  const double tol = 4.0 * static_cast<double>(len_x + 2) * Eps<T>();
   EXPECT_TRUE(NearWithBound(actual, expected, bound, tol, len_y, 1, len_y))
       << "trans=" << tc.trans << " m=" << tc.m << " n=" << tc.n
       << " incx=" << tc.incx << " incy=" << tc.incy;

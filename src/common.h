@@ -65,7 +65,9 @@ inline bool IsOne(T x) {
 // ---------------------------------------------------------------------------
 // Argument decoding (Fortran CHARACTER*1 arguments)
 
-inline char ToUpper(char c) { return (c >= 'a' && c <= 'z') ? c - 32 : c; }
+inline char ToUpper(char c) {
+  return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 32) : c;
+}
 
 // op(X) for GEMM-style arguments.
 enum class Op { kNoTrans, kTrans, kConjTrans };
@@ -84,9 +86,9 @@ inline bool DecodeOp(char c, Op* op) {
       *op = Op::kConjTrans;
       return true;
     default:
+      *op = Op::kNoTrans;
       return false;
   }
-      *op = Op::kNoTrans;
 }
 
 // Reports an invalid argument via xerbla_ (`info` is the 1-based position),

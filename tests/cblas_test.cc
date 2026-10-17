@@ -97,9 +97,12 @@ template <typename T>
 struct Mat {
   int rows = 0, cols = 0;
   std::vector<T> v;
-  Mat(int r, int c, T fill = T(0)) : rows(r), cols(c), v(size_t(r) * c, fill) {}
-  T& operator()(int i, int j) { return v[i + size_t(j) * rows]; }
-  const T& operator()(int i, int j) const { return v[i + size_t(j) * rows]; }
+  Mat(int r, int c, T fill = T(0))
+      : rows(r), cols(c), v(static_cast<size_t>(r) * c, fill) {}
+  T& operator()(int i, int j) { return v[i + static_cast<size_t>(j) * rows]; }
+  const T& operator()(int i, int j) const {
+    return v[i + static_cast<size_t>(j) * rows];
+  }
 };
 
 template <typename T>
@@ -132,9 +135,11 @@ char FlipUplo(char uplo) { return uplo == 'L' ? 'U' : 'L'; }
 // Column-major storage with leading dimension ld (padding: sentinel).
 template <typename T>
 std::vector<T> General(const Mat<T>& a, int ld) {
-  std::vector<T> s(size_t(ld) * std::max(a.cols, 1), MakeScalar<T>(7, 7));
+  std::vector<T> s(static_cast<size_t>(ld) * std::max(a.cols, 1),
+                   MakeScalar<T>(7, 7));
   for (int j = 0; j < a.cols; ++j) {
-    for (int i = 0; i < a.rows; ++i) s[i + size_t(j) * ld] = a(i, j);
+    for (int i = 0; i < a.rows; ++i)
+      s[i + static_cast<size_t>(j) * ld] = a(i, j);
   }
   return s;
 }
@@ -144,7 +149,7 @@ template <typename T>
 Mat<T> FromGeneral(const std::vector<T>& s, int rows, int cols, int ld) {
   Mat<T> a(rows, cols);
   for (int j = 0; j < cols; ++j) {
-    for (int i = 0; i < rows; ++i) a(i, j) = s[i + size_t(j) * ld];
+    for (int i = 0; i < rows; ++i) a(i, j) = s[i + static_cast<size_t>(j) * ld];
   }
   return a;
 }
@@ -152,10 +157,10 @@ Mat<T> FromGeneral(const std::vector<T>& s, int rows, int cols, int ld) {
 // Band storage with kl sub- and ku super-diagonals, leading dimension ldab.
 template <typename T>
 std::vector<T> Band(const Mat<T>& a, int kl, int ku, int ldab) {
-  std::vector<T> s(size_t(ldab) * std::max(a.cols, 1), NaN<T>());
+  std::vector<T> s(static_cast<size_t>(ldab) * std::max(a.cols, 1), NaN<T>());
   for (int j = 0; j < a.cols; ++j) {
     for (int i = std::max(0, j - ku); i < std::min(a.rows, j + kl + 1); ++i) {
-      s[(ku + i - j) + size_t(j) * ldab] = a(i, j);
+      s[(ku + i - j) + static_cast<size_t>(j) * ldab] = a(i, j);
     }
   }
   return s;
@@ -234,7 +239,7 @@ void ExpectNear(const std::vector<T>& actual, const std::vector<T>& expected,
 }
 
 // The 0-based CBLAS index for a 1-based Fortran index (0 for "none").
-size_t ZeroBased(int i) { return i > 0 ? size_t(i - 1) : 0; }
+size_t ZeroBased(int i) { return i > 0 ? static_cast<size_t>(i - 1) : 0; }
 
 // Random vector with increment inc (gaps hold the StridedVector sentinel).
 template <typename T>

@@ -225,16 +225,16 @@ void BenchGemm(const Options& opt, const Libraries& libs) {
     const int lda = std::max(1, ta == 'N' ? s.m : s.k);
     const int ldb = std::max(1, tb == 'N' ? s.k : s.n);
     const int ldc = std::max(1, s.m);
-    const auto a = std::make_shared<std::vector<T>>(
-        RandomVector<T>(size_t(lda) * (ta == 'N' ? s.k : s.m), rng));
-    const auto b = std::make_shared<std::vector<T>>(
-        RandomVector<T>(size_t(ldb) * (tb == 'N' ? s.n : s.k), rng));
+    const auto a = std::make_shared<std::vector<T>>(RandomVector<T>(
+        static_cast<size_t>(lda) * (ta == 'N' ? s.k : s.m), rng));
+    const auto b = std::make_shared<std::vector<T>>(RandomVector<T>(
+        static_cast<size_t>(ldb) * (tb == 'N' ? s.n : s.k), rng));
 
     Case<T> c;
     c.label = std::to_string(s.m) + " x " + std::to_string(s.n) + " x " +
               std::to_string(s.k);
     c.flops = (kIsComplex<T> ? 8.0 : 2.0) * s.m * s.n * s.k;
-    c.initial_out = RandomVector<T>(size_t(ldc) * s.n, rng);
+    c.initial_out = RandomVector<T>(static_cast<size_t>(ldc) * s.n, rng);
     c.call = [=](void* fn, T* out) {
       const T alpha = T(1), beta = T(0.5);
       reinterpret_cast<GemmFn<T>>(fn)(&ta, &tb, &s.m, &s.n, &s.k, &alpha,
@@ -255,7 +255,7 @@ void BenchGemv(const Options& opt, const Libraries& libs) {
   for (const Shape& s : opt.shapes) {
     const int lda = std::max(1, s.m), inc = 1;
     const auto a = std::make_shared<std::vector<T>>(
-        RandomVector<T>(size_t(lda) * s.n, rng));
+        RandomVector<T>(static_cast<size_t>(lda) * s.n, rng));
     const auto x = std::make_shared<std::vector<T>>(
         RandomVector<T>(trans == 'N' ? s.n : s.m, rng));
 
@@ -276,10 +276,11 @@ void BenchGemv(const Options& opt, const Libraries& libs) {
 // triangular solves stay well conditioned. Both triangles are filled.
 template <typename T>
 std::shared_ptr<std::vector<T>> DominantMatrix(int n, std::mt19937& rng) {
-  auto a =
-      std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * n, rng));
+  auto a = std::make_shared<std::vector<T>>(
+      RandomVector<T>(static_cast<size_t>(n) * n, rng));
   for (int i = 0; i < n; ++i)
-    (*a)[i + size_t(i) * n] += T(static_cast<typename RealType<T>::type>(n));
+    (*a)[i + static_cast<size_t>(i) * n] +=
+        T(static_cast<typename RealType<T>::type>(n));
   return a;
 }
 
@@ -297,11 +298,11 @@ void BenchSymm(const Options& opt, const Libraries& libs) {
     const int ka = (opt.side == 'L') ? s.m : s.n;
     const auto a = DominantMatrix<T>(ka, rng);
     const auto b = std::make_shared<std::vector<T>>(
-        RandomVector<T>(size_t(s.m) * s.n, rng));
+        RandomVector<T>(static_cast<size_t>(s.m) * s.n, rng));
     Case<T> c;
     c.label = Label(s.m, s.n);
     c.flops = (kIsComplex<T> ? 8.0 : 2.0) * s.m * s.n * ka;
-    c.initial_out = RandomVector<T>(size_t(s.m) * s.n, rng);
+    c.initial_out = RandomVector<T>(static_cast<size_t>(s.m) * s.n, rng);
     const char side = opt.side, uplo = opt.uplo;
     c.call = [=](void* fn, T* out) {
       using Fn = void (*)(const char*, const char*, const int*, const int*,
@@ -326,12 +327,12 @@ void BenchSyrk(const Options& opt, const Libraries& libs) {
     // C is n x n; A is n x k (trans = N) or k x n.
     const int n = s.m, k = s.k;
     const int lda = (trans == 'N') ? n : k;
-    const auto a =
-        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(n) * k, rng));
     Case<T> c;
     c.label = Label(n, k);
     c.flops = (kIsComplex<T> ? 4.0 : 1.0) * n * (n + 1.0) * k;
-    c.initial_out = RandomVector<T>(size_t(n) * n, rng);
+    c.initial_out = RandomVector<T>(static_cast<size_t>(n) * n, rng);
     const char uplo = opt.uplo;
     c.call = [=](void* fn, T* out) {
       using Fn =
@@ -363,15 +364,15 @@ void BenchTriangleUpdate(const Options& opt, const Libraries& libs) {
     const int n = s.m, k = s.k;
     const int lda = (ta == 'N') ? n : k;
     const int ldb = gemmt ? ((tb == 'N') ? k : n) : lda;
-    const auto a =
-        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
-    const auto b =
-        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(n) * k, rng));
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(n) * k, rng));
+    const auto b = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(n) * k, rng));
     Case<T> c;
     c.label = Label(n, k);
     // gemmt: half of a GEMM; syr2k: two halves.
     c.flops = (kIsComplex<T> ? 4.0 : 1.0) * n * (n + 1.0) * k * (gemmt ? 1 : 2);
-    c.initial_out = RandomVector<T>(size_t(n) * n, rng);
+    c.initial_out = RandomVector<T>(static_cast<size_t>(n) * n, rng);
     const char uplo = opt.uplo;
     if (gemmt) {
       c.call = [=](void* fn, T* out) {
@@ -413,7 +414,7 @@ void BenchTriangular3(const Options& opt, const Libraries& libs,
     const int ka = (opt.side == 'L') ? s.m : s.n;
     const auto a = DominantMatrix<T>(ka, rng);
     const auto b0 = std::make_shared<std::vector<T>>(
-        RandomVector<T>(size_t(s.m) * s.n, rng));
+        RandomVector<T>(static_cast<size_t>(s.m) * s.n, rng));
     Case<T> c;
     c.label = Label(s.m, s.n);
     c.flops = (kIsComplex<T> ? 4.0 : 1.0) * s.m * s.n * ka;
@@ -514,7 +515,7 @@ void BenchRankUpdate(const Options& opt, const Libraries& libs) {
     c.label = (routine == "ger") ? std::to_string(m) + "x" + std::to_string(n)
                                  : std::to_string(n);
     // Multiply-adds per element: 1 (ger), 1/2 (syr), 1 (syr2).
-    const double elements = (routine == "ger")   ? double(m) * n
+    const double elements = (routine == "ger")   ? static_cast<double>(m) * n
                             : (routine == "syr") ? 0.5 * n * n
                                                  : 1.0 * n * n;
     c.flops = (kIsComplex<T> ? 8.0 : 2.0) * elements;
@@ -582,7 +583,8 @@ void BenchBandPacked(const Options& opt, const Libraries& libs) {
     const int kl = (routine == "gbmv") ? k : (lower ? k : 0);
     const int ku = (routine == "gbmv") ? k : (lower ? 0 : k);
     const int lda = kl + ku + 1;
-    const size_t size = packed ? size_t(n) * (n + 1) / 2 : size_t(lda) * n;
+    const size_t size = packed ? static_cast<size_t>(n) * (n + 1) / 2
+                               : static_cast<size_t>(lda) * n;
     auto a = std::make_shared<std::vector<T>>(RandomVector<T>(size, rng));
     // Scale the off-diagonals and make the diagonal dominant. Counts the
     // elements that are part of the matrix.
@@ -594,12 +596,12 @@ void BenchBandPacked(const Options& opt, const Libraries& libs) {
       if (packed) {
         begin = lower ? j : 0;
         end = lower ? n : j + 1;
-        offset =
-            lower ? size_t(j) * (2 * n - j + 1) / 2 : size_t(j) * (j + 1) / 2;
+        offset = lower ? static_cast<size_t>(j) * (2 * n - j + 1) / 2
+                       : static_cast<size_t>(j) * (j + 1) / 2;
       } else {
         begin = std::max(0, j - ku);
         end = std::max(begin, std::min(m, j + kl + 1));
-        offset = size_t(j) * lda + ku + begin - j;
+        offset = static_cast<size_t>(j) * lda + ku + begin - j;
       }
       elements += end - begin;
       for (int i = begin; i < end; ++i) {
@@ -699,12 +701,12 @@ void BenchOmatcopy(const Options& opt, const Libraries& libs) {
   for (const Shape& s : opt.shapes) {
     const int m = s.m, n = s.n;
     const int ldb = (trans == 'N' || trans == 'R') ? m : n;
-    const auto a =
-        std::make_shared<std::vector<T>>(RandomVector<T>(size_t(m) * n, rng));
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(m) * n, rng));
     Case<T> c;
     c.label = std::to_string(m) + "x" + std::to_string(n);
-    c.flops = double(m) * n;
-    c.initial_out = std::vector<T>(size_t(m) * n);
+    c.flops = static_cast<double>(m) * n;
+    c.initial_out = std::vector<T>(static_cast<size_t>(m) * n);
     c.call = [=](void* fn, T* out) {
       const char order = 'C';
       const T alpha = T(2);

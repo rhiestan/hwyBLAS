@@ -525,8 +525,9 @@ TYPED_TEST(Level1Test, Rotmg) {
     for (int iter = 0; iter < 625; ++iter) {
       // d1 and d2 over many orders of magnitude, independently, so that the
       // rescaling of either or both runs, possibly several times.
-      const T d1_in = std::abs(rng.Next()) * std::pow(T(10), T(iter % 25 - 12));
-      const T d2_in = rng.Next() * std::pow(T(10), T(iter / 25 - 12));
+      const int e1 = iter % 25 - 12, e2 = iter / 25 - 12;
+      const T d1_in = std::abs(rng.Next()) * std::pow(T(10), T(e1));
+      const T d2_in = rng.Next() * std::pow(T(10), T(e2));
       const T x1_in = rng.Next(), y1 = rng.Next();
       T d1 = d1_in, d2 = d2_in, x1 = x1_in, param[5] = {};
       HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);

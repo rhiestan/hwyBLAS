@@ -15,6 +15,8 @@ option(HWYBLAS_BUILD_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(HWYBLAS_BUILD_BENCH "Build the benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(BUILD_SHARED_LIBS "Build hwyblas as a shared library" ON)
 option(HWYBLAS_INSTALL "Generate the install target" ${PROJECT_IS_TOP_LEVEL})
+option(HWYBLAS_CLANG_TIDY "Run clang-tidy (checks in .clang-tidy) while compiling"
+       OFF)
 
 include(GNUInstallDirs)
 
@@ -76,6 +78,13 @@ else()
 endif()
 if(WIN32)
   target_compile_definitions(hwyblas_options INTERFACE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+
+# clang-tidy runs on hwyBLAS's own C++ sources, not on Highway (added above)
+# or GoogleTest. It is slow: Highway compiles each source once per target.
+if(HWYBLAS_CLANG_TIDY)
+  find_program(HWYBLAS_CLANG_TIDY_EXE NAMES clang-tidy REQUIRED)
+  set(CMAKE_CXX_CLANG_TIDY "${HWYBLAS_CLANG_TIDY_EXE}")
 endif()
 
 add_subdirectory(src)

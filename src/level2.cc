@@ -232,7 +232,7 @@ void Syr2(const char* name, const char* uplo_ptr, const blasint* n_ptr,
   const T* xc = ContiguousInput(x, n, incx, kScratchX);
   const T* yc = ContiguousInput(y, n, incy, kScratchY);
   // Row scales s0 = alpha * conj(y) and s1 = conj(alpha * x).
-  T* s0 = static_cast<T*>(ScratchBuffer(kScratchTemp, 2 * n * sizeof(T)));
+  T* s0 = static_cast<T*>(ScratchBuffer(kScratchTemp, 2 * sizeof(T) * n));
   T* s1 = s0 + n;
   for (blasint j = 0; j < n; ++j) {
     s0[j] = alpha * Conj(yc[j]);

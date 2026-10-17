@@ -31,12 +31,13 @@ namespace hwyblas {
 namespace HWY_NAMESPACE {
 namespace hn = hwy::HWY_NAMESPACE;
 
-// Columns per strip. The strip kernels keep per-column broadcasts and
-// accumulators in registers: 2 per column for real types, 4 for complex ones
-// (which would spill with 4 columns on 16-register targets).
+// Columns per strip. The strip kernels keep 2 vectors per column in
+// registers: a broadcast and an accumulator for real types, 2 accumulators
+// for complex ones (whose kernel re-reads its broadcasts from memory to make
+// room for them, see below).
 template <typename T>
 constexpr size_t SymvCols() {
-  return IsComplex<T>::value ? 4 : 4;
+  return 4;
 }
 
 // Real: for the m x kCols rectangle R whose columns are cols[c]:

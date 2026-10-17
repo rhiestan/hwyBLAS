@@ -4,11 +4,15 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
   GIT_TAG v1.17.0)
-# Always link GoogleTest statically, independent of BUILD_SHARED_LIBS.
+# Always link GoogleTest statically, independent of BUILD_SHARED_LIBS, and
+# do not run clang-tidy on it.
 set(_hwyblas_shared ${BUILD_SHARED_LIBS})
+set(_hwyblas_tidy "${CMAKE_CXX_CLANG_TIDY}")
 set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_CXX_CLANG_TIDY "")
 FetchContent_MakeAvailable(googletest)
 set(BUILD_SHARED_LIBS ${_hwyblas_shared})
+set(CMAKE_CXX_CLANG_TIDY "${_hwyblas_tidy}")
 include(GoogleTest)
 
 # ---------------------------------------------------------------------------
@@ -112,7 +116,8 @@ set(HWYBLAS_EIGEN_DIR "${PROJECT_SOURCE_DIR}/../eigen"
     CACHE PATH "Path to an Eigen source checkout (for the Eigen test)")
 if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
   add_executable(hwyblas_eigen_test eigen_test.cc test_main.cc)
-  target_include_directories(hwyblas_eigen_test PRIVATE ${HWYBLAS_EIGEN_DIR})
+  # SYSTEM: no warnings (or clang-tidy diagnostics) from Eigen's headers.
+  target_include_directories(hwyblas_eigen_test SYSTEM PRIVATE ${HWYBLAS_EIGEN_DIR})
   target_link_libraries(hwyblas_eigen_test PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
   gtest_discover_tests(hwyblas_eigen_test DISCOVERY_MODE PRE_TEST)
   hwyblas_add_gtest_target_tests(hwyblas_eigen_test 1)

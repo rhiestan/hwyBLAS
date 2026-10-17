@@ -349,10 +349,10 @@ TYPED_TEST(Level3Test, Syr2kHer2k) {
   std::vector<std::pair<TriangleRoutine, char>> cases = {
       {TriangleRoutine::kSyr2k, 'N'}, {TriangleRoutine::kSyr2k, 'T'}};
   if constexpr (IsComplex<T>::value) {
-    cases.push_back({TriangleRoutine::kHer2k, 'N'});
-    cases.push_back({TriangleRoutine::kHer2k, 'C'});
+    cases.emplace_back(TriangleRoutine::kHer2k, 'N');
+    cases.emplace_back(TriangleRoutine::kHer2k, 'C');
   } else {
-    cases.push_back({TriangleRoutine::kSyr2k, 'C'});  // same as T
+    cases.emplace_back(TriangleRoutine::kSyr2k, 'C');  // same as T
   }
   ForEachTarget([&] {
     uint64_t seed = 1;

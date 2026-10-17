@@ -205,7 +205,8 @@ TYPED_TEST(ExtensionsTest, Iamin) {
 
 // Element (i, j) of a rows x cols matrix with the given order.
 size_t Index(char order, int i, int j, int ld) {
-  return order == 'C' ? i + size_t(j) * ld : size_t(i) * ld + j;
+  return order == 'C' ? i + static_cast<size_t>(j) * ld
+                      : static_cast<size_t>(i) * ld + j;
 }
 
 // The transposition options of ?omatcopy_ for T (R and C conjugate).
@@ -235,9 +236,10 @@ void CheckMatcopy(bool in_place, char order, char trans, int rows, int cols,
   // Leading dimensions with padding (for the given order).
   const int lda = (order == 'C' ? rows : cols) + 2;
   const int ldb = (order == 'C' ? b_rows : b_cols) + 3;
-  const size_t a_size = size_t(lda) * std::max(order == 'C' ? cols : rows, 1);
+  const size_t a_size =
+      static_cast<size_t>(lda) * std::max(order == 'C' ? cols : rows, 1);
   const size_t b_size =
-      size_t(ldb) * std::max(order == 'C' ? b_cols : b_rows, 1);
+      static_cast<size_t>(ldb) * std::max(order == 'C' ? b_cols : b_rows, 1);
 
   Random<T> rng(seed);
   std::vector<T> a = rng.Vector(a_size);
@@ -331,14 +333,14 @@ TYPED_TEST(ExtensionsTest, ImatcopySameLeadingDimension) {
   using T = TypeParam;
   const int rows = 6, cols = 5, ld = 8;
   Random<T> rng(3);
-  std::vector<T> a = rng.Vector(size_t(ld) * cols);
+  std::vector<T> a = rng.Vector(static_cast<size_t>(ld) * cols);
   const std::vector<T> a0 = a;
   const T alpha = MakeScalar<T>(-2.0, 0.5);
   HWYBLAS_CALL(T, imatcopy, "C", "N", &rows, &cols, P(&alpha), P(a.data()), &ld,
                &ld);
   for (int j = 0; j < cols; ++j) {
     for (int i = 0; i < ld; ++i) {
-      const size_t k = i + size_t(j) * ld;
+      const size_t k = i + static_cast<size_t>(j) * ld;
       if (i < rows) {
         EXPECT_NEAR(Abs(a[k] - alpha * a0[k]), 0, 4 * Eps<T>() * 4);
       } else {

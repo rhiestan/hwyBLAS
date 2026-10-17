@@ -61,7 +61,7 @@ class BlasLibrary {
  private:
   // Benchmarks compare single-threaded performance: switch off threading in
   // libraries that support it.
-  void SetSingleThreaded() {
+  void SetSingleThreaded() const {
     if (auto f = Get<void (*)(int)>("openblas_set_num_threads")) f(1);
     if (auto f = Get<int (*)(int)>("MKL_Set_Num_Threads_Local")) f(1);
     if (auto f = Get<void (*)(int)>("MKL_Set_Num_Threads")) f(1);

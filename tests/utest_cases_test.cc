@@ -228,7 +228,7 @@ TYPED_TEST(UtestCases, Nrm2Extremes) {
     // elements have few significant bits, hence the loose tolerance.)
     const R tiny = std::numeric_limits<R>::denorm_min() * R(1000);
     x.assign(n, T(tiny));
-    const double expected = std::sqrt(double(n)) * double(tiny);
+    const double expected = std::sqrt(static_cast<double>(n)) * double(tiny);
     EXPECT_NEAR(Nrm2(n, x.data(), 1), expected, 1e-2 * expected);
     // Negative increment.
     x.assign(5, T(10));

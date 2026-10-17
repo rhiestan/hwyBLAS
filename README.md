@@ -120,6 +120,13 @@ BLAS wrappers allocate temporaries (`nomalloc`, `product_notemporary`), and
 pass negative strides, which BLAS interprets differently (`product_extra`).
 `threads_non_blocking_thread_pool` is also excluded: it occasionally hangs.
 
+### clang-tidy
+
+`.clang-tidy` selects the checks (with the reasons for the disabled ones);
+clangd uses it automatically. `-DHWYBLAS_CLANG_TIDY=ON` runs clang-tidy on
+hwyBLAS's own sources while building (not on Highway or GoogleTest). The code
+has no clang-tidy warnings with these checks.
+
 ### Continuous integration
 
 GitHub Actions (`.github/workflows/ci.yml`) builds hwyBLAS and runs `ctest` on

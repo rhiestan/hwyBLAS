@@ -361,7 +361,7 @@ HWY_INLINE size_t ArgAbsExtremum(size_t n, const T* HWY_RESTRICT x_typed) {
 
   const R first =
       IsComplex<T>::value ? std::abs(x[0]) + std::abs(x[1]) : std::abs(x[0]);
-  if (first != first) return 0;  // NaN
+  if (std::isnan(first)) return 0;
 
   // Magnitudes of the elements in one vector. For complex elements both
   // lanes of a pair hold |re| + |im|.

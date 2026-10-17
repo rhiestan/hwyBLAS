@@ -116,8 +116,8 @@ struct RealGemmKernel {
 
   // Runs Tile<..., kCols = n>; kJ + 1 enumerates the partial column counts.
   template <bool kDirectB, size_t kRowV, size_t... kJ>
-  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...>, size_t kc,
-                                      const T* HWY_RESTRICT a,
+  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...> /*cols*/,
+                                      size_t kc, const T* HWY_RESTRICT a,
                                       const T* HWY_RESTRICT b, ptrdiff_t b_ks,
                                       ptrdiff_t b_cs, T alpha, T beta,
                                       T* HWY_RESTRICT c, size_t ldc, size_t m,
@@ -300,8 +300,8 @@ struct ComplexGemmKernel {
 
   // Runs Tile<..., kCols = n>; kJ + 1 enumerates the partial column counts.
   template <bool kDirectB, size_t kRowV, size_t... kJ>
-  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...>, size_t kc,
-                                      const T* HWY_RESTRICT a,
+  static HWY_INLINE void DispatchCols(std::index_sequence<kJ...> /*cols*/,
+                                      size_t kc, const T* HWY_RESTRICT a,
                                       const T* HWY_RESTRICT b, ptrdiff_t b_ks,
                                       ptrdiff_t b_cs, T alpha, T beta,
                                       T* HWY_RESTRICT c, size_t ldc, size_t m,

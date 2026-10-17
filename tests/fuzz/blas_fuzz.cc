@@ -29,9 +29,10 @@
 //    ends at an inaccessible page.
 // Results must agree within a bound of the form c * eps * (k + 1) * scale,
 // where k is the length of the inner products and scale the size of the
-// result. hwyBLAS is loaded from the fuzzer's own directory, so the
-// environment variable HWYBLAS_TARGET selects the target that is tested.
-#include <stdint.h>
+// result. hwyBLAS is loaded at runtime (the library built with the fuzzer),
+// so the environment variable HWYBLAS_TARGET selects the target that is
+// tested.
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +48,7 @@
 #include <random>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "blas_loader.h"
@@ -350,7 +352,7 @@ class Builder {
   struct Shape {
     int rows = 0, cols = 0;
     int ld = 0;  // for messages
-    std::function<long(int, int)> index;
+    std::function<int64_t(int, int)> index;
     bool unit_diag = false;  // diagonal not referenced (assumed 1)
     bool hermitian = false;  // imaginary part of the diagonal not referenced
     bool solve = false;      // dominant diagonal: a well-conditioned solve
@@ -363,7 +365,7 @@ class Builder {
     op.output = output;
     op.ld = s.ld;
     op.guard_after = Uniform(0, 3) != 0;
-    long size = 0;
+    int64_t size = 0;
     for (int j = 0; j < s.cols; ++j) {
       for (int i = 0; i < s.rows; ++i) size = std::max(size, s.index(i, j) + 1);
     }
@@ -376,7 +378,7 @@ class Builder {
         s.solve ? 1.0 / std::max(1, std::max(s.rows, s.cols)) : 1.0;
     for (int j = 0; j < s.cols; ++j) {
       for (int i = 0; i < s.rows; ++i) {
-        const long idx = s.index(i, j);
+        const int64_t idx = s.index(i, j);
         if (idx < 0) continue;
         if (i == j && s.unit_diag) continue;
         T v = Random(i == j ? 1.0 : off_scale);
@@ -408,45 +410,45 @@ class Builder {
     s.rows = rows;
     s.cols = cols;
     s.ld = ld;
-    s.index = [ld](int i, int j) { return i + static_cast<long>(j) * ld; };
+    s.index = [ld](int i, int j) { return i + static_cast<int64_t>(j) * ld; };
     return s;
   }
   Shape Vector(int n, int inc) {
     Shape s;
     s.rows = n;
     s.cols = 1;
-    const long step = std::abs(inc);
+    const int64_t step = std::abs(inc);
     s.index = [step](int i, int) { return i * step; };
     return s;
   }
   // The `uplo` triangle of an n x n matrix.
   Shape Triangle(int n, int ld, char uplo) {
     Shape s = General(n, n, ld);
-    s.index = [ld, uplo](int i, int j) -> long {
+    s.index = [ld, uplo](int i, int j) -> int64_t {
       if (uplo == 'U' ? i > j : i < j) return -1;
-      return i + static_cast<long>(j) * ld;
+      return i + static_cast<int64_t>(j) * ld;
     };
     return s;
   }
   // General band matrix with kl sub- and ku superdiagonals.
   Shape Band(int m, int n, int kl, int ku, int ld) {
     Shape s = General(m, n, ld);
-    s.index = [kl, ku, ld](int i, int j) -> long {
+    s.index = [kl, ku, ld](int i, int j) -> int64_t {
       if (i < j - ku || i > j + kl) return -1;
-      return ku + i - j + static_cast<long>(j) * ld;
+      return ku + i - j + static_cast<int64_t>(j) * ld;
     };
     return s;
   }
   // The `uplo` triangle of an n x n band matrix with k off-diagonals.
   Shape TriangleBand(int n, int k, int ld, char uplo) {
     Shape s = General(n, n, ld);
-    s.index = [k, ld, uplo](int i, int j) -> long {
+    s.index = [k, ld, uplo](int i, int j) -> int64_t {
       if (uplo == 'U') {
         if (i > j || i < j - k) return -1;
-        return k + i - j + static_cast<long>(j) * ld;
+        return k + i - j + static_cast<int64_t>(j) * ld;
       }
       if (i < j || i > j + k) return -1;
-      return i - j + static_cast<long>(j) * ld;
+      return i - j + static_cast<int64_t>(j) * ld;
     };
     return s;
   }
@@ -455,11 +457,11 @@ class Builder {
     Shape s;
     s.rows = n;
     s.cols = n;
-    s.index = [n, uplo](int i, int j) -> long {
+    s.index = [n, uplo](int i, int j) -> int64_t {
       if (uplo == 'U') {
-        return i > j ? -1 : i + static_cast<long>(j) * (j + 1) / 2;
+        return i > j ? -1 : i + static_cast<int64_t>(j) * (j + 1) / 2;
       }
-      return i < j ? -1 : i + static_cast<long>(j) * (2 * n - j - 1) / 2;
+      return i < j ? -1 : i + static_cast<int64_t>(j) * (2 * n - j - 1) / 2;
     };
     return s;
   }
@@ -609,7 +611,7 @@ std::vector<Routine<T>> Routines() {
   // Dot products: real ones return the result, complex ones use the CBLAS
   // *_sub functions (the Fortran ABI for complex return values varies).
   const auto add_dot = [&](std::string name, bool conj) {
-    add(name, [conj](Case<T>& c, Builder<T>& b) {
+    add(std::move(name), [conj](Case<T>& c, Builder<T>& b) {
       (void)conj;  // only used for complex types
       const int n = b.Dim("n", 1);
       const int incx = b.Inc("incx"), incy = b.Inc("incy");
@@ -713,7 +715,7 @@ std::vector<Routine<T>> Routines() {
       const int y = b.Add("y", b.Vector(n, incy), true);
       // param = {flag, h11, h21, h12, h22}; unused entries are NaN.
       typename Builder<T>::Shape s = b.Vector(5, 1);
-      s.index = [flag](int i, int) -> long {
+      s.index = [flag](int i, int) -> int64_t {
         if (i == 0) return 0;
         if (flag == -2) return -1;
         if (flag == 0 && (i == 1 || i == 4)) return -1;
@@ -1236,7 +1238,7 @@ uint64_t SplitMix(uint64_t x) {
 
 struct Options {
   uint64_t seed = 1;
-  long iterations = 1000;
+  int64_t iterations = 1000;
   double time = 0;  // > 0: run for this many seconds
   std::string types = "sdcz";
   std::vector<std::string> routines;  // empty: all
@@ -1246,8 +1248,8 @@ struct Options {
 };
 
 struct Stats {
-  long cases = 0, failures = 0;
-  std::map<std::string, long> per_routine;
+  int64_t cases = 0, failures = 0;
+  std::map<std::string, int64_t> per_routine;
 };
 
 // All routines of all types, type-erased: generate and run one case.
@@ -1275,8 +1277,7 @@ void AddRoutines(std::vector<AnyRoutine>& all) {
              return true;  // not provided by one of the libraries
            }
            char seed_str[32];
-           snprintf(seed_str, sizeof(seed_str), "0x%016llx",
-                    static_cast<unsigned long long>(seed));
+           snprintf(seed_str, sizeof(seed_str), "0x%016" PRIx64, seed);
            const std::string repro = name + ":" + seed_str;
            g_current_case = repro + " " + c.params;
            if (opt.verbose) {
@@ -1304,7 +1305,7 @@ int Main(int argc, char** argv) {
     if (strncmp(arg, "--seed=", 7) == 0) {
       opt.seed = strtoull(arg + 7, nullptr, 0);
     } else if (strncmp(arg, "--iterations=", 13) == 0) {
-      opt.iterations = atol(arg + 13);
+      opt.iterations = strtoll(arg + 13, nullptr, 10);
     } else if (strncmp(arg, "--time=", 7) == 0) {
       opt.time = atof(arg + 7);
     } else if (strncmp(arg, "--types=", 8) == 0) {
@@ -1397,7 +1398,7 @@ int Main(int argc, char** argv) {
   }
 
   const auto start = std::chrono::steady_clock::now();
-  for (long i = 0;; ++i) {
+  for (int64_t i = 0;; ++i) {
     if (opt.time > 0) {
       const double elapsed = std::chrono::duration<double>(
                                  std::chrono::steady_clock::now() - start)
@@ -1411,8 +1412,8 @@ int Main(int argc, char** argv) {
     r.run(SplitMix(seed), hwy, ref, opt, stats);
     if (stats.failures >= opt.max_failures) break;
   }
-  printf("%ld cases of %zu routines, %ld failures\n", stats.cases,
-         stats.per_routine.size(), stats.failures);
+  printf("%" PRId64 " cases of %zu routines, %" PRId64 " failures\n",
+         stats.cases, stats.per_routine.size(), stats.failures);
   return stats.failures == 0 ? 0 : 1;
 }
 
