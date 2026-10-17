@@ -1,0 +1,167 @@
+# Builds hwyBLAS and runs its tests on Linux (x86-64 and ARM64), macOS and
+# Windows. The jobs check out the test dependencies next to hwyBLAS, where
+# the build looks for them: Eigen (../eigen, for the Eigen test), OpenBLAS's
+# sources (../OpenBLAS, for the Netlib CBLAS testers) and an OpenBLAS library
+# (the reference of the fuzz tests). Highway 1.4.0 is downloaded by the build.
+# Two jobs also run the AVX-512 targets in Intel SDE.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  EIGEN_VERSION: 5.0.1
+  OPENBLAS_VERSION: 0.3.34
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64 GCC (with SDE)
+            os: ubuntu-24.04
+            cc: gcc
+            cxx: g++
+            sde: true
+            openblas_target: HASWELL
+          - name: Linux x86-64 Clang ASan
+            os: ubuntu-24.04
+            cc: clang
+            cxx: clang++
+            flags: -fsanitize=address -fno-omit-frame-pointer
+            openblas_target: HASWELL
+          - name: Linux ARM64 GCC
+            os: ubuntu-24.04-arm
+            cc: gcc
+            cxx: g++
+            openblas_target: ARMV8
+          - name: macOS ARM64 Clang
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+            openblas_target: ARMV8
+          - name: Windows MSVC
+            os: windows-latest
+            cc: cl
+            cxx: cl
+          - name: Windows clang-cl (with SDE)
+            os: windows-latest
+            cc: clang-cl
+            cxx: clang-cl
+            sde: true
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out hwyBLAS
+        uses: actions/checkout@v7
+        with:
+          path: hwyBLAS
+
+      - name: Check out OpenBLAS (Netlib CBLAS testers)
+        uses: actions/checkout@v7
+        with:
+          repository: OpenMathLib/OpenBLAS
+          ref: v${{ env.OPENBLAS_VERSION }}
+          path: OpenBLAS
+
+      - name: Check out Eigen
+        run: >-
+          git clone --quiet --depth 1 --branch "$EIGEN_VERSION"
+          https://gitlab.com/libeigen/eigen.git eigen
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Set up the MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+
+      - name: Set up Intel SDE
+        if: matrix.sde
+        uses: petarpetrovt/setup-sde@v6.0
+
+      # Single-threaded and for one fixed CPU target, so that the cached
+      # library runs on every runner.
+      - name: Cache the reference OpenBLAS
+        if: runner.os != 'Windows'
+        id: openblas-cache
+        uses: actions/cache@v6
+        with:
+          path: openblas
+          key: openblas-${{ env.OPENBLAS_VERSION }}-${{ runner.os }}-${{ runner.arch }}-${{ matrix.openblas_target }}
+
+      - name: Build the reference OpenBLAS
+        if: runner.os != 'Windows' && steps.openblas-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S OpenBLAS -B openblas-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+            -DTARGET=${{ matrix.openblas_target }} -DUSE_THREAD=0 \
+            -DNOFORTRAN=1 -DBUILD_WITHOUT_LAPACK=ON -DBUILD_TESTING=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PWD/openblas" -DCMAKE_INSTALL_LIBDIR=lib
+          cmake --build openblas-build
+          cmake --install openblas-build
+
+      # Where the build looks for it by default.
+      - name: Download the reference OpenBLAS
+        if: runner.os == 'Windows'
+        run: |
+          dir="OpenBLAS-$OPENBLAS_VERSION-x64"
+          curl -sSfL -o openblas.zip "https://github.com/OpenMathLib/OpenBLAS/releases/download/v$OPENBLAS_VERSION/$dir.zip"
+          7z x -bso0 -o"$dir" openblas.zip
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          CFLAGS: ${{ matrix.flags }}
+          CXXFLAGS: ${{ matrix.flags }}
+          LDFLAGS: ${{ matrix.flags }}
+        run: |
+          args=()
+          case "$RUNNER_OS" in
+            Linux) args+=(-DHWYBLAS_FUZZ_REFERENCE="$PWD/openblas/lib/libopenblas.so") ;;
+            macOS) args+=(-DHWYBLAS_FUZZ_REFERENCE="$PWD/openblas/lib/libopenblas.dylib") ;;
+          esac
+          if [ -n "${SDE_PATH:-}" ]; then
+            if [ "$RUNNER_OS" = Windows ]; then
+              args+=(-DHWYBLAS_SDE="$(cygpath -m "$SDE_PATH")/sde.exe")
+            else
+              args+=(-DHWYBLAS_SDE="$SDE_PATH/sde64")
+              # SDE attaches to the program it runs.
+              sudo sysctl -w kernel.yama.ptrace_scope=0
+            fi
+          fi
+          cmake -S hwyBLAS -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${args[@]}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
+
+      - name: Install
+        run: cmake --install build --prefix install
+
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-${{ matrix.os }}-${{ matrix.cc }}${{ matrix.flags && '-asan' || '' }}
+          path: build/Testing/Temporary/LastTest*.log
+          if-no-files-found: ignore

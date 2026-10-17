@@ -1,5 +1,7 @@
 # hwyBLAS
 
+[![CI](https://github.com/rhiestan/hwyBLAS/actions/workflows/ci.yml/badge.svg)](https://github.com/rhiestan/hwyBLAS/actions/workflows/ci.yml)
+
 A BLAS implementation built on [Google Highway](https://github.com/google/highway).
 
 Goals:
@@ -67,9 +69,9 @@ cmake --build build
 ctest --test-dir build        # or run build/bin/hwyblas_tests directly
 ```
 
-The build produces `build/bin/hwyblas.dll` (or `libhwyblas.so`), exporting the
-Fortran-style symbols (`dgemm_`, ...). Pass `-DBUILD_SHARED_LIBS=OFF` for a
-static library.
+The build produces `build/bin/hwyblas.dll` (`build/lib/libhwyblas.so` on
+Linux, `build/lib/libhwyblas.dylib` on macOS), exporting the Fortran-style
+symbols (`dgemm_`, ...). Pass `-DBUILD_SHARED_LIBS=OFF` for a static library.
 
 Supported SIMD targets on x86: SSE2, SSE4, AVX2, AVX-512 and AVX-512 (Zen 4).
 Scalable-vector targets (SVE, RVV) are not supported yet. The best target that
@@ -117,6 +119,15 @@ because they fail with any BLAS (`HWYBLAS_EIGEN_TESTSUITE_EXCLUDE`): Eigen's
 BLAS wrappers allocate temporaries (`nomalloc`, `product_notemporary`), and
 pass negative strides, which BLAS interprets differently (`product_extra`).
 `threads_non_blocking_thread_pool` is also excluded: it occasionally hangs.
+
+### Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) builds hwyBLAS and runs `ctest` on
+Linux x86-64 (GCC, and Clang with AddressSanitizer), Linux ARM64 (GCC), macOS
+ARM64 (Apple Clang) and Windows (MSVC and clang-cl). The GCC and clang-cl jobs
+also run the AVX-512 targets in SDE. The jobs fetch Eigen 5.0.1 and OpenBLAS
+0.3.34 (the sources for the Netlib testers, and the library as the fuzz
+reference) and download Highway 1.4.0. Eigen's own test suite is not run.
 
 ## Installing
 
