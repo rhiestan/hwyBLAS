@@ -255,6 +255,13 @@ struct Fortran<c64> {
 // ---------------------------------------------------------------------------
 // Level 2
 
+// The row-major complex wrappers conjugate vectors around the Fortran call
+// only if the Fortran routine accepts the arguments: an invalid call must be
+// reported without touching the vectors, which may be shorter than the
+// dimensions say. These are the conditions of the Fortran routines.
+bool ValidUplo(char c) { return c == 'U' || c == 'L'; }
+bool ValidLd(CblasInt ld, CblasInt rows) { return ld >= 1 && ld >= rows; }
+
 // GEMV (band = false) and GBMV: y := alpha * op(A) * x + beta * y.
 // Positions: layout 1, trans 2, m 3, n 4, [kl 5, ku 6,] alpha, a, lda, x,
 // incx, beta, y, incy.
@@ -273,6 +280,8 @@ void Gemv(const char* name, bool band, CBLAS_LAYOUT layout,
     conj = conj && IsComplex<T>::value;
     std::swap(m, n);
     std::swap(kl, ku);
+    conj = conj && m >= 0 && n >= 0 && incx != 0 && incy != 0 &&
+           (band ? kl >= 0 && ku >= 0 && lda >= kl + ku + 1 : ValidLd(lda, m));
   }
   CblasScope scope(
       name,
@@ -320,7 +329,14 @@ void Triangular(const char* name, TriangularKind kind, CBLAS_LAYOUT layout,
     // Row-major A is column-major A^T, whose other triangle is stored.
     uc = FlipUplo(uc);
     tc = FlipTrans(tc, &conj);
-    conj = conj && IsComplex<T>::value;
+    conj = conj && IsComplex<T>::value && ValidUplo(uc) && dc != '?' &&
+           n >= 0 && incx != 0;
+    if (kind == TriangularKind::kTrmv || kind == TriangularKind::kTrsv) {
+      conj = conj && ValidLd(lda, n);
+    } else if (kind == TriangularKind::kTbmv ||
+               kind == TriangularKind::kTbsv) {
+      conj = conj && k >= 0 && lda >= k + 1;
+    }
   }
   CblasScope scope(name, {2, 3, 4, 5, 6, 7, 8, 9, 10});
   // With conj: conj(A') * x = conj(A' * conj(x)), and the same for solves.
@@ -365,8 +381,13 @@ void Symmetric(const char* name, SymmetricKind kind, CBLAS_LAYOUT layout,
   // Row-major A is column-major A^T: the other triangle of the same matrix
   // if symmetric, of conj(A) if Hermitian.
   const bool row = (layout == CblasRowMajor);
-  const bool conj = row && IsComplex<T>::value;
   if (row) uc = FlipUplo(uc);
+  const bool conj =
+      row && IsComplex<T>::value && ValidUplo(uc) && n >= 0 && incx != 0 &&
+      incy != 0 &&
+      (kind == SymmetricKind::kFull   ? ValidLd(lda, n)
+       : kind == SymmetricKind::kBand ? k >= 0 && lda >= k + 1
+                                      : true);
   CblasScope scope(name, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
   if (conj) {
     alpha = Conj(alpha);
@@ -416,7 +437,9 @@ void Ger(const char* name, bool conj, CBLAS_LAYOUT layout, CblasInt m,
   // Row-major A is column-major A^T += alpha * op(y) * x^T (n x m), an
   // unconjugated update with the vectors swapped and y conjugated for GERC.
   CblasScope scope(name, {3, 2, 4, 7, 8, 5, 6, 9, 10});
-  WithConjugatedInput<T>(conj && IsComplex<T>::value, n, y, incy,
+  conj = conj && IsComplex<T>::value && n >= 0 && m >= 0 && incy != 0 &&
+         incx != 0 && ValidLd(lda, n);
+  WithConjugatedInput<T>(conj, n, y, incy,
                          [&](const void* yv, CblasInt iy) {
                            Fortran<T>::ger(&n, &m, F<T>(alpha), F<T>(yv), &iy,
                                            F<T>(x), &incx, F<T>(a), &lda);
@@ -435,9 +458,11 @@ void Syr(const char* name, bool packed, CBLAS_LAYOUT layout, CBLAS_UPLO uplo,
   // and conj(A) += alpha * conj(x) * conj(x)^H.
   const bool row = (layout == CblasRowMajor);
   if (row) uc = FlipUplo(uc);
+  const bool conj = row && IsComplex<T>::value && ValidUplo(uc) && n >= 0 &&
+                    incx != 0 && (packed || ValidLd(lda, n));
   CblasScope scope(name, {2, 3, 4, 5, 6, 7, 8});
   WithConjugatedInput<T>(
-      row && IsComplex<T>::value, n, x, incx, [&](const void* xv, CblasInt ix) {
+      conj, n, x, incx, [&](const void* xv, CblasInt ix) {
         if (packed) {
           Fortran<T>::spr(&uc, &n, &alpha, F<T>(xv), &ix, F<T>(a));
         } else {
@@ -458,8 +483,9 @@ void Syr2(const char* name, bool packed, CBLAS_LAYOUT layout, CBLAS_UPLO uplo,
   // Row-major Hermitian: conj(A) += conj(alpha) conj(x) conj(y)^H +
   // alpha conj(y) conj(x)^H, i.e. the same update with all conjugated.
   const bool row = (layout == CblasRowMajor);
-  const bool conj = row && IsComplex<T>::value;
   if (row) uc = FlipUplo(uc);
+  const bool conj = row && IsComplex<T>::value && ValidUplo(uc) && n >= 0 &&
+                    incx != 0 && incy != 0 && (packed || ValidLd(lda, n));
   if (conj) alpha = Conj(alpha);
   CblasScope scope(name, {2, 3, 4, 5, 6, 7, 8, 9, 10});
   WithConjugatedInput<T>(conj, n, x, incx, [&](const void* xv, CblasInt ix) {

@@ -1163,5 +1163,46 @@ TEST(CblasErrors, Handler) {
             std::string::npos);
 }
 
+// Row-major complex calls that conjugate the output vector around the
+// Fortran call must report invalid arguments before touching it: the vector
+// may be shorter than the dimensions say. The handler checks the vector at
+// the time of the report.
+using z64 = std::complex<double>;
+z64 g_vector[2];
+std::vector<std::string> g_reports;
+void CheckVectorUntouched(const char* name, hwyblas_int position) {
+  const bool untouched = g_vector[0] == z64(1, 2) && g_vector[1] == z64(3, 4);
+  g_reports.push_back(std::string(name) + ":" + std::to_string(position) +
+                      (untouched ? "" : " touched"));
+}
+
+TEST(CblasErrors, InvalidCallsLeaveVectorsUntouched) {
+  static const z64 a[4], x[2], one = 1;
+  g_vector[0] = z64(1, 2);
+  g_vector[1] = z64(3, 4);
+  g_reports.clear();
+  hwyblas_set_error_handler(CheckVectorUntouched);
+  // lda < n (k < 0 for the band matrices).
+  cblas_zgemv(CblasRowMajor, CblasConjTrans, 2, 2, &one, a, 1, x, 1, &one,
+              g_vector, 1);
+  cblas_zgbmv(CblasRowMajor, CblasConjTrans, 2, 2, -1, 0, &one, a, 1, x, 1,
+              &one, g_vector, 1);
+  cblas_ztrmv(CblasRowMajor, CblasUpper, CblasConjTrans, CblasNonUnit, 2, a, 1,
+              g_vector, 1);
+  cblas_ztbsv(CblasRowMajor, CblasUpper, CblasConjTrans, CblasNonUnit, 2, -1,
+              a, 1, g_vector, 1);
+  cblas_zhemv(CblasRowMajor, CblasUpper, 2, &one, a, 1, x, 1, &one, g_vector,
+              1);
+  cblas_zhbmv(CblasRowMajor, CblasUpper, 2, -1, &one, a, 1, x, 1, &one,
+              g_vector, 1);
+  // incx == 0.
+  cblas_zhpmv(CblasRowMajor, CblasUpper, 2, &one, a, x, 0, &one, g_vector, 1);
+  hwyblas_set_error_handler(nullptr);
+  EXPECT_EQ(g_reports, (std::vector<std::string>{
+                           "cblas_zgemv:7", "cblas_zgbmv:5", "cblas_ztrmv:7",
+                           "cblas_ztbsv:6", "cblas_zhemv:6", "cblas_zhbmv:4",
+                           "cblas_zhpmv:7"}));
+}
+
 }  // namespace
 }  // namespace hwyblas_test
