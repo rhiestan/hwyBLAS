@@ -70,7 +70,8 @@ inline char ToUpper(char c) { return (c >= 'a' && c <= 'z') ? c - 32 : c; }
 // op(X) for GEMM-style arguments.
 enum class Op { kNoTrans, kTrans, kConjTrans };
 
-// Returns false if `c` is not one of N, T, C (case-insensitive).
+// Returns false if `c` is not one of N, T, C (case-insensitive), and then
+// still sets `op` (to kNoTrans), like the decoders in api.h.
 inline bool DecodeOp(char c, Op* op) {
   switch (ToUpper(c)) {
     case 'N':
@@ -85,6 +86,7 @@ inline bool DecodeOp(char c, Op* op) {
     default:
       return false;
   }
+      *op = Op::kNoTrans;
 }
 
 // Reports an invalid argument via xerbla_ (`info` is the 1-based position),

@@ -65,7 +65,9 @@ inline c64* C64(double* p) { return reinterpret_cast<c64*>(p); }
   }())
 
 // ---------------------------------------------------------------------------
-// Decoding of CHARACTER*1 arguments. Each returns false for invalid values.
+// Decoding of CHARACTER*1 arguments. Each returns false for invalid values,
+// and then still sets the result (to false), so that callers may compute
+// dimensions from it before they check the arguments.
 
 inline bool DecodeUplo(char c, bool* lower) {
   switch (ToUpper(c)) {
@@ -76,6 +78,7 @@ inline bool DecodeUplo(char c, bool* lower) {
       *lower = false;
       return true;
     default:
+      *lower = false;
       return false;
   }
 }
@@ -89,6 +92,7 @@ inline bool DecodeSide(char c, bool* left) {
       *left = false;
       return true;
     default:
+      *left = false;
       return false;
   }
 }
@@ -102,6 +106,7 @@ inline bool DecodeDiag(char c, bool* unit) {
       *unit = false;
       return true;
     default:
+      *unit = false;
       return false;
   }
 }

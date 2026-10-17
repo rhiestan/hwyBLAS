@@ -402,7 +402,9 @@ struct StridedVector {
     std::vector<bool> is_element(data.size(), false);
     for (size_t i = 0; i < n; ++i) is_element[&(*this)[i] - data.data()] = true;
     for (size_t i = 0; i < data.size(); ++i) {
-      if (!is_element[i]) EXPECT_EQ(data[i], Sentinel()) << "gap " << i;
+      if (!is_element[i]) {
+        EXPECT_EQ(data[i], Sentinel()) << "gap " << i;
+      }
     }
     std::vector<T> e(n);
     for (size_t i = 0; i < n; ++i) e[i] = (*this)[i];

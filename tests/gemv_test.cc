@@ -117,7 +117,9 @@ void CheckGemv(const GemvCase& tc, T alpha, T beta, uint64_t seed) {
     is_element[VectorIndex(i, len_y, tc.incy)] = true;
   }
   for (size_t i = 0; i < size_y; ++i) {
-    if (!is_element[i]) ASSERT_EQ(y[i], y_orig[i]) << "gap modified at " << i;
+    if (!is_element[i]) {
+      ASSERT_EQ(y[i], y_orig[i]) << "gap modified at " << i;
+    }
   }
 }
 
