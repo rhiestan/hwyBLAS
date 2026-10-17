@@ -41,6 +41,10 @@ template void RunGemm(const GemmProblem<double>&);
 template void RunGemm(const GemmProblem<std::complex<float>>&);
 template void RunGemm(const GemmProblem<std::complex<double>>&);
 
+// HWY_DYNAMIC_DISPATCH needs an unqualified name: with a single target, it
+// prepends the target's namespace.
+const char* SelectedTargetName() { return HWY_DYNAMIC_DISPATCH(TargetName)(); }
+
 template <typename T>
 void ScaleMatrix(size_t m, size_t n, T beta, T* c, size_t ldc, Part part,
                  bool real_diagonal) {
@@ -172,7 +176,7 @@ HWYBLAS_API void zgemm_(const char* transa, const char* transb,
 }
 
 HWYBLAS_API const char* hwyblas_target_name(void) {
-  return HWY_DYNAMIC_DISPATCH(hwyblas::TargetName)();
+  return hwyblas::SelectedTargetName();
 }
 
 }  // extern "C"
