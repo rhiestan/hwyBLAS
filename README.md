@@ -94,6 +94,21 @@ cmake build -DHWYBLAS_SDE=/path/to/sde/sde.exe
 ctest --test-dir build -j16 -L "target_AVX3"   # AVX3 and AVX3_ZEN4
 ```
 
+The differential fuzzer `blas_fuzz` calls hwyBLAS and a reference BLAS
+(OpenBLAS by default, `-DHWYBLAS_FUZZ_REFERENCE=...`) with the same random
+arguments and compares the results: random sizes, transposes, triangles,
+alpha/beta (including 0 and 1), padded leading dimensions and negative
+increments. It also checks that hwyBLAS does not read elements it must not
+reference (they are NaN, e.g. the other triangle or C when beta = 0), does
+not modify its inputs, and does not access memory outside of its operands
+(each one is placed next to an inaccessible page). ctest runs a few thousand
+cases per target; for longer runs:
+
+```sh
+build/bin/blas_fuzz --time=600 --seed=7 OpenBLAS=path/to/libopenblas.dll
+build/bin/blas_fuzz --repro=dgemm:0x1234...  OpenBLAS=...   # rerun one failure
+```
+
 ## Installing
 
 ```sh

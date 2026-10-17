@@ -167,3 +167,42 @@ else()
   message(STATUS "Netlib CBLAS testers not found at "
                  "${HWYBLAS_NETLIB_CBLAS_TESTS_DIR}: skipping them")
 endif()
+
+# Differential fuzzer: compares hwyBLAS with a reference BLAS (OpenBLAS by
+# default) on random arguments. Run it by hand for longer soak tests, e.g.
+#   blas_fuzz --time=600 --seed=7 OpenBLAS=path/to/libopenblas.dll
+add_executable(blas_fuzz fuzz/blas_fuzz.cc)
+target_include_directories(blas_fuzz PRIVATE "${PROJECT_SOURCE_DIR}/bench")
+target_link_libraries(blas_fuzz PRIVATE hwyblas_options ${CMAKE_DL_LIBS})
+# It loads hwyblas at runtime (as the benchmark does), from its own directory.
+add_dependencies(blas_fuzz hwyblas)
+
+if(WIN32)
+  set(_openblas "${PROJECT_SOURCE_DIR}/../OpenBLAS-0.3.34-x64/bin/libopenblas.dll")
+else()
+  set(_openblas "")
+endif()
+set(HWYBLAS_FUZZ_REFERENCE "${_openblas}" CACHE FILEPATH
+    "Reference BLAS library for the fuzz tests (e.g. OpenBLAS)")
+set(HWYBLAS_FUZZ_ITERATIONS 3000 CACHE STRING
+    "Cases per fuzz test run")
+set(HWYBLAS_SDE_FUZZ_ITERATIONS 1000 CACHE STRING
+    "Cases per fuzz test run in SDE")
+if(EXISTS "${HWYBLAS_FUZZ_REFERENCE}")
+  set(_reference "Reference=${HWYBLAS_FUZZ_REFERENCE}")
+  add_test(NAME Fuzz COMMAND blas_fuzz --iterations=${HWYBLAS_FUZZ_ITERATIONS}
+                                       ${_reference})
+  foreach(target IN LISTS HWYBLAS_TEST_TARGETS)
+    hwyblas_target_launcher(${target} _launcher)
+    set(_iterations ${HWYBLAS_FUZZ_ITERATIONS})
+    if(_launcher)
+      set(_iterations ${HWYBLAS_SDE_FUZZ_ITERATIONS})
+    endif()
+    hwyblas_add_target_test(${target} Fuzz
+      COMMAND ${_launcher} $<TARGET_FILE:blas_fuzz> --iterations=${_iterations}
+              ${_reference})
+  endforeach()
+else()
+  message(STATUS "No reference BLAS for the fuzz tests "
+                 "(HWYBLAS_FUZZ_REFERENCE): skipping them")
+endif()
