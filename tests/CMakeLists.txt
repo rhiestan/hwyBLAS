@@ -94,6 +94,7 @@ add_executable(hwyblas_tests
   level2_test.cc
   level3_test.cc
   utest_cases_test.cc
+  semantics_test.cc
   test_main.cc
 )
 target_link_libraries(hwyblas_tests PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
