@@ -109,6 +109,14 @@ build/bin/blas_fuzz --time=600 --seed=7 OpenBLAS=path/to/libopenblas.dll
 build/bin/blas_fuzz --repro=dgemm:0x1234...  OpenBLAS=...   # rerun one failure
 ```
 
+`-DHWYBLAS_EIGEN_TESTSUITE=ON` also builds Eigen's own test suite (from the
+Eigen checkout, about 900 programs; this takes a while) with
+`EIGEN_USE_BLAS` against hwyBLAS, and runs its official tests as the test
+`EigenTestSuite`, also once per target. A few Eigen tests are excluded
+because they fail with any BLAS (`HWYBLAS_EIGEN_TESTSUITE_EXCLUDE`): Eigen's
+BLAS wrappers allocate temporaries (`nomalloc`, `product_notemporary`), and
+pass negative strides, which BLAS interprets differently (`product_extra`).
+
 ## Installing
 
 ```sh

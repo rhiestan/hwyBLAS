@@ -116,6 +116,67 @@ if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
   target_link_libraries(hwyblas_eigen_test PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
   gtest_discover_tests(hwyblas_eigen_test DISCOVERY_MODE PRE_TEST)
   hwyblas_add_gtest_target_tests(hwyblas_eigen_test 1)
+
+  # Eigen's own test suite, compiled with EIGEN_USE_BLAS against hwyBLAS
+  # (about 900 programs: building them takes a while). It runs as the test
+  # EigenTestSuite, and once per target that the CPU supports
+  # (<target>.EigenTestSuite; not in SDE).
+  option(HWYBLAS_EIGEN_TESTSUITE
+         "Build and run Eigen's test suite against hwyBLAS" OFF)
+  # Tests that fail with any BLAS because of Eigen's EIGEN_USE_BLAS code:
+  # nomalloc and product_notemporary (its BLAS wrappers allocate
+  # temporaries), product_extra (passes negative strides, which BLAS
+  # defines differently, so every BLAS reads out of bounds).
+  set(HWYBLAS_EIGEN_TESTSUITE_EXCLUDE "^(nomalloc|product_notemporary|product_extra)_"
+      CACHE STRING "Eigen tests to exclude (regular expression)")
+  set(HWYBLAS_EIGEN_TESTSUITE_SEED 3 CACHE STRING
+      "Random seed of Eigen's tests (EIGEN_SEED)")
+  cmake_host_system_information(RESULT _cores QUERY NUMBER_OF_LOGICAL_CORES)
+  set(HWYBLAS_EIGEN_TESTSUITE_JOBS ${_cores} CACHE STRING
+      "Parallel jobs for Eigen's test suite")
+  if(HWYBLAS_EIGEN_TESTSUITE AND NOT BUILD_SHARED_LIBS)
+    message(WARNING "HWYBLAS_EIGEN_TESTSUITE needs a shared hwyblas")
+  elseif(HWYBLAS_EIGEN_TESTSUITE)
+    include(ExternalProject)
+    set(_eigen_build "${CMAKE_CURRENT_BINARY_DIR}/eigen_testsuite")
+    set(_eigen_args
+      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+      -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      -DCMAKE_BUILD_TYPE=Release
+      -DEIGEN_TEST_EXTERNAL_BLAS=ON
+      "-DBLAS_LIBRARIES=$<TARGET_LINKER_FILE:hwyblas>"
+      -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF
+      -DEIGEN_BUILD_DEMOS=OFF -DEIGEN_BUILD_DOC=OFF)
+    if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+      list(APPEND _eigen_args "-DEIGEN_TEST_CUSTOM_CXX_FLAGS=/FI${CMAKE_CURRENT_SOURCE_DIR}/eigen/clang_cl_compat.h")
+    endif()
+    ExternalProject_Add(eigen_testsuite
+      SOURCE_DIR "${HWYBLAS_EIGEN_DIR}"
+      BINARY_DIR "${_eigen_build}"
+      CMAKE_ARGS ${_eigen_args}
+      BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target buildtests
+      INSTALL_COMMAND ""
+      DEPENDS hwyblas)
+    set(_run ${CMAKE_COMMAND} -DEIGEN_BUILD=${_eigen_build}
+        -DHWYBLAS_DIR=$<TARGET_FILE_DIR:hwyblas> -DCTEST=${CMAKE_CTEST_COMMAND}
+        -DJOBS=${HWYBLAS_EIGEN_TESTSUITE_JOBS}
+        -DSEED=${HWYBLAS_EIGEN_TESTSUITE_SEED}
+        "-DEXCLUDE=${HWYBLAS_EIGEN_TESTSUITE_EXCLUDE}")
+    set(_script "${CMAKE_CURRENT_SOURCE_DIR}/eigen/run_testsuite.cmake")
+    add_test(NAME EigenTestSuite COMMAND ${_run} -P "${_script}")
+    # It runs many tests in parallel itself.
+    set_tests_properties(EigenTestSuite PROPERTIES RUN_SERIAL ON)
+    foreach(target IN LISTS HWYBLAS_TEST_TARGETS)
+      hwyblas_target_launcher(${target} _launcher)
+      if(_launcher)
+        continue()  # too slow in SDE
+      endif()
+      hwyblas_add_target_test(${target} EigenTestSuite
+        COMMAND ${_run} -DCHECK=$<TARGET_FILE:hwyblas_eigen_test>
+                -P "${_script}")
+      set_tests_properties(${target}.EigenTestSuite PROPERTIES RUN_SERIAL ON)
+    endforeach()
+  endif()
 else()
   message(STATUS "Eigen not found at ${HWYBLAS_EIGEN_DIR}: skipping Eigen test")
 endif()
