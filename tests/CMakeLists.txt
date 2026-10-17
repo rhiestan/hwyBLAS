@@ -239,8 +239,10 @@ endif()
 add_executable(blas_fuzz fuzz/blas_fuzz.cc)
 target_include_directories(blas_fuzz PRIVATE "${PROJECT_SOURCE_DIR}/bench")
 target_link_libraries(blas_fuzz PRIVATE hwyblas_options ${CMAKE_DL_LIBS})
-# It loads hwyblas at runtime (as the benchmark does), from its own directory.
+# It loads hwyblas at runtime (as the benchmark does), from this path.
 add_dependencies(blas_fuzz hwyblas)
+target_compile_definitions(blas_fuzz PRIVATE
+  "HWYBLAS_LIBRARY=\"$<TARGET_FILE:hwyblas>\"")
 
 if(WIN32)
   set(_openblas "${PROJECT_SOURCE_DIR}/../OpenBLAS-0.3.34-x64/bin/libopenblas.dll")

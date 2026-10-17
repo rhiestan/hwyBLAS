@@ -1296,12 +1296,6 @@ void AddRoutines(std::vector<AnyRoutine>& all) {
   }
 }
 
-std::string ExeDirectory(const char* argv0) {
-  std::string path(argv0);
-  const size_t slash = path.find_last_of("/\\");
-  return slash == std::string::npos ? "." : path.substr(0, slash);
-}
-
 int Main(int argc, char** argv) {
   Options opt;
   std::string ref_name, ref_path;
@@ -1344,12 +1338,7 @@ int Main(int argc, char** argv) {
             argv[0]);
     return 1;
   }
-#if defined(_WIN32)
-  const std::string hwy_path = ExeDirectory(argv[0]) + "/hwyblas.dll";
-#else
-  const std::string hwy_path = ExeDirectory(argv[0]) + "/libhwyblas.so";
-#endif
-  Lib hwy("hwyBLAS", hwy_path);
+  Lib hwy("hwyBLAS", HWYBLAS_LIBRARY);
   Lib ref(ref_name, ref_path);
   if (!hwy.ok() || !ref.ok()) return 1;
   if (auto target = hwy.Get<const char* (*)()>("hwyblas_target_name")) {

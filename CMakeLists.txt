@@ -71,9 +71,11 @@ if(MSVC)
   # /fp:precise keeps FMA contraction under our control (Highway emits FMA
   # explicitly); /Zc:__cplusplus for correct feature detection.
   target_compile_options(hwyblas_options INTERFACE /W3 /Zc:__cplusplus /fp:precise)
-  target_compile_definitions(hwyblas_options INTERFACE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 else()
   target_compile_options(hwyblas_options INTERFACE -Wall -Wextra -ffp-contract=off)
+endif()
+if(WIN32)
+  target_compile_definitions(hwyblas_options INTERFACE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 
 add_subdirectory(src)

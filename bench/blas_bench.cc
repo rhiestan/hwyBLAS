@@ -884,12 +884,6 @@ std::vector<int> ParseInts(const char* s, char sep) {
   return v;
 }
 
-std::string ExeDirectory(const char* argv0) {
-  std::string path = argv0;
-  const size_t pos = path.find_last_of("/\\");
-  return pos == std::string::npos ? "." : path.substr(0, pos);
-}
-
 int Main(int argc, char** argv) {
   if (argc < 2 || argv[1][0] == '-') {
     fprintf(stderr,
@@ -901,11 +895,7 @@ int Main(int argc, char** argv) {
   Options opt;
   opt.routine = argv[1];
   std::vector<std::pair<std::string, std::string>> lib_specs;
-#if defined(_WIN32)
-  lib_specs.emplace_back("hwyBLAS", ExeDirectory(argv[0]) + "/hwyblas.dll");
-#else
-  lib_specs.emplace_back("hwyBLAS", ExeDirectory(argv[0]) + "/libhwyblas.so");
-#endif
+  lib_specs.emplace_back("hwyBLAS", HWYBLAS_LIBRARY);
 
   for (int i = 2; i < argc; ++i) {
     const char* arg = argv[i];
