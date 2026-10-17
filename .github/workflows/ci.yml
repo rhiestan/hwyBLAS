@@ -85,12 +85,30 @@ jobs:
           git clone --quiet --depth 1 --branch "$EIGEN_VERSION"
           https://gitlab.com/libeigen/eigen.git eigen
 
-      - name: Set up Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v6
+      # On Windows, the MSVC environment provides Visual Studio's Ninja.
+      - name: Install Ninja
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q ninja-build
+          else
+            brew install ninja
+          fi
 
+      # The environment of vcvars64.bat, for all later steps.
       - name: Set up the MSVC environment
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+        shell: pwsh
+        run: |
+          # vcvars64.bat looks for vswhere.exe on the PATH.
+          $env:Path += ";${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath `
+                -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" |
+            Select-String '^[^=]+=' | ForEach-Object { $_.Line } |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up Intel SDE
         if: matrix.sde
