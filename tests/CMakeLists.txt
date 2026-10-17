@@ -126,8 +126,11 @@ if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
   # Tests that fail with any BLAS because of Eigen's EIGEN_USE_BLAS code:
   # nomalloc and product_notemporary (its BLAS wrappers allocate
   # temporaries), product_extra (passes negative strides, which BLAS
-  # defines differently, so every BLAS reads out of bounds).
-  set(HWYBLAS_EIGEN_TESTSUITE_EXCLUDE "^(nomalloc|product_notemporary|product_extra)_"
+  # defines differently, so every BLAS reads out of bounds). Also
+  # threads_non_blocking_thread_pool, which does not use BLAS and hangs
+  # in about one of 20 runs.
+  set(HWYBLAS_EIGEN_TESTSUITE_EXCLUDE
+      "^((nomalloc|product_notemporary|product_extra)_|threads_non_blocking_thread_pool$)"
       CACHE STRING "Eigen tests to exclude (regular expression)")
   set(HWYBLAS_EIGEN_TESTSUITE_SEED 3 CACHE STRING
       "Random seed of Eigen's tests (EIGEN_SEED)")

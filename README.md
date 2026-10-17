@@ -116,6 +116,7 @@ Eigen checkout, about 900 programs; this takes a while) with
 because they fail with any BLAS (`HWYBLAS_EIGEN_TESTSUITE_EXCLUDE`): Eigen's
 BLAS wrappers allocate temporaries (`nomalloc`, `product_notemporary`), and
 pass negative strides, which BLAS interprets differently (`product_extra`).
+`threads_non_blocking_thread_pool` is also excluded: it occasionally hangs.
 
 ## Installing
 
