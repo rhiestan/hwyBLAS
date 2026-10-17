@@ -1,6 +1,8 @@
-// Target-independent support code: error reporting and scratch memory.
+// Target-independent support code: error reporting, scratch memory and
+// target selection.
 #include "common.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,12 +83,69 @@ hwyblas_set_error_handler(hwyblas_error_handler handler) {
   return hwyblas::g_error_handler.exchange(handler, std::memory_order_acq_rel);
 }
 
+namespace {
+
+// Targets that are compiled into the library and that this CPU can run.
+int64_t CompiledAndSupportedTargets() {
+  static const int64_t targets = [] {
+    int64_t supported = hwy::SupportedTargets();
+    // Highway only selects AVX3_ZEN4 on AMD CPUs, but its code also runs on
+    // Intel CPUs with the AVX-512 extensions of Sapphire Rapids (or under
+    // Intel SDE), which is useful for testing.
+    if (supported & HWY_AVX3_SPR) supported |= HWY_AVX3_ZEN4;
+    // This translation unit is compiled with the same HWY_DISABLED_TARGETS
+    // as the kernels, so HWY_TARGETS matches the set of compiled targets.
+    return supported & HWY_TARGETS;
+  }();
+  return targets;
+}
+
+bool EqualsIgnoreCase(const char* a, const char* b) {
+  for (; *a != '\0' && *b != '\0'; ++a, ++b) {
+    if (tolower(static_cast<unsigned char>(*a)) !=
+        tolower(static_cast<unsigned char>(*b))) {
+      return false;
+    }
+  }
+  return *a == *b;
+}
+
+// The target named by the environment variable HWYBLAS_TARGET (e.g. "SSE4"
+// or "AVX3_ZEN4"), or 0 if it is not set or that target is not available.
+int64_t TargetFromEnvironment() {
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)  // getenv is safe here
+#endif
+  const char* name = getenv("HWYBLAS_TARGET");
+  if (name == nullptr || *name == '\0') return 0;
+  const int64_t available = CompiledAndSupportedTargets();
+  for (int64_t bits = available; bits != 0; bits &= bits - 1) {
+    const int64_t target = bits & -bits;
+    if (EqualsIgnoreCase(hwy::TargetName(target), name)) return target;
+  }
+  fprintf(stderr,
+          "hwyBLAS: HWYBLAS_TARGET=%s is not available on this CPU, using "
+          "automatic target selection\n",
+          name);
+  return 0;
+}
+
+// The targets that automatic selection chooses from: the one named by
+// HWYBLAS_TARGET, or 0 for all available targets. Set when the library is
+// loaded, before any dispatch.
+const int64_t g_default_targets = [] {
+  const int64_t target = TargetFromEnvironment();
+  if (target != 0) hwy::SetSupportedTargetsForTest(target);
+  return target;
+}();
+
+}  // namespace
+
 extern "C" HWYBLAS_API int64_t hwyblas_available_targets(void) {
-  // This translation unit is compiled with the same HWY_DISABLED_TARGETS as
-  // the kernels, so HWY_TARGETS matches the set of compiled targets.
-  return hwy::SupportedTargets() & HWY_TARGETS;
+  return g_default_targets != 0 ? g_default_targets
+                                : CompiledAndSupportedTargets();
 }
 
 extern "C" HWYBLAS_API void hwyblas_force_target(int64_t target) {
-  hwy::SetSupportedTargetsForTest(target);
+  hwy::SetSupportedTargetsForTest(target != 0 ? target : g_default_targets);
 }

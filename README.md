@@ -72,7 +72,27 @@ Fortran-style symbols (`dgemm_`, ...). Pass `-DBUILD_SHARED_LIBS=OFF` for a
 static library.
 
 Supported SIMD targets on x86: SSE2, SSE4, AVX2, AVX-512 and AVX-512 (Zen 4).
-Scalable-vector targets (SVE, RVV) are not supported yet.
+Scalable-vector targets (SVE, RVV) are not supported yet. The best target that
+the CPU supports is selected at runtime; the environment variable
+`HWYBLAS_TARGET` (`SSE2`, `SSE4`, `AVX2`, `AVX3` or `AVX3_ZEN4`) selects a
+specific one instead.
+
+### Testing
+
+`ctest` runs the unit tests, the Eigen test and the Netlib CBLAS testers
+(from `../OpenBLAS/ctest`, if present; `-DHWYBLAS_NETLIB_CBLAS_TESTS_DIR=...`).
+Most unit tests loop over all targets that the CPU supports. In addition,
+every test program runs once per target with `HWYBLAS_TARGET` set; these
+tests are named after the target (`SSE4.hwyblas_tests.0`, ...) and labeled,
+e.g. `ctest -L target_SSE4`. Targets that the CPU cannot run are skipped.
+
+To test the AVX-512 targets on a CPU without AVX-512, use the
+[Intel Software Development Emulator](https://www.intel.com/content/www/us/en/developer/articles/tool/software-development-emulator.html):
+
+```sh
+cmake build -DHWYBLAS_SDE=/path/to/sde/sde.exe
+ctest --test-dir build -j16 -L "target_AVX3"   # AVX3 and AVX3_ZEN4
+```
 
 ## Installing
 

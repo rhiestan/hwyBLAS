@@ -908,12 +908,16 @@ hwyblas_set_error_handler(hwyblas_error_handler handler);
 HWYBLAS_API const char* hwyblas_target_name(void);
 
 /* Bitmask of Highway targets (HWY_AVX2 etc.) that are compiled into the
- * library and supported by this CPU. */
+ * library and supported by this CPU. If the environment variable
+ * HWYBLAS_TARGET names one of them when the library is loaded (e.g.
+ * HWYBLAS_TARGET=SSE4; see hwyblas_target_name() for the names), only that
+ * one: it is then used instead of the best target. */
 HWYBLAS_API int64_t hwyblas_available_targets(void);
 
 /* Restricts runtime dispatch to `target` (one bit of
  * hwyblas_available_targets()), e.g. to test or benchmark a specific code
- * path. 0 restores automatic selection. Not thread-safe. */
+ * path. 0 restores automatic selection (or the target named by
+ * HWYBLAS_TARGET). Not thread-safe. */
 HWYBLAS_API void hwyblas_force_target(int64_t target);
 
 #ifdef __cplusplus

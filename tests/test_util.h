@@ -411,7 +411,8 @@ struct StridedVector {
 };
 
 // Runs `test` once for every SIMD target that the CPU supports and that the
-// library might dispatch to, so all compiled code paths get exercised.
+// library might dispatch to, so all compiled code paths get exercised. (Only
+// for the target named by HWYBLAS_TARGET, if that is set.)
 template <class Func>
 void ForEachTarget(const Func& test) {
   const int64_t targets = hwyblas_available_targets();
@@ -421,7 +422,7 @@ void ForEachTarget(const Func& test) {
     SCOPED_TRACE(hwyblas_target_name());
     test();
   }
-  hwyblas_force_target(0);  // restore automatic selection
+  hwyblas_force_target(0);  // restore the default selection
 }
 
 }  // namespace hwyblas_test
