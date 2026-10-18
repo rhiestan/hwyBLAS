@@ -106,6 +106,19 @@ constexpr char ConjTrans() {
 // LSAME(ca, cb): whether ca and cb are the same letter, ignoring case.
 inline bool Lsame(char ca, char cb) { return ToUpper(ca) == ToUpper(cb); }
 
+// CABS1(z) = |Re(z)| + |Im(z)|, the statement function of the complex
+// routines (|z| for real z).
+template <typename T>
+RealT<T> Cabs1(T z) {
+  return std::abs(std::real(z)) + std::abs(std::imag(z));
+}
+
+// NINT(x): x rounded to the nearest integer, halfway cases away from zero.
+template <typename R>
+blasint Nint(R x) {
+  return static_cast<blasint>(std::lround(x));
+}
+
 // A routine name such as "DGETRF": the precision letter of T and `rest`.
 class RoutineName {
  public:

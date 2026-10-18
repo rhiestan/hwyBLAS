@@ -1,6 +1,6 @@
 // LAPACK's auxiliary routines for vectors and matrices: xLACGV, xLACPY,
-// xLACP2, xLACRM, xLARCM, xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC
-// and ILAxLR.
+// xLACP2, xLACRM, xLARCM, CROT / ZROT, ICMAX1 / IZMAX1, SCSUM1 / DZSUM1,
+// xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC and ILAxLR.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -153,6 +153,98 @@ void Larcm(blasint m, blasint n, const RealT<T>* a, blasint lda, const T* b,
       C(i, j) = T(std::real(C(i, j)), RWORK(l + (j - 1) * m + i - 1));
     }
   }
+}
+
+// CROT / ZROT: applies the plane rotation with real cosine C and complex
+// sine S to the complex vectors CX and CY:
+//   [  C         S ] [ CX ]
+//   [ -conjg(S)  C ] [ CY ]
+// (the BLAS's CSROT / ZDROT, with real S, is Rot in blas.h).
+template <typename T>
+std::enable_if_t<IsComplex<T>::value> Rot(blasint n, T* cx, blasint incx, T* cy,
+                                          blasint incy, RealT<T> c, T s) {
+  const Vector<T> CX(cx);
+  const Vector<T> CY(cy);
+  if (n <= 0) return;
+  if (incx == 1 && incy == 1) {
+    // Code for both increments equal to 1.
+    for (blasint i = 1; i <= n; ++i) {
+      const T stemp = c * CX(i) + s * CY(i);
+      CY(i) = c * CY(i) - std::conj(s) * CX(i);
+      CX(i) = stemp;
+    }
+    return;
+  }
+  // Code for unequal increments or equal increments not equal to 1.
+  blasint ix = 1;
+  blasint iy = 1;
+  if (incx < 0) ix = (-n + 1) * incx + 1;
+  if (incy < 0) iy = (-n + 1) * incy + 1;
+  for (blasint i = 1; i <= n; ++i) {
+    const T stemp = c * CX(ix) + s * CY(iy);
+    CY(iy) = c * CY(iy) - std::conj(s) * CX(ix);
+    CX(ix) = stemp;
+    ix = ix + incx;
+    iy = iy + incy;
+  }
+}
+
+// ICMAX1 / IZMAX1: the index of the first element of the complex vector
+// ZX of largest absolute value |ZX(i)| (unlike ICAMAX / IZAMAX, which use
+// |Re| + |Im|), or 0 if N < 1 or INCX <= 0.
+template <typename T>
+blasint Imax1(blasint n, const T* zx, blasint incx) {
+  using R = RealT<T>;
+  const Vector<const T> ZX(zx);
+  blasint imax1 = 0;
+  if (n < 1 || incx <= 0) return imax1;
+  imax1 = 1;
+  if (n == 1) return imax1;
+  if (incx == 1) {
+    // Code for increment equal to 1.
+    R dmax = std::abs(ZX(1));
+    for (blasint i = 2; i <= n; ++i) {
+      if (std::abs(ZX(i)) > dmax) {
+        imax1 = i;
+        dmax = std::abs(ZX(i));
+      }
+    }
+  } else {
+    // Code for increment not equal to 1.
+    blasint ix = 1;
+    R dmax = std::abs(ZX(1));
+    ix = ix + incx;
+    for (blasint i = 2; i <= n; ++i) {
+      if (std::abs(ZX(ix)) > dmax) {
+        imax1 = i;
+        dmax = std::abs(ZX(ix));
+      }
+      ix = ix + incx;
+    }
+  }
+  return imax1;
+}
+
+// SCSUM1 / DZSUM1: the sum of the absolute values |CX(i)| of the complex
+// vector CX (unlike SCASUM / DZASUM, which use |Re| + |Im|).
+template <typename T>
+RealT<T> Sum1(blasint n, const T* cx, blasint incx) {
+  using R = RealT<T>;
+  const Vector<const T> CX(cx);
+  R stemp = R(0);
+  if (n <= 0) return stemp;
+  if (incx == 1) {
+    // Code for increment equal to 1.
+    for (blasint i = 1; i <= n; ++i) stemp = stemp + std::abs(CX(i));
+    return stemp;
+  }
+  // Code for increment not equal to 1 (DO I = 1, NINCX, INCX, which counts
+  // down for INCX < 0; LAPACK calls it with INCX = 1).
+  const blasint nincx = n * incx;
+  for (blasint i = 1; incx > 0 ? i <= nincx : i >= nincx; i += incx) {
+    stemp = stemp + std::abs(CX(i));
+  }
+  return stemp;
 }
 
 // xLAPY2: sqrt(x**2 + y**2), taking care not to cause unnecessary overflow
@@ -548,7 +640,10 @@ template c64 Ladiv<c64>(c64, c64);
   template void Lacrm<T>(blasint, blasint, const T*, blasint, const RealT<T>*, \
                          blasint, T*, blasint, RealT<T>*);                     \
   template void Larcm<T>(blasint, blasint, const RealT<T>*, blasint, const T*, \
-                         blasint, T*, blasint, RealT<T>*);
+                         blasint, T*, blasint, RealT<T>*);                     \
+  template void Rot<T>(blasint, T*, blasint, T*, blasint, RealT<T>, T);        \
+  template blasint Imax1<T>(blasint, const T*, blasint);                       \
+  template RealT<T> Sum1<T>(blasint, const T*, blasint);
 HWYBLAS_LAPACK_INSTANTIATE(c32)
 HWYBLAS_LAPACK_INSTANTIATE(c64)
 #undef HWYBLAS_LAPACK_INSTANTIATE
@@ -628,12 +723,31 @@ HWYBLAS_LAPACK_AUXILIARY(z, c64, double)
                                   const hwyblas_int* ldc, R* rwork) {         \
     hwyblas::lapack::Larcm(*m, *n, a, *lda, As<const T>(b), *ldb, As<T>(c),   \
                            *ldc, rwork);                                      \
+  }                                                                           \
+  HWYBLAS_API void prefix##rot_(                                              \
+      const hwyblas_int* n, R* cx, const hwyblas_int* incx, R* cy,            \
+      const hwyblas_int* incy, const R* c, const R* s) {                      \
+    hwyblas::lapack::Rot(*n, As<T>(cx), *incx, As<T>(cy), *incy, *c,          \
+                         *As<const T>(s));                                    \
+  }                                                                           \
+  HWYBLAS_API hwyblas_int i##prefix##max1_(const hwyblas_int* n, const R* zx, \
+                                           const hwyblas_int* incx) {         \
+    return hwyblas::lapack::Imax1(*n, As<const T>(zx), *incx);                \
   }
 
 HWYBLAS_LAPACK_AUXILIARY_COMPLEX(c, c32, float)
 HWYBLAS_LAPACK_AUXILIARY_COMPLEX(z, c64, double)
 
 #undef HWYBLAS_LAPACK_AUXILIARY_COMPLEX
+
+HWYBLAS_API float scsum1_(const hwyblas_int* n, const float* cx,
+                          const hwyblas_int* incx) {
+  return hwyblas::lapack::Sum1(*n, As<const c32>(cx), *incx);
+}
+HWYBLAS_API double dzsum1_(const hwyblas_int* n, const double* cx,
+                           const hwyblas_int* incx) {
+  return hwyblas::lapack::Sum1(*n, As<const c64>(cx), *incx);
+}
 
 #define HWYBLAS_LAPACK_AUXILIARY_REAL(prefix, R)                      \
   HWYBLAS_API R prefix##lapy2_(const R* x, const R* y) {              \

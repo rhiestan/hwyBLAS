@@ -1,5 +1,5 @@
 # Fills translated routine bodies into a C++ skeleton: each line
-#   //@@BODY name.cc|old=>new|~word=>new|VOID@@
+#   //@@BODY name.cc|old=>new|~word=>new|%regex=>new|VOID@@
 # is replaced by the body of <tr dir>/name.cc (from f2cc.py), with the given
 # replacements and the common clean-ups applied. See doc/fortran_port.md.
 # Usage: python assemble.py skeleton.cc out.cc [tr dir, default tr]
@@ -11,6 +11,7 @@ NL = chr(10)
 TR = sys.argv[3] if len(sys.argv) > 3 else 'tr'
 
 COMMON = [
+    (r'\(R\((\d+)\.0\),\s*R\(0\.0\)\)', r'T(\1)'),
     (r'\bSign\(', 'std::copysign('),
     (r'\bstd::real\((\w+)\)', r'std::real(\1)'),
     (r'\bR\((\d+)\.0\)', r'R(\1)'),
@@ -36,6 +37,9 @@ def body(spec):
         if old.startswith('~'):
             # Whole-word replacement.
             text = re.sub(r'\b' + old[1:] + r'\b', new, text)
+        elif old.startswith('%'):
+            # Regular expression.
+            text = re.sub(old[1:], new.replace('\\n', NL), text)
         else:
             text = text.replace(old.replace('\\n', NL),
                                 new.replace('\\n', NL))

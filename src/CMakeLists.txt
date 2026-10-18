@@ -24,7 +24,10 @@ if(HWYBLAS_LAPACK)
     lapack/geqrf.cc
     lapack/gesdd.cc
     lapack/gesvd.cc
+    lapack/gees.cc
     lapack/getrf.cc
+    lapack/hessenberg.cc
+    lapack/hseqr.cc
     lapack/householder.cc
     lapack/lapacke.cc
     lapack/lasq.cc
@@ -33,6 +36,7 @@ if(HWYBLAS_LAPACK)
     lapack/steqr.cc
     lapack/syev.cc
     lapack/tridiagonal.cc
+    lapack/trsen.cc
     lapack/ungqr.cc
     lapack/ungtr.cc
   )

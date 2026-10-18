@@ -84,6 +84,12 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?gesdd` (singular value decomposition by divide and conquer) | s d c z |
 | `?bdsdc`, `?lasdq`, `?lasd0` - `?lasd8`, `?lasda`, `?lasdt`, `?lamrg`, `?laed6` (bidiagonal divide and conquer) | s d |
 | `?lacp2`, `?lacrm`, `?larcm` (complex matrices with real ones) | c z |
+| `?gees` (Schur factorization), `?gebal`, `?gebak` (balancing), `?gehrd`, `?gehd2`, `?lahr2` (Hessenberg reduction) | s d c z |
+| `?orghr`, `?ormhr` (Q of the Hessenberg reduction) | s d |
+| `?unghr`, `?unmhr` | c z |
+| `?hseqr`, `?laqr0` - `?laqr5`, `?lahqr` (Hessenberg QR algorithm), `?trsen`, `?trexc`, `?trsyl`, `?lacn2` (reordering of the Schur form), `?larfx` | s d c z |
+| `?lanv2`, `?laexc`, `?lasy2`, `?laln2` | s d |
+| `?lartg`, `?rot` (with complex sine), `icmax1`, `izmax1`, `scsum1`, `dzsum1` | c z |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
 | `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |

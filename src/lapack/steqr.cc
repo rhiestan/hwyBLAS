@@ -1,9 +1,9 @@
 // Eigenvalues (and eigenvectors) of real symmetric tridiagonal matrices:
 // xSTEQR (implicit QL or QR method, with eigenvectors) and xSTERF
 // (root-free variant, eigenvalues only), with their auxiliary routines
-// xLAE2, xLAEV2 (2-by-2 symmetric eigenproblems), xLARTG (plane rotations),
-// xLASR (applying sequences of plane rotations), xLANST (norms of
-// tridiagonal matrices) and xLASRT (sorting).
+// xLAE2, xLAEV2 (2-by-2 symmetric eigenproblems), xLARTG (plane rotations,
+// also for complex T), xLASR (applying sequences of plane rotations), xLANST
+// (norms of tridiagonal matrices) and xLASRT (sorting).
 //
 // xSTEQR and xSTERF keep the control flow of the Fortran routines, which is
 // built from GO TO statements: the labels have the Fortran statement
@@ -200,6 +200,161 @@ void Lartg(R f, R g, R* c, R* s, R* r) {
     *r = std::copysign(d, f);
     *s = gs / *r;
     *r = *r * u;
+  }
+}
+
+// xLARTG for complex F and G (CLARTG / ZLARTG, Fortran 90): generates a
+// plane rotation with real C and complex S so that
+//    [  C         S  ]  .  [ F ]  =  [ R ]
+//    [ -conjg(S)  C  ]     [ G ]     [ 0 ]
+// with C**2 + |S|**2 = 1 and C >= 0, without unnecessary overflow and
+// underflow (Anderson, "Algorithm 978", 2017). The comments in the code are
+// the reference's.
+template <typename T>
+std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
+  using R = RealT<T>;
+  const R zero = R(0), one = R(1);
+  const T czero = T(0);
+  const R safmin = LaConstants<R>::safmin();
+  const R safmax = one / safmin;
+  // ABSSQ(t) = real(t)**2 + aimag(t)**2.
+  const auto abssq = [](T t) {
+    return std::real(t) * std::real(t) + std::imag(t) * std::imag(t);
+  };
+  const R rtmin = std::sqrt(safmin);
+
+  if (g == czero) {
+    *c = one;
+    *s = czero;
+    *r = f;
+  } else if (f == czero) {
+    *c = zero;
+    if (std::real(g) == zero) {
+      *r = std::abs(std::imag(g));
+      *s = std::conj(g) / *r;
+    } else if (std::imag(g) == zero) {
+      *r = std::abs(std::real(g));
+      *s = std::conj(g) / *r;
+    } else {
+      const R g1 = std::max(std::abs(std::real(g)), std::abs(std::imag(g)));
+      const R rtmax = std::sqrt(safmax / 2);
+      if (g1 > rtmin && g1 < rtmax) {
+        // Use unscaled algorithm.
+        // The following two lines can be replaced by `d = abs( g )`.
+        // This algorithm do not use the intrinsic complex abs.
+        const R g2 = abssq(g);
+        const R d = std::sqrt(g2);
+        *s = std::conj(g) / d;
+        *r = d;
+      } else {
+        // Use scaled algorithm.
+        const R u = std::min(safmax, std::max(safmin, g1));
+        const T gs = g / u;
+        // The following two lines can be replaced by `d = abs( gs )`.
+        // This algorithm do not use the intrinsic complex abs.
+        const R g2 = abssq(gs);
+        const R d = std::sqrt(g2);
+        *s = std::conj(gs) / d;
+        *r = d * u;
+      }
+    }
+  } else {
+    const R f1 = std::max(std::abs(std::real(f)), std::abs(std::imag(f)));
+    const R g1 = std::max(std::abs(std::real(g)), std::abs(std::imag(g)));
+    R rtmax = std::sqrt(safmax / 4);
+    if (f1 > rtmin && f1 < rtmax && g1 > rtmin && g1 < rtmax) {
+      // Use unscaled algorithm.
+      const R f2 = abssq(f);
+      const R g2 = abssq(g);
+      const R h2 = f2 + g2;
+      // safmin <= f2 <= h2 <= safmax
+      if (f2 >= h2 * safmin) {
+        // safmin <= f2/h2 <= 1, and h2/f2 is finite
+        *c = std::sqrt(f2 / h2);
+        *r = f / *c;
+        rtmax = rtmax * 2;
+        if (f2 > rtmin && h2 < rtmax) {
+          // safmin <= sqrt( f2*h2 ) <= safmax
+          *s = std::conj(g) * (f / std::sqrt(f2 * h2));
+        } else {
+          *s = std::conj(g) * (*r / h2);
+        }
+      } else {
+        // f2/h2 <= safmin may be subnormal, and h2/f2 may overflow.
+        // Moreover,
+        //  safmin <= f2*f2 * safmax < f2 * h2 < h2*h2 * safmin <= safmax,
+        //  sqrt(safmin) <= sqrt(f2 * h2) <= sqrt(safmax).
+        // Also,
+        //  g2 >> f2, which means that h2 = g2.
+        const R d = std::sqrt(f2 * h2);
+        *c = f2 / d;
+        if (*c >= safmin) {
+          *r = f / *c;
+        } else {
+          // f2 / sqrt(f2 * h2) < safmin, then
+          //  sqrt(safmin) <= f2 * sqrt(safmax) <= h2 / sqrt(f2 * h2) <=
+          //  h2 * (safmin / f2) <= h2 <= safmax
+          *r = f * (h2 / d);
+        }
+        *s = std::conj(g) * (f / d);
+      }
+    } else {
+      // Use scaled algorithm.
+      const R u = std::min({safmax, std::max({safmin, f1, g1})});
+      const T gs = g / u;
+      const R g2 = abssq(gs);
+      R w, f2, h2;
+      T fs;
+      if (f1 / u < rtmin) {
+        // f is not well-scaled when scaled by g1.
+        // Use a different scaling for f.
+        const R v = std::min(safmax, std::max(safmin, f1));
+        w = v / u;
+        fs = f / v;
+        f2 = abssq(fs);
+        h2 = f2 * (w * w) + g2;
+      } else {
+        // Otherwise use the same scaling for f and g.
+        w = one;
+        fs = f / u;
+        f2 = abssq(fs);
+        h2 = f2 + g2;
+      }
+      // safmin <= f2 <= h2 <= safmax
+      if (f2 >= h2 * safmin) {
+        // safmin <= f2/h2 <= 1, and h2/f2 is finite
+        *c = std::sqrt(f2 / h2);
+        *r = fs / *c;
+        rtmax = rtmax * 2;
+        if (f2 > rtmin && h2 < rtmax) {
+          // safmin <= sqrt( f2*h2 ) <= safmax
+          *s = std::conj(gs) * (fs / std::sqrt(f2 * h2));
+        } else {
+          *s = std::conj(gs) * (*r / h2);
+        }
+      } else {
+        // f2/h2 <= safmin may be subnormal, and h2/f2 may overflow.
+        // Moreover,
+        //  safmin <= f2*f2 * safmax < f2 * h2 < h2*h2 * safmin <= safmax,
+        //  sqrt(safmin) <= sqrt(f2 * h2) <= sqrt(safmax).
+        // Also,
+        //  g2 >> f2, which means that h2 = g2.
+        const R d = std::sqrt(f2 * h2);
+        *c = f2 / d;
+        if (*c >= safmin) {
+          *r = fs / *c;
+        } else {
+          // f2 / sqrt(f2 * h2) < safmin, then
+          //  sqrt(safmin) <= f2 * sqrt(safmax) <= h2 / sqrt(f2 * h2) <=
+          //  h2 * (safmin / f2) <= h2 <= safmax
+          *r = fs * (h2 / d);
+        }
+        *s = std::conj(gs) * (fs / d);
+      }
+      // Rescale c and r.
+      *c = *c * w;
+      *r = *r * u;
+    }
   }
 }
 
@@ -1164,6 +1319,9 @@ HWYBLAS_LAPACK_INSTANTIATE(float)
 HWYBLAS_LAPACK_INSTANTIATE(double)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
+template void Lartg<c32>(c32, c32, float*, c32*, c32*);
+template void Lartg<c64>(c64, c64, double*, c64*, c64*);
+
 }  // namespace lapack
 }  // namespace hwyblas
 
@@ -1223,5 +1381,16 @@ HWYBLAS_LAPACK_STEQR_REAL(s, float)
 HWYBLAS_LAPACK_STEQR_REAL(d, double)
 
 #undef HWYBLAS_LAPACK_STEQR_REAL
+
+HWYBLAS_API void clartg_(const float* f, const float* g, float* c, float* s,
+                         float* r) {
+  hwyblas::lapack::Lartg(*As<const c32>(f), *As<const c32>(g), c, As<c32>(s),
+                         As<c32>(r));
+}
+HWYBLAS_API void zlartg_(const double* f, const double* g, double* c, double* s,
+                         double* r) {
+  hwyblas::lapack::Lartg(*As<const c64>(f), *As<const c64>(g), c, As<c64>(s),
+                         As<c64>(r));
+}
 
 }  // extern "C"

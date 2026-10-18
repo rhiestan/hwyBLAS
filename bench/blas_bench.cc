@@ -10,10 +10,11 @@
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
 // (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf,
-// geqp3, syev (heev for complex), gesvd, gesdd (their times include copying
-// the input matrix, which they overwrite; for syev, gesvd and gesdd, the
-// outputs of the libraries differ, as eigenvectors and singular vectors are
-// unique only up to their sign). A square
+// geqp3, syev (heev for complex), gesvd, gesdd, gees (their times include
+// copying the input matrix, which they overwrite; for syev, gesvd, gesdd and
+// gees, the outputs of the libraries differ, as eigenvectors and singular
+// vectors are unique only up to their sign, and the order of the
+// eigenvalues in the Schur form depends on rounding). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -1045,6 +1046,61 @@ void BenchGesdd(const Options& opt, const Libraries& libs) {
   }
 }
 
+template <typename T>
+using GeesRealFn = void (*)(const char*, const char*, void*, const int*, T*,
+                            const int*, int*, T*, T*, T*, const int*, T*,
+                            const int*, int*, int*);
+template <typename T>
+using GeesComplexFn = void (*)(const char*, const char*, void*, const int*, T*,
+                               const int*, int*, T*, T*, const int*, T*,
+                               const int*, typename RealType<T>::type*, int*,
+                               int*);
+
+// Schur factorization A = Z * T * Z**H of an n x n matrix with the Schur
+// vectors (LAPACK, jobvs = 'V', sort = 'N'), reported as GFLOP/s of the
+// nominal 25 n**3 flops (4 times as many real flops for complex T).
+template <typename T>
+void BenchGees(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const char jobvs = 'V', sort = 'N';
+  const std::string symbol = Symbol<T>("gees");
+  PrintHeader<T>(libs, symbol + "  jobvs=V sort=N", "n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.n, lda = std::max(1, n);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * n, rng));
+    // More than the optimal workspace.
+    const int lwork = 64 * n + 4096;
+    const auto w = std::make_shared<std::vector<T>>(2 * lda);
+    const auto vs =
+        std::make_shared<std::vector<T>>(static_cast<size_t>(lda) * n);
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+    const auto rwork = std::make_shared<std::vector<R>>(lda);
+    const auto bwork = std::make_shared<std::vector<int>>(lda);
+
+    Case<T> c;
+    c.label = std::to_string(n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * 25.0 * n * n * n;
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      int sdim = 0, info = 0;
+      if constexpr (kIsComplex<T>) {
+        reinterpret_cast<GeesComplexFn<T>>(fn)(
+            &jobvs, &sort, nullptr, &n, out, &lda, &sdim, w->data(), vs->data(),
+            &lda, work->data(), &lwork, rwork->data(), bwork->data(), &info);
+      } else {
+        reinterpret_cast<GeesRealFn<T>>(fn)(
+            &jobvs, &sort, nullptr, &n, out, &lda, &sdim, w->data(),
+            w->data() + lda, vs->data(), &lda, work->data(), &lwork,
+            bwork->data(), &info);
+      }
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
 // G elements per second in the GFLOP/s columns.
 template <typename T>
@@ -1234,6 +1290,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchGesvd<T>(opt, libs);
   } else if (opt.routine == "gesdd") {
     BenchGesdd<T>(opt, libs);
+  } else if (opt.routine == "gees") {
+    BenchGees<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

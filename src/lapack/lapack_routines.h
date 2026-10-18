@@ -452,6 +452,211 @@ blasint Gesdd(char jobz, blasint m, blasint n, T* a, blasint lda, RealT<T>* s,
               T* u, blasint ldu, T* vt, blasint ldvt, T* work, blasint lwork,
               RealT<T>* rwork, blasint* iwork);
 
+// ---------------------------------------------------------------------------
+// Nonsymmetric eigenproblem: balancing and Hessenberg reduction
+// (hessenberg.cc), Hessenberg QR (hseqr.cc), reordering of the Schur form
+// (trsen.cc), Schur factorization (gees.cc). Where the real and the
+// complex routine have different arguments (WR and WI for W, pairs of real
+// shifts for complex ones), they are two overloads of the same name.
+
+template <typename T>
+blasint Gebal(char job, blasint n, T* a, blasint lda, blasint* ilo,
+              blasint* ihi, RealT<T>* scale);
+
+template <typename T>
+blasint Gebak(char job, char side, blasint n, blasint ilo, blasint ihi,
+              const RealT<T>* scale, blasint m, T* v, blasint ldv);
+
+template <typename T>
+blasint Gehd2(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
+              T* work);
+
+template <typename T>
+void Lahr2(blasint n, blasint k, blasint nb, T* a, blasint lda, T* tau, T* t,
+           blasint ldt, T* y, blasint ldy);
+
+template <typename T>
+blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
+              T* work, blasint lwork);
+
+// xORGHR for real T, xUNGHR for complex T.
+template <typename T>
+blasint Unghr(blasint n, blasint ilo, blasint ihi, T* a, blasint lda,
+              const T* tau, T* work, blasint lwork);
+
+// xORMHR for real T, xUNMHR for complex T.
+template <typename T>
+blasint Unmhr(char side, char trans, blasint m, blasint n, blasint ilo,
+              blasint ihi, const T* a, blasint lda, const T* tau, T* c,
+              blasint ldc, T* work, blasint lwork);
+
+// Real T only.
+template <typename R>
+void Lanv2(R* a, R* b, R* c, R* d, R* rt1r, R* rt1i, R* rt2r, R* rt2i, R* cs,
+           R* sn);
+
+template <typename R>
+void Laqr1(blasint n, const R* h, blasint ldh, R sr1, R si1, R sr2, R si2,
+           R* v);
+template <typename T>
+void Laqr1(blasint n, const T* h, blasint ldh, T s1, T s2, T* v);
+
+template <typename R>
+blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
+              blasint ldh, R* wr, R* wi, blasint iloz, blasint ihiz, R* z,
+              blasint ldz);
+template <typename T>
+blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
+              blasint ldh, T* w, blasint iloz, blasint ihiz, T* z, blasint ldz);
+
+template <typename R>
+void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
+           blasint kbot, blasint nshfts, R* sr, R* si, R* h, blasint ldh,
+           blasint iloz, blasint ihiz, R* z, blasint ldz, R* v, blasint ldv,
+           R* u, blasint ldu, blasint nv, R* wv, blasint ldwv, blasint nh,
+           R* wh, blasint ldwh);
+template <typename T>
+void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
+           blasint kbot, blasint nshfts, T* s, T* h, blasint ldh, blasint iloz,
+           blasint ihiz, T* z, blasint ldz, T* v, blasint ldv, T* u,
+           blasint ldu, blasint nv, T* wv, blasint ldwv, blasint nh, T* wh,
+           blasint ldwh);
+
+template <typename R>
+void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
+           blasint nw, R* h, blasint ldh, blasint iloz, blasint ihiz, R* z,
+           blasint ldz, blasint* ns, blasint* nd, R* sr, R* si, R* v,
+           blasint ldv, blasint nh, R* t, blasint ldt, blasint nv, R* wv,
+           blasint ldwv, R* work, blasint lwork);
+template <typename T>
+void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
+           blasint nw, T* h, blasint ldh, blasint iloz, blasint ihiz, T* z,
+           blasint ldz, blasint* ns, blasint* nd, T* sh, T* v, blasint ldv,
+           blasint nh, T* t, blasint ldt, blasint nv, T* wv, blasint ldwv,
+           T* work, blasint lwork);
+
+template <typename R>
+void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
+           blasint nw, R* h, blasint ldh, blasint iloz, blasint ihiz, R* z,
+           blasint ldz, blasint* ns, blasint* nd, R* sr, R* si, R* v,
+           blasint ldv, blasint nh, R* t, blasint ldt, blasint nv, R* wv,
+           blasint ldwv, R* work, blasint lwork);
+template <typename T>
+void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
+           blasint nw, T* h, blasint ldh, blasint iloz, blasint ihiz, T* z,
+           blasint ldz, blasint* ns, blasint* nd, T* sh, T* v, blasint ldv,
+           blasint nh, T* t, blasint ldt, blasint nv, T* wv, blasint ldwv,
+           T* work, blasint lwork);
+
+template <typename R>
+blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
+              blasint ldh, R* wr, R* wi, blasint iloz, blasint ihiz, R* z,
+              blasint ldz, R* work, blasint lwork);
+template <typename T>
+blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
+              blasint ldh, T* w, blasint iloz, blasint ihiz, T* z, blasint ldz,
+              T* work, blasint lwork);
+
+template <typename R>
+blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
+              blasint ldh, R* wr, R* wi, blasint iloz, blasint ihiz, R* z,
+              blasint ldz, R* work, blasint lwork);
+template <typename T>
+blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
+              blasint ldh, T* w, blasint iloz, blasint ihiz, T* z, blasint ldz,
+              T* work, blasint lwork);
+
+template <typename R>
+blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
+              blasint ldh, R* wr, R* wi, R* z, blasint ldz, R* work,
+              blasint lwork);
+template <typename T>
+blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
+              blasint ldh, T* w, T* z, blasint ldz, T* work, blasint lwork);
+
+// xLARFX: applies H = I - tau * v * v**H to C, unrolled for orders <= 10.
+template <typename T>
+void Larfx(char side, blasint m, blasint n, const T* v, T tau, T* c,
+           blasint ldc, T* work);
+
+// Complex T only: xLARTG for complex F and G (real C), xROT with complex S
+// (CROT / ZROT; the real-S rotation is the BLAS's, see blas.h), ICMAX1 /
+// IZMAX1 and SCSUM1 / DZSUM1 (true absolute values).
+template <typename T>
+std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r);
+
+template <typename T>
+std::enable_if_t<IsComplex<T>::value> Rot(blasint n, T* cx, blasint incx, T* cy,
+                                          blasint incy, RealT<T> c, T s);
+
+template <typename T>
+blasint Imax1(blasint n, const T* zx, blasint incx);
+
+template <typename T>
+RealT<T> Sum1(blasint n, const T* cx, blasint incx);
+
+// Real T only.
+template <typename R>
+blasint Lasy2(bool ltranl, bool ltranr, blasint isgn, blasint n1, blasint n2,
+              const R* tl, blasint ldtl, const R* tr, blasint ldtr, const R* b,
+              blasint ldb, R* scale, R* x, blasint ldx, R* xnorm);
+
+template <typename R>
+blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
+              blasint lda, R d1, R d2, const R* b, blasint ldb, R wr, R wi,
+              R* x, blasint ldx, R* scale, R* xnorm);
+
+template <typename R>
+blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
+              blasint j1, blasint n1, blasint n2, R* work);
+
+template <typename R>
+void Lacn2(blasint n, R* v, R* x, blasint* isgn, R* est, blasint* kase,
+           blasint* isave);
+template <typename T>
+void Lacn2(blasint n, T* v, T* x, RealT<T>* est, blasint* kase, blasint* isave);
+
+template <typename T>
+blasint Trsyl(char trana, char tranb, blasint isgn, blasint m, blasint n,
+              const T* a, blasint lda, const T* b, blasint ldb, T* c,
+              blasint ldc, RealT<T>* scale);
+
+template <typename R>
+blasint Trexc(char compq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
+              blasint* ifst, blasint* ilst, R* work);
+template <typename T>
+blasint Trexc(char compq, blasint n, T* t, blasint ldt, T* q, blasint ldq,
+              blasint ifst, blasint ilst);
+
+// SELECT is a LOGICAL array (nonzero is true).
+template <typename R>
+blasint Trsen(char job, char compq, const blasint* select, blasint n, R* t,
+              blasint ldt, R* q, blasint ldq, R* wr, R* wi, blasint* m, R* s,
+              R* sep, R* work, blasint lwork, blasint* iwork, blasint liwork);
+template <typename T>
+blasint Trsen(char job, char compq, const blasint* select, blasint n, T* t,
+              blasint ldt, T* q, blasint ldq, T* w, blasint* m, RealT<T>* s,
+              RealT<T>* sep, T* work, blasint lwork);
+
+// The SELECT functions of xGEES, with the Fortran calling convention:
+// SELECT(WR, WI) for real T, SELECT(W) for complex T (W points to the real
+// and the imaginary part). Nonzero is true.
+template <typename R>
+using GeesSelectReal = blasint (*)(const R*, const R*);
+template <typename R>
+using GeesSelectComplex = blasint (*)(const R*);
+
+// BWORK is a LOGICAL array of N elements (used if SORT = 'S').
+template <typename R>
+blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
+             blasint lda, blasint* sdim, R* wr, R* wi, R* vs, blasint ldvs,
+             R* work, blasint lwork, blasint* bwork);
+template <typename T>
+blasint Gees(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
+             blasint n, T* a, blasint lda, blasint* sdim, T* w, T* vs,
+             blasint ldvs, T* work, blasint lwork, RealT<T>* rwork,
+             blasint* bwork);
+
 }  // namespace lapack
 }  // namespace hwyblas
 

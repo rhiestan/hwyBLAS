@@ -8,8 +8,8 @@ are documented in the routine's comment (own block sizes, fused kernels,
 fixed reference bugs).
 
 The routines of milestones M0–M2 (getrf … syev) were ported by hand. From M3
-(gesvd, gesdd and their helpers, about 40 routines) on, a small translator
-produces a first draft that is then finished by hand. The scripts are in
+on (gesvd, gesdd, gees and their helpers, about 80 routines so far), a small
+translator produces a first draft that is then finished by hand. The scripts are in
 `doc/fortran_port/`:
 
 | Script | Purpose |
@@ -32,9 +32,16 @@ The translator produces the conventions described in
   the function as in Fortran (`blasint`, `bool`, `R` = real type,
   `T` = the routine's element type).
 - **Constants**: `PARAMETER`s become `const` locals; `1.0D+0` becomes `R(1)`.
-- **Control flow**: `IF/ELSE IF/ELSE`, `DO` (with step, also negative) and
-  `DO WHILE` map directly. `GO TO 10` becomes `goto L10;` with a label `L10:`,
-  so the GOTO-heavy routines (bdsqr, lasq*, lasd*) keep their exact flow.
+- **Control flow**: `IF/ELSE IF/ELSE`, `DO` and `DO WHILE` map directly; a
+  `DO` step that is a variable gets a condition for both signs (`m3 > 0 ? k
+  <= hi : k >= hi`), since its sign is only known at run time. `CYCLE` and
+  `EXIT` become `continue` and `break`. `GO TO 10` becomes `goto L10;` with a
+  label `L10:`, so the GOTO-heavy routines (bdsqr, lasq*, lasd*, laqr*) keep
+  their exact flow; a computed `GO TO (10, 20, 30) K` becomes a `switch` of
+  `goto`s.
+- **Statement functions** such as `CABS1(CDUM) = ABS(DBLE(CDUM)) +
+  ABS(DIMAG(CDUM))` are dropped, and their uses call a helper of the same
+  name (`Cabs1` in `lapack_common.h`).
 - **Intrinsics**: `MAX/MIN` (`std::max<blasint>` for integer arguments,
   initializer lists for more than two), `ABS`, `SQRT`, `SIGN`
   (`std::copysign`), `DBLE`/`REAL`, `CONJG`, `MOD`, `NINT`, `LSAME`, `**`
@@ -49,7 +56,9 @@ The translator produces the conventions described in
   is instantiated for all four types. Where the real and complex routines
   differ by more than conjugation, the difference is kept with
   `if constexpr`, or the two are ported as separate functions behind one
-  template (`GesvdReal` / `GesvdComplex`).
+  template (`GesvdReal` / `GesvdComplex`), or as two overloads of the same
+  name where their arguments differ (`WR` and `WI` against `W` in xHSEQR,
+  xLAQR*, xTRSEN, xGEES).
 
 ## Step 1: translate (`f2cc.py`)
 
@@ -60,7 +69,9 @@ python doc/fortran_port/f2cc.py ../LAPACK/lapack-3.12.1/SRC/dlamrg.f > tr/dlamrg
 The script:
 
 1. Joins continuation lines and keeps comments (without the `*>` Doxygen
-   block and the `..` separators).
+   block and the `..` separators). Statements are upper-cased (Fortran is
+   case-insensitive, and newer routines such as xLAQR0 are partly lower
+   case).
 2. Collects the declarations: types, array ranks, `PARAMETER`s,
    `EXTERNAL`s and the dummy arguments.
 3. Emits the declarations, then translates statement by statement: a regex
@@ -69,12 +80,14 @@ The script:
 4. Translates calls using the `SIGS` table, which gives each known routine's
    argument kinds: `v` value, `p` scalar output (passed as a pointer), `a`
    array (pointer, `X.ptr(i, j)` for subarrays), `i` INFO (dropped and
-   assigned from the return value). Routines missing from the table are
-   marked `/*CHECK SIG*/`.
+   assigned from the return value). `SIGS_COMPLEX` has the kinds of the
+   complex routines whose arguments differ from the real ones'. Routines
+   missing from the tables are marked `/*CHECK SIG*/`.
 
 Everything the script cannot decide is marked `/*CHECK ...*/`: local array
-sizes, unknown signatures, string concatenation, `ILAENV` options, and whole
-arrays passed where a pointer is expected. For example, `dlamrg.f` becomes:
+sizes, unknown signatures, string concatenation, `ILAENV` options, `DATA`
+and `EQUIVALENCE` statements, and whole arrays passed where a pointer is
+expected. For example, `dlamrg.f` becomes:
 
 ```cpp
   const Vector<R> A(a);
@@ -116,12 +129,14 @@ applying the `|`-separated edits:
 
 - `old=>new`: literal replacement (`\n` in either part stands for a newline);
 - `~word=>new`: whole-word replacement (e.g. renaming a variable);
+- `%regex=>new`: a regular expression replacement;
 - `VOID`: the routine is a `void` function (`return info;` becomes
   `return;`, and a trailing `return;` is removed).
 
 It then applies the common clean-ups (`Sign(` → `std::copysign(`,
-`R(1.0)` → `R(1)`, removing the `// End of ...` comment, `&*x` → `x`, and
-declaring `info` at its first assignment). Keeping the edits in the skeleton
+`R(1.0)` → `R(1)`, complex constants `(R(1.0),R(0.0))` → `T(1)`, removing
+the `// End of ...` comment, `&*x` → `x`, and declaring `info` at its first
+assignment). Keeping the edits in the skeleton
 means a fix to the translator only requires running both steps again.
 
 ## Step 3: finish by hand
@@ -140,7 +155,16 @@ attention:
 - variables that the compiler warns may be used uninitialized because the
   Fortran flow initializes them via `GO TO` (initialized, with a comment);
 - `2**K` as `blasint{1} << k`, and `INT(LOG(...))`-style mixed expressions,
-  checked against the Fortran.
+  checked against the Fortran;
+- a matrix named `T` (xLAQR2, xTREXC, xTRSEN …) clashes with the template
+  parameter and is renamed `Tm`. A regex that renames `T(` must catch every
+  index expression: `T(*ns, *ns)` once stayed the complex number
+  `T(ns, ns)`, which compiled and broke xLAQR3's deflation test;
+- `DATA` tables become `static const` arrays with views, `EQUIVALENCE`d
+  arrays one array with two views (xLALN2);
+- `INT(WORK(1))` of a complex workspace query needs `std::real`;
+- `INFO` / `IERR` values the Fortran sets but never reads (the compiler
+  warns) are dropped, with a comment where it matters.
 
 Once a file has been finished by hand, it is edited directly and not
 assembled again.
@@ -160,3 +184,16 @@ A ported routine is accepted when:
 - **LAPACK's own testers** (`TESTING/LIN`, `TESTING/EIG`), run by hand with
   `tests/lapack/run_lapack_testers.sh`, link the ported routines in place of
   the reference ones and show no new failures.
+
+Residual checks cannot see changes to heuristics that only steer the
+convergence (shifts, deflation criteria, the NIBBLE crossover of xLAQR0):
+the result is still a valid factorization. For those, the port was also
+compared with the reference LAPACK itself, built as a DLL (with flang and
+`-ffp-contract=off`) against hwyBLAS's BLAS and loaded next to hwyBLAS in
+one process. With the same BLAS, the real routines (xGEES and below) give
+bitwise identical results on random and structured matrices of orders 3 to
+200, and mutations of the heuristics change them. The complex routines
+differ in the last bits: for COMPLEX / REAL, flang performs a full complex
+division (the standard's conversion to COMPLEX first), while C++ (and
+gfortran) divide the two parts; the multishift QR algorithm then amplifies
+such differences into a different order of the eigenvalues.

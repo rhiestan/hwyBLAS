@@ -88,6 +88,15 @@ void Trmm(char side, char uplo, char transa, char diag, blasint m, blasint n,
                            Raw(b), &ldb);
 }
 
+// x := op(A) * x with triangular A.
+template <typename T>
+void Trmv(char uplo, char trans, char diag, blasint n, const T* a, blasint lda,
+          T* x, blasint incx) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, strmv_, dtrmv_, ctrmv_, ztrmv_, &uplo, &trans,
+                           &diag, &n, Raw(a), &lda, Raw(x), &incx);
+}
+
 // y := alpha * op(A) * x + beta * y.
 template <typename T>
 void Gemv(char trans, blasint m, blasint n, T alpha, const T* a, blasint lda,
@@ -166,6 +175,23 @@ T Dotc(blasint n, const T* x, blasint incx, const T* y, blasint incy) {
   }
 }
 
+// x**T * y (no conjugation): xDOT for real T, xDOTU for complex T.
+template <typename T>
+T Dotu(blasint n, const T* x, blasint incx, const T* y, blasint incy) {
+  using blas_detail::Raw;
+  if constexpr (std::is_same_v<T, float>) {
+    return sdot_(&n, x, &incx, y, &incy);
+  } else if constexpr (std::is_same_v<T, double>) {
+    return ddot_(&n, x, &incx, y, &incy);
+  } else if constexpr (std::is_same_v<T, c32>) {
+    const hwyblas_complex_float r = cdotu_(&n, Raw(x), &incx, Raw(y), &incy);
+    return T(r.real, r.imag);
+  } else {
+    const hwyblas_complex_double r = zdotu_(&n, Raw(x), &incx, Raw(y), &incy);
+    return T(r.real, r.imag);
+  }
+}
+
 // y := alpha * x + y.
 template <typename T>
 void Axpy(blasint n, T alpha, const T* x, blasint incx, T* y, blasint incy) {
@@ -230,6 +256,21 @@ RealT<T> Nrm2(blasint n, const T* x, blasint incx) {
     return scnrm2_(&n, Raw(x), &incx);
   } else {
     return dznrm2_(&n, Raw(x), &incx);
+  }
+}
+
+// Sum of |x_i| (|re| + |im| for complex x): xASUM, SCASUM or DZASUM.
+template <typename T>
+RealT<T> Asum(blasint n, const T* x, blasint incx) {
+  using blas_detail::Raw;
+  if constexpr (std::is_same_v<T, float>) {
+    return sasum_(&n, Raw(x), &incx);
+  } else if constexpr (std::is_same_v<T, double>) {
+    return dasum_(&n, Raw(x), &incx);
+  } else if constexpr (std::is_same_v<T, c32>) {
+    return scasum_(&n, Raw(x), &incx);
+  } else {
+    return dzasum_(&n, Raw(x), &incx);
   }
 }
 

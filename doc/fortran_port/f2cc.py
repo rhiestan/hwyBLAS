@@ -41,7 +41,7 @@ SIGS = {
     'GEMV': ('Gemv', 'vvvvavavvav'),
     'LACGV': ('Lacgv', 'vav'),
     'LARFG': ('Larfg', 'vpavp'),
-    'LARF1F': ('Larf1f', 'vvvavvavva'),
+    'LARF1F': ('Larf1f', 'vvvavvava'),
     'LABRD': ('Labrd', 'vvvavaaaaavav'),
     'GEBD2': ('Gebd2', 'vvavaaaaai'),
     'LACRM': ('Lacrm', 'vvavavavaa'),
@@ -67,10 +67,67 @@ SIGS = {
     'LANST': ('Lanst', 'vvaa'),
     'LAPY2': ('Lapy2', 'vv'),
     'LAMC3': ('Lamc3', 'vv'),
+    'GEBAL': ('Gebal', 'vvavppai'),
+    'GEBAK': ('Gebak', 'vvvvvavavi'),
+    'GEHD2': ('Gehd2', 'vvvavaai'),
+    'GEHRD': ('Gehrd', 'vvvavaavi'),
+    'LAHR2': ('Lahr2', 'vvvavaavav'),
+    'UNGHR': ('Unghr', 'vvvavaavi'),
+    'UNMHR': ('Unmhr', 'vvvvvvavaavavi'),
+    'HSEQR': ('Hseqr', 'vvvvvavaaavavi'),
+    'LAQR0': ('Laqr0', 'vvvvvavaavvavavi'),
+    'LAQR4': ('Laqr4', 'vvvvvavaavvavavi'),
+    'LAHQR': ('Lahqr', 'vvvvvavaavvavi'),
+    'LAQR1': ('Laqr1', 'vavvvvva'),
+    'LAQR2': ('Laqr2', 'vvvvvvavvvavppaaavvavvavav'),
+    'LAQR3': ('Laqr3', 'vvvvvvavvvavppaaavvavvavav'),
+    'LAQR5': ('Laqr5', 'vvvvvvvaaavvvavavavvavvav'),
+    'LANV2': ('Lanv2', 'pppppppppp'),
+    'TREXC': ('Trexc', 'vvavavppai'),
+    'LAEXC': ('Laexc', 'vvavavvvvai'),
+    'LASY2': ('Lasy2', 'vvvvvavavavpavpi'),
+    'TRSYL': ('Trsyl', 'vvvvvavavavpi'),
+    'TRSEN': ('Trsen', 'vvavavavaapppavavi'),
+    'LACN2': ('Lacn2', 'vaaappa'),
+    'LALN2': ('Laln2', 'vvvvvavvvavvvavppi'),
+    'LARFX': ('Larfx', 'vvvavavaa'),
+    'LARF': ('Larf', 'vvvavvava'),
+    'LARFB': ('Larfb', 'vvvvvvvavavavav'),
+    'TRMM': ('Trmm', 'vvvvvvvavav'),
+    'TRMV': ('Trmv', 'vvvvavav'),
+    'AXPY': ('Axpy', 'vvavav'),
+    'ASUM': ('Asum', 'vav'),
+    'DOTU': ('Dotu', 'vavav'),
+    'DOTC': ('Dotc', 'vavav'),
+    'LADIV': ('Ladiv', 'vv'),
+    'IAMAX': ('Iamax', 'vav'),
+    'IMAX1': ('Imax1', 'vav'),
+    'SUM1': ('Sum1', 'vav'),
+    'GEES': ('Gees', 'vvvvavpaaavavaai'),
+
+}
+# Argument kinds of the complex routines whose arguments differ from the
+# real ones' (e.g. W for WR and WI).
+SIGS_COMPLEX = {
+    'LAHQR': 'vvvvvavavvavi',
+    'LAQR0': 'vvvvvavavvavavi',
+    'LAQR4': 'vvvvvavavvavavi',
+    'LAQR1': 'vavvva',
+    'LAQR2': 'vvvvvvavvvavppaavvavvavav',
+    'LAQR3': 'vvvvvvavvvavppaavvavvavav',
+    'LAQR5': 'vvvvvvvaavvvavavavvavvav',
+    'HSEQR': 'vvvvvavaavavi',
+    'TREXC': 'vvavavvvi',
+    'TRSEN': 'vvavavavapppavi',
+    'LACN2': 'vaappa',
+    'GEES': 'vvvvavpaavavaaai',
 }
 REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'ORMBR': 'UNMBR', 'ORMQR': 'UNMQR', 'ORMLQ': 'UNMLQ',
-             'DROT': 'ROT', 'SROT': 'ROT', 'DSCAL': 'RSCAL'}
+             'DROT': 'ROT', 'SROT': 'ROT', 'DSCAL': 'RSCAL',
+             'ORGHR': 'UNGHR', 'ORMHR': 'UNMHR', 'ZDSCAL': 'RSCAL',
+             'DZNRM2': 'NRM2', 'DZASUM': 'ASUM', 'IZAMAX': 'IAMAX',
+             'IDAMAX': 'IAMAX', 'IZMAX1': 'IMAX1', 'DZSUM1': 'SUM1'}
 FUNCS = {
     'MAX': 'std::max', 'MIN': 'std::min', 'ABS': 'std::abs',
     'SQRT': 'std::sqrt', 'SIGN': 'Sign', 'DBLE': 'std::real',
@@ -118,6 +175,7 @@ class Routine:
         self.name = ''
         self.externals = set()
         self.funcs_int = set()
+        self.statfuncs = set()  # statement functions, e.g. CABS1
 
 
 def split_args(toks):
@@ -216,6 +274,8 @@ def expr(toks, r):
                 sub = ', '.join(expr(a, r) for a in inner)
                 if val in r.arrays:
                     out.append(val + '(' + sub + ')')
+                elif val in r.statfuncs:
+                    out.append(val.capitalize() + '(' + sub + ')')
                 elif val in ('DBLE', 'REAL') and is_int_expr(toks[i + 2:j], r):
                     out.append('R(' + sub + ')')
                 elif val in FUNCS:
@@ -251,6 +311,10 @@ def base_name(name):
         return '', name
     p, rest = name[0], name[1:]
     if name in REAL2CPLX:
+        # Names with two precision letters (DZNRM2, IZAMAX, ZDSCAL) work
+        # in the precision of the calling routine.
+        if name[:2] in ('DZ', 'SC', 'IZ', 'IC', 'ZD', 'CS', 'ID', 'IS'):
+            p = ''
         return p, REAL2CPLX[name]
     if rest in REAL2CPLX:
         rest = REAL2CPLX[rest]
@@ -261,7 +325,7 @@ def call_expr(name, args, r, as_func=False):
     """Translates CALL name(args) or a function reference."""
     p, base = base_name(name)
     if name == 'XERBLA':
-        nm = args[0][0][1][2:-1]
+        nm = args[0][0][1][2:-1].rstrip()  # e.g. 'DGEES ' (padded)
         return 'Xerbla<T>("%s", %s)' % (nm, expr(args[1], r))
     if name == 'ILAENV':
         return 'Ilaenv<T>(' + ', '.join(expr(a, r) for a in args) + \
@@ -273,12 +337,14 @@ def call_expr(name, args, r, as_func=False):
         kinds = 'vvvavv'
     elif base in SIGS:
         cname, kinds = SIGS[base]
+        if p in ('C', 'Z') and base in SIGS_COMPLEX:
+            kinds = SIGS_COMPLEX[base]
     else:
         cname = base.capitalize()
         kinds = None
     # Real routine called from a complex one: real template argument.
     rout_cplx = r.name[0] in 'CZ'
-    if rout_cplx and p in 'DS' and base not in ('LAMCH',):
+    if rout_cplx and p and p in 'DS' and base not in ('LAMCH',):
         cname += '<R>'
     outs, ret = [], None
     for k, a in enumerate(args):
@@ -336,13 +402,15 @@ def lines_of(path):
             for k in range(len(stmts) - 1, -1, -1):
                 if stmts[k][0] == 'S':
                     stmts[k] = ('S', stmts[k][1], stmts[k][2] + ' ' +
-                                line[6:].strip())
+                                line[6:].strip().upper())
                     break
             continue
         if line[6:].strip().upper() == 'IMPLICIT NONE':
             continue
         label = line[:5].strip()
-        stmts.append(('S', label, line[6:].strip()))
+        # Fortran is case-insensitive: statements are translated in upper
+        # case (comments keep their case).
+        stmts.append(('S', label, line[6:].strip().upper()))
     return stmts
 
 
@@ -383,6 +451,11 @@ def parse_decls(stmts, r):
             for x in m.group(1).split(','):
                 r.externals.add(x.strip())
             continue
+        m = re.match(r'^(\w+)\s*\(\s*\w+(\s*,\s*\w+)*\s*\)\s*=', t)
+        if m and m.group(1) not in r.arrays and m.group(1) not in r.args and (
+                m.group(1) in r.ints | r.reals | r.cplx | r.logs):
+            r.statfuncs.add(m.group(1))
+            continue
         m = re.match(r'^PARAMETER\s*\((.*)\)$', t)
         if m:
             toks = tokenize(m.group(1))
@@ -418,6 +491,8 @@ def translate(path):
         if st[0] == 'S':
             for m in re.finditer(r'GO\s*TO\s+(\d+)', st[2]):
                 gotos.add(m.group(1))
+            for m in re.finditer(r'GO\s*TO\s*\(([\d,\s]+)\)', st[2]):
+                gotos.update(x.strip() for x in m.group(1).split(','))
     do_stack = []  # (label or None)
     started = False
     pending_comments = []
@@ -438,6 +513,9 @@ def translate(path):
             if not t.startswith(('REAL(', 'INTEGER(')):
                 continue
         if t == 'END':
+            continue
+        m = re.match(r'^(\w+)\s*\(', t)
+        if not started and m and m.group(1) in r.statfuncs:
             continue
         if not started:
             started = True
@@ -460,7 +538,8 @@ def translate(path):
                                (r.chars, 'char')):
                 names = sorted(n.lower() for n in group
                                if n not in r.arrays and n not in r.args and
-                               n not in r.params and n != r.name and n not in r.externals)
+                               n not in r.params and n != r.name and
+                               n not in r.externals and n not in r.statfuncs)
                 if names:
                     emit('%s %s;' % (typ, ', '.join(names)))
         stmt(label, t, r, emit, ind, do_stack, gotos)
@@ -527,9 +606,13 @@ def body(t, r, emit, ind, do_stack):
                 st = st.replace(' ', '')
                 inc = '--' + v if st == '-1' else v + ' -= ' + st[1:]
                 emit('for (%s = %s; %s >= %s; %s) {' % (v, lo, v, hi, inc))
-            else:
+            elif re.fullmatch(r'\d+', st):
                 emit('for (%s = %s; %s <= %s; %s += %s) {' % (v, lo, v, hi,
                                                             v, st))
+            else:
+                # A step whose sign is only known at run time.
+                emit('for (%s = %s; (%s) > 0 ? %s <= %s : %s >= %s; '
+                     '%s += %s) {' % (v, lo, st, v, hi, v, hi, v, st))
         else:
             emit('for (%s = %s; %s <= %s; ++%s) {' % (v, lo, v, hi, v))
         do_stack.append(lab)
@@ -567,6 +650,23 @@ def body(t, r, emit, ind, do_stack):
         return
     if t == 'RETURN':
         emit('return info;')
+        return
+    if t == 'CYCLE':
+        emit('continue;')
+        return
+    if t == 'EXIT':
+        emit('break;')
+        return
+    m = re.match(r'^GO\s*TO\s*\(([\d,\s]+)\)\s*,?\s*(.*)$', t)
+    if m:
+        # Computed GO TO: falls through if the index is out of range.
+        labels = [x.strip() for x in m.group(1).split(',')]
+        emit('switch (%s) {' % expr(tokenize(m.group(2)), r))
+        for k, lab in enumerate(labels):
+            emit('  case %d: goto L%s;' % (k + 1, lab))
+        emit('  default:  // Out of range: no jump.')
+        emit('    break;')
+        emit('}')
         return
     m = re.match(r'^CALL\s+(\w+)\s*\((.*)\)$', t)
     if m:
