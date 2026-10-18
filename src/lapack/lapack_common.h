@@ -88,6 +88,23 @@ constexpr char Prefix() {
   }
 }
 
+// The part of a routine name after the precision letter where the real and
+// the complex routine differ, e.g. RealOrComplex<T>("ORGQR", "UNGQR").
+template <typename T>
+constexpr const char* RealOrComplex(const char* real, const char* complex) {
+  return IsComplex<T>::value ? complex : real;
+}
+
+// The TRANS argument for (conjugate) transposition that the real and the
+// complex routines accept: 'T' or 'C'.
+template <typename T>
+constexpr char ConjTrans() {
+  return IsComplex<T>::value ? 'C' : 'T';
+}
+
+// LSAME(ca, cb): whether ca and cb are the same letter, ignoring case.
+inline bool Lsame(char ca, char cb) { return ToUpper(ca) == ToUpper(cb); }
+
 // A routine name such as "DGETRF": the precision letter of T and `rest`.
 class RoutineName {
  public:
@@ -152,6 +169,24 @@ R Lamch(char cmach) {
     default:
       return R(0);
   }
+}
+
+// WORK(1) = LWORK: a workspace size returned in the first element of a
+// workspace array of type T. In single precision (float and c32), the
+// routines use SROUNDUP_LWORK(LWORK), which rounds up so that the float
+// value is not smaller than LWORK (float has 24 mantissa bits). The ported
+// routines use this for every workspace size, also where a single-precision
+// routine of LAPACK 3.12.1 still returns REAL(LWORK), which can round down.
+template <typename T>
+T WorkSize(blasint lwork) {
+  using R = RealT<T>;
+  R size = static_cast<R>(lwork);
+  if constexpr (std::is_same_v<R, float>) {
+    if (static_cast<blasint>(size) < lwork) {
+      size = size * (1.0f + std::numeric_limits<float>::epsilon());
+    }
+  }
+  return T(size);
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@
 #include "hwyblas/lapack.h"
 #include "src/lapack/blas.h"
 #include "src/lapack/lapack_common.h"
+#include "src/lapack/lapack_routines.h"
 
 namespace hwyblas {
 namespace lapack {
@@ -263,6 +264,14 @@ blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
   }
   return info;
 }
+
+#define HWYBLAS_LAPACK_INSTANTIATE(T)                                  \
+  template void Laswp<T>(blasint, T*, blasint, blasint, blasint,       \
+                         const blasint*, blasint);                     \
+  template blasint Getrf2<T>(blasint, blasint, T*, blasint, blasint*); \
+  template blasint Getrf<T>(blasint, blasint, T*, blasint, blasint*);
+HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
+#undef HWYBLAS_LAPACK_INSTANTIATE
 
 }  // namespace lapack
 }  // namespace hwyblas

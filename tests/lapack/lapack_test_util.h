@@ -22,17 +22,20 @@ namespace hwyblas_test {
 constexpr double kLapackThreshold = 30.0;
 
 // Forces the block size (ILAENV ispec = 1) of all LAPACK routines while it
-// exists, so that small matrices exercise the blocked code paths. nb = 0
-// keeps ILAENV's choice.
+// exists, and the crossover point nx (ispec = 3) below which the blocked
+// routines use unblocked code, so that small matrices exercise the blocked
+// code paths. nb = 0 keeps ILAENV's choices.
 class ScopedBlockSize {
  public:
-  explicit ScopedBlockSize(hwyblas_int nb) {
+  explicit ScopedBlockSize(hwyblas_int nb, hwyblas_int nx = 0) {
     nb_ = nb;
+    nx_ = nx;
     previous_ = hwyblas_set_ilaenv(nb > 0 ? &Ilaenv : nullptr);
   }
   ~ScopedBlockSize() {
     hwyblas_set_ilaenv(previous_);
     nb_ = 0;
+    nx_ = 0;
   }
   ScopedBlockSize(const ScopedBlockSize&) = delete;
   ScopedBlockSize& operator=(const ScopedBlockSize&) = delete;
@@ -44,10 +47,12 @@ class ScopedBlockSize {
                             const hwyblas_int* n4, size_t name_len,
                             size_t opts_len) {
     if (*ispec == 1) return nb_;
+    if (*ispec == 3) return nx_;
     return ilaenv_(ispec, name, opts, n1, n2, n3, n4, name_len, opts_len);
   }
 
   static inline hwyblas_int nb_ = 0;
+  static inline hwyblas_int nx_ = 0;
   hwyblas_ilaenv_function previous_ = nullptr;
 };
 
@@ -100,6 +105,15 @@ std::string Name(const char* rest) {
   return std::string(1, prefix) + rest;
 }
 
+// The name of a LAPACKE function in its error messages, e.g.
+// LapackeName<double>("getrf_work") = "LAPACKE_dgetrf_work".
+template <typename T>
+std::string LapackeName(const char* rest) {
+  std::string name = Name<T>(rest);
+  name[0] = static_cast<char>(name[0] - 'A' + 'a');
+  return "LAPACKE_" + name;
+}
+
 // The 1-norm (maximum column sum) of a dense matrix.
 template <typename T>
 double Norm1(const Dense<T>& a) {
@@ -122,6 +136,81 @@ double Norm1(const std::vector<T>& x, size_t m, size_t n, size_t ld) {
     norm = std::max(norm, sum);
   }
   return norm;
+}
+
+// LAPACK's eps (xLAMCH('Epsilon')): the unit roundoff, half the machine
+// epsilon.
+template <typename T>
+double LapackEps() {
+  return Eps<T>() / 2;
+}
+
+// The m x n matrix a (leading dimension lda) in higher precision.
+template <typename T>
+Dense<T> ToDense(const std::vector<T>& a, size_t m, size_t n, size_t lda) {
+  Dense<T> d(m, n);
+  for (size_t j = 0; j < n; ++j) {
+    for (size_t i = 0; i < m; ++i)
+      d(i, j) = static_cast<RefT<T>>(At(a, i, j, lda));
+  }
+  return d;
+}
+
+template <typename T>
+Dense<T> Identity(size_t n) {
+  Dense<T> d(n, n);
+  for (size_t i = 0; i < n; ++i) d(i, i) = 1;
+  return d;
+}
+
+// a * b.
+template <typename T>
+Dense<T> Mul(const Dense<T>& a, const Dense<T>& b) {
+  Dense<T> c(a.rows, b.cols);
+  for (size_t j = 0; j < b.cols; ++j) {
+    for (size_t l = 0; l < a.cols; ++l) {
+      const RefT<T> blj = b(l, j);
+      for (size_t i = 0; i < a.rows; ++i) c(i, j) += a(i, l) * blj;
+    }
+  }
+  return c;
+}
+
+// a**H (a**T for real T).
+template <typename T>
+Dense<T> Adjoint(const Dense<T>& a) {
+  Dense<T> t(a.cols, a.rows);
+  for (size_t j = 0; j < a.cols; ++j) {
+    for (size_t i = 0; i < a.rows; ++i) t(j, i) = Conj(a(i, j));
+  }
+  return t;
+}
+
+// a - b.
+template <typename T>
+Dense<T> Sub(const Dense<T>& a, const Dense<T>& b) {
+  Dense<T> d(a.rows, a.cols);
+  for (size_t i = 0; i < d.v.size(); ++i) d.v[i] = a.v[i] - b.v[i];
+  return d;
+}
+
+// ||I - Q**H * Q||_1 / (n * eps) for the m x n matrix q: the orthogonality
+// ratio of LAPACK's test programs (e.g. xQRT01).
+template <typename T>
+double OrthogonalityRatio(const Dense<T>& q) {
+  const double resid = Norm1(Sub<T>(Identity<T>(q.cols), Mul(Adjoint(q), q)));
+  return resid / std::max<double>(1, static_cast<double>(q.rows)) /
+         LapackEps<T>();
+}
+
+// ||a - b||_1 / (scale * ||a||_1 * eps), or the residual ratio when a = 0.
+template <typename T>
+double ResidualRatio(const Dense<T>& a, const Dense<T>& b, double scale) {
+  const double anorm = Norm1(a);
+  const double resid = Norm1(Sub(a, b));
+  const double eps = LapackEps<T>();
+  if (anorm <= 0) return resid / eps;
+  return resid / std::max(1.0, scale) / anorm / eps;
 }
 
 }  // namespace hwyblas_test

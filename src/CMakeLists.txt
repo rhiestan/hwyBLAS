@@ -15,9 +15,14 @@ add_library(hwyblas::hwyblas ALIAS hwyblas)
 # LAPACK, ported from the reference implementation (see src/lapack/).
 if(HWYBLAS_LAPACK)
   target_sources(hwyblas PRIVATE
+    lapack/auxiliary.cc
     lapack/environment.cc
+    lapack/geqrf.cc
     lapack/getrf.cc
+    lapack/householder.cc
     lapack/lapacke.cc
+    lapack/potrf.cc
+    lapack/ungqr.cc
   )
 endif()
 

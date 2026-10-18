@@ -9,8 +9,9 @@
 // symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
-// (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf (its time
-// includes copying the input matrix, which it factors in place). A square
+// (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf
+// (their times include copying the input matrix, which they factor in
+// place). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -689,8 +690,6 @@ void BenchBandPacked(const Options& opt, const Libraries& libs) {
   }
 }
 
-// OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
-// G elements per second in the GFLOP/s columns.
 template <typename T>
 using GetrfFn = void (*)(const int*, const int*, T*, const int*, int*, int*);
 
@@ -726,6 +725,86 @@ void BenchGetrf(const Options& opt, const Libraries& libs) {
   }
 }
 
+template <typename T>
+using PotrfFn = void (*)(const char*, const int*, T*, const int*, int*);
+
+// Cholesky factorization of an n x n symmetric (Hermitian) positive definite
+// matrix (LAPACK), the triangle --uplo (default: L). Each call factors a
+// fresh copy of the same matrix.
+template <typename T>
+void BenchPotrf(const Options& opt, const Libraries& libs) {
+  const char uplo = opt.uplo;
+  const std::string symbol = Symbol<T>("potrf");
+  PrintHeader<T>(libs, symbol + "  uplo=" + uplo, "n");
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.n, lda = std::max(1, n);
+    // Random, with a dominant real diagonal: the Hermitian matrix of either
+    // triangle is positive definite.
+    auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * n, rng));
+    for (int j = 0; j < n; ++j) {
+      (*a)[j + static_cast<size_t>(j) * lda] = T(static_cast<float>(2 * n));
+    }
+
+    Case<T> c;
+    c.label = std::to_string(n);
+    // n^3 / 3 flops, about 4 times as many for complex numbers.
+    c.flops =
+        (kIsComplex<T> ? 4.0 : 1.0) * (static_cast<double>(n) * n * n / 3);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      int info = 0;
+      reinterpret_cast<PotrfFn<T>>(fn)(&uplo, &n, out, &lda, &info);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+template <typename T>
+using GeqrfFn = void (*)(const int*, const int*, T*, const int*, T*, T*,
+                         const int*, int*);
+
+// QR factorization of an m x n matrix (LAPACK), with a workspace that is
+// large enough for any block size up to 256. Each call factors a fresh copy
+// of the same random matrix.
+template <typename T>
+void BenchGeqrf(const Options& opt, const Libraries& libs) {
+  const std::string symbol = Symbol<T>("geqrf");
+  PrintHeader<T>(libs, symbol, "m x n");
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int lda = std::max(1, s.m);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * s.n, rng));
+    const int lwork = 256 * std::max(1, s.n);
+    const auto tau =
+        std::make_shared<std::vector<T>>(std::max(1, std::min(s.m, s.n)));
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+
+    Case<T> c;
+    c.label = std::to_string(s.m) + " x " + std::to_string(s.n);
+    // 2 m n^2 - 2 n^3 / 3 flops for m >= n (m and n swapped otherwise),
+    // about 4 times as many for complex numbers.
+    const double lo = std::min(s.m, s.n), hi = std::max(s.m, s.n);
+    c.flops =
+        (kIsComplex<T> ? 4.0 : 1.0) * (2 * hi * lo * lo - 2 * lo * lo * lo / 3);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      int info = 0;
+      reinterpret_cast<GeqrfFn<T>>(fn)(&s.m, &s.n, out, &lda, tau->data(),
+                                       work->data(), &lwork, &info);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+// OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
+// G elements per second in the GFLOP/s columns.
 template <typename T>
 void BenchOmatcopy(const Options& opt, const Libraries& libs) {
   const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
@@ -901,6 +980,10 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchOmatcopy<T>(opt, libs);
   } else if (opt.routine == "getrf") {
     BenchGetrf<T>(opt, libs);
+  } else if (opt.routine == "potrf") {
+    BenchPotrf<T>(opt, libs);
+  } else if (opt.routine == "geqrf") {
+    BenchGeqrf<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

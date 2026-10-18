@@ -305,10 +305,10 @@ TYPED_TEST(GetrfTest, LapackeErrors) {
       LapackeGetrf<T>(true, LAPACK_ROW_MAJOR, 4, 4, a.data(), 3, ipiv.data()),
       -5);
   const std::string out = ::testing::internal::GetCapturedStdout();
-  const std::string prefix = "LAPACKE_" + Name<T>("GETRF");
+  const std::string prefix = LapackeName<T>("getrf");
   EXPECT_EQ(out, "Wrong parameter 1 in " + prefix + "\nWrong parameter 1 in " +
-                     prefix + "_WORK\nWrong parameter 5 in " + prefix +
-                     "_WORK\n");
+                     prefix + "_work\nWrong parameter 5 in " + prefix +
+                     "_work\n");
   {
     ErrorCapture errors;
     EXPECT_EQ(LapackeGetrf<T>(true, LAPACK_COL_MAJOR, -1, 4, a.data(), 4,
