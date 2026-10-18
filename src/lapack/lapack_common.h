@@ -19,6 +19,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -170,6 +171,47 @@ R Lamch(char cmach) {
       return R(0);
   }
 }
+
+// The constants of LAPACK's LA_CONSTANTS module (la_constants.f90) for the
+// real type R, used by the Fortran 90 routines (xLASSQ, xLARTG): Blue's
+// scaling constants for sums of squares without overflow and underflow
+// (tsml, tbig, ssml, sbig), and the safe minimum.
+template <typename R>
+struct LaConstants {
+  using Limits = std::numeric_limits<R>;
+
+  // floor(a / 2) and ceil(a / 2), also for negative a.
+  static constexpr int FloorHalf(int a) {
+    return a >= 0 ? a / 2 : -((1 - a) / 2);
+  }
+  static constexpr int CeilHalf(int a) { return -FloorHalf(-a); }
+
+  // radix**ceiling((minexponent - 1) / 2): values below are squared with
+  // scaling up (by ssml).
+  static R tsml() {
+    return std::ldexp(R(1), CeilHalf(Limits::min_exponent - 1));
+  }
+  // radix**floor((maxexponent - digits + 1) / 2): values above are squared
+  // with scaling down (by sbig).
+  static R tbig() {
+    return std::ldexp(R(1),
+                      FloorHalf(Limits::max_exponent - Limits::digits + 1));
+  }
+  // radix**(-floor((minexponent - digits) / 2)).
+  static R ssml() {
+    return std::ldexp(R(1), -FloorHalf(Limits::min_exponent - Limits::digits));
+  }
+  // radix**(-ceiling((maxexponent + digits - 1) / 2)).
+  static R sbig() {
+    return std::ldexp(R(1),
+                      -CeilHalf(Limits::max_exponent + Limits::digits - 1));
+  }
+  // radix**max(minexponent - 1, 1 - maxexponent).
+  static R safmin() {
+    return std::ldexp(
+        R(1), std::max(Limits::min_exponent - 1, 1 - Limits::max_exponent));
+  }
+};
 
 // WORK(1) = LWORK: a workspace size returned in the first element of a
 // workspace array of type T. In single precision (float and c32), the

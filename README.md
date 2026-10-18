@@ -69,10 +69,13 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?getrf`, `?getrf2`, `?laswp` (LU factorization) | s d c z |
 | `?potrf`, `?potrf2` (Cholesky factorization) | s d c z |
 | `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |
+| `?geqp3`, `?laqps`, `?laqp2` (QR factorization with column pivoting) | s d c z |
 | `?orgqr`, `?org2r`, `?orglq`, `?orgl2`, `?ormqr`, `?orm2r`, `?ormlq`, `?orml2` (Q of QR / LQ) | s d |
 | `?ungqr`, `?ung2r`, `?unglq`, `?ungl2`, `?unmqr`, `?unm2r`, `?unmlq`, `?unml2` | c z |
 | `?larfg`, `?larf`, `?larf1f`, `?larf1l`, `?larft`, `?larfb` (Householder reflectors) | s d c z |
-| `?lacpy`, `ila?lc`, `ila?lr` | s d c z |
+| `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
+| `?lanhe` | c z |
+| `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |
 | `?lacgv` | c z |
 | `?lapy2`, `?lapy3`, `?ladiv` | s d |
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |

@@ -17,10 +17,12 @@ if(HWYBLAS_LAPACK)
   target_sources(hwyblas PRIVATE
     lapack/auxiliary.cc
     lapack/environment.cc
+    lapack/geqp3.cc
     lapack/geqrf.cc
     lapack/getrf.cc
     lapack/householder.cc
     lapack/lapacke.cc
+    lapack/norms.cc
     lapack/potrf.cc
     lapack/ungqr.cc
   )

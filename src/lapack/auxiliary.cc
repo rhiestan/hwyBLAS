@@ -1,5 +1,5 @@
 // LAPACK's auxiliary routines for vectors and matrices: xLACGV, xLACPY,
-// xLAPY2, xLAPY3, xLADIV, ILAxLC and ILAxLR.
+// xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC and ILAxLR.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -231,12 +231,209 @@ blasint Ilalr(blasint m, blasint n, const T* a, blasint lda) {
   return ilalr;
 }
 
+// xLASET: sets the off-diagonal elements of the M-by-N matrix A to ALPHA
+// and its diagonal to BETA: of the strictly upper triangle (UPLO = 'U'),
+// the strictly lower triangle (UPLO = 'L') or all of A (otherwise).
+template <typename T>
+void Laset(char uplo, blasint m, blasint n, T alpha, T beta, T* a,
+           blasint lda) {
+  const Matrix<T> A(a, lda);
+  if (Lsame(uplo, 'U')) {
+    // Set the strictly upper triangular or trapezoidal part of the array
+    // to ALPHA.
+    for (blasint j = 2; j <= n; ++j) {
+      for (blasint i = 1; i <= std::min(j - 1, m); ++i) A(i, j) = alpha;
+    }
+  } else if (Lsame(uplo, 'L')) {
+    // Set the strictly lower triangular or trapezoidal part of the array
+    // to ALPHA.
+    for (blasint j = 1; j <= std::min(m, n); ++j) {
+      for (blasint i = j + 1; i <= m; ++i) A(i, j) = alpha;
+    }
+  } else {
+    // Set the leading m-by-n submatrix to ALPHA.
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = 1; i <= m; ++i) A(i, j) = alpha;
+    }
+  }
+  // Set the first min(M,N) diagonal elements to BETA.
+  for (blasint i = 1; i <= std::min(m, n); ++i) A(i, i) = beta;
+}
+
+// xLASCL: multiplies the M-by-N matrix A by the real scalar CTO/CFROM,
+// without over- or underflow if the final result CTO*A(I,J)/CFROM can be
+// represented: in steps of factors that are safe (powers of the safe
+// minimum, then the rest). TYPE selects the storage of A:
+//   'G' full matrix, 'L' lower triangular, 'U' upper triangular,
+//   'H' upper Hessenberg,
+//   'B' lower half of a symmetric band matrix (lower bandwidth KL),
+//   'Q' upper half of a symmetric band matrix (upper bandwidth KU),
+//   'Z' band matrix with bandwidths KL, KU, in the storage of xGBTRF.
+// Returns INFO (0, or -i for an illegal argument i).
+template <typename T>
+blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
+              blasint m, blasint n, T* a, blasint lda) {
+  using R = RealT<T>;
+  const R zero = R(0), one = R(1);
+  const Matrix<T> A(a, lda);
+
+  // Test the input arguments.
+  blasint info = 0;
+  blasint itype;
+  if (Lsame(type, 'G')) {
+    itype = 0;
+  } else if (Lsame(type, 'L')) {
+    itype = 1;
+  } else if (Lsame(type, 'U')) {
+    itype = 2;
+  } else if (Lsame(type, 'H')) {
+    itype = 3;
+  } else if (Lsame(type, 'B')) {
+    itype = 4;
+  } else if (Lsame(type, 'Q')) {
+    itype = 5;
+  } else if (Lsame(type, 'Z')) {
+    itype = 6;
+  } else {
+    itype = -1;
+  }
+
+  if (itype == -1) {
+    info = -1;
+  } else if (cfrom == zero || std::isnan(cfrom)) {
+    info = -4;
+  } else if (std::isnan(cto)) {
+    info = -5;
+  } else if (m < 0) {
+    info = -6;
+  } else if (n < 0 || (itype == 4 && n != m) || (itype == 5 && n != m)) {
+    info = -7;
+  } else if (itype <= 3 && lda < std::max<blasint>(1, m)) {
+    info = -9;
+  } else if (itype >= 4) {
+    if (kl < 0 || kl > std::max<blasint>(m - 1, 0)) {
+      info = -2;
+    } else if (ku < 0 || ku > std::max<blasint>(n - 1, 0) ||
+               ((itype == 4 || itype == 5) && kl != ku)) {
+      info = -3;
+    } else if ((itype == 4 && lda < kl + 1) || (itype == 5 && lda < ku + 1) ||
+               (itype == 6 && lda < 2 * kl + ku + 1)) {
+      info = -9;
+    }
+  }
+
+  if (info != 0) {
+    Xerbla<T>("LASCL", -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0 || m == 0) return info;
+
+  // Get machine parameters.
+  const R smlnum = Lamch<R>('S');
+  const R bignum = one / smlnum;
+
+  R cfromc = cfrom;
+  R ctoc = cto;
+
+  bool done = false;
+  while (!done) {
+    const R cfrom1 = cfromc * smlnum;
+    R mul;
+    if (cfrom1 == cfromc) {
+      // CFROMC is an inf. Multiply by a correctly signed zero for finite
+      // CTOC, or a NaN if CTOC is infinite.
+      mul = ctoc / cfromc;
+      done = true;
+    } else {
+      const R cto1 = ctoc / bignum;
+      if (cto1 == ctoc) {
+        // CTOC is either 0 or an inf. In both cases, CTOC itself serves as
+        // the correct multiplication factor.
+        mul = ctoc;
+        done = true;
+        cfromc = one;
+      } else if (std::abs(cfrom1) > std::abs(ctoc) && ctoc != zero) {
+        mul = smlnum;
+        done = false;
+        cfromc = cfrom1;
+      } else if (std::abs(cto1) > std::abs(cfromc)) {
+        mul = bignum;
+        done = false;
+        ctoc = cto1;
+      } else {
+        mul = ctoc / cfromc;
+        done = true;
+        if (mul == one) return info;
+      }
+    }
+
+    if (itype == 0) {
+      // Full matrix.
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = 1; i <= m; ++i) A(i, j) = A(i, j) * mul;
+      }
+    } else if (itype == 1) {
+      // Lower triangular matrix.
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = j; i <= m; ++i) A(i, j) = A(i, j) * mul;
+      }
+    } else if (itype == 2) {
+      // Upper triangular matrix.
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = 1; i <= std::min(j, m); ++i) A(i, j) = A(i, j) * mul;
+      }
+    } else if (itype == 3) {
+      // Upper Hessenberg matrix.
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = 1; i <= std::min(j + 1, m); ++i) {
+          A(i, j) = A(i, j) * mul;
+        }
+      }
+    } else if (itype == 4) {
+      // Lower half of a symmetric band matrix.
+      const blasint k3 = kl + 1;
+      const blasint k4 = n + 1;
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = 1; i <= std::min(k3, k4 - j); ++i) {
+          A(i, j) = A(i, j) * mul;
+        }
+      }
+    } else if (itype == 5) {
+      // Upper half of a symmetric band matrix.
+      const blasint k1 = ku + 2;
+      const blasint k3 = ku + 1;
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = std::max<blasint>(k1 - j, 1); i <= k3; ++i) {
+          A(i, j) = A(i, j) * mul;
+        }
+      }
+    } else if (itype == 6) {
+      // Band matrix.
+      const blasint k1 = kl + ku + 2;
+      const blasint k2 = kl + 1;
+      const blasint k3 = 2 * kl + ku + 1;
+      const blasint k4 = kl + ku + 1 + m;
+      for (blasint j = 1; j <= n; ++j) {
+        for (blasint i = std::max(k1 - j, k2); i <= std::min(k3, k4 - j); ++i) {
+          A(i, j) = A(i, j) * mul;
+        }
+      }
+    }
+  }
+  return info;
+}
+
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                   \
   template void Lacgv<T>(blasint, T*, blasint);                         \
   template void Lacpy<T>(char, blasint, blasint, const T*, blasint, T*, \
                          blasint);                                      \
   template blasint Ilalc<T>(blasint, blasint, const T*, blasint);       \
-  template blasint Ilalr<T>(blasint, blasint, const T*, blasint);
+  template blasint Ilalr<T>(blasint, blasint, const T*, blasint);       \
+  template void Laset<T>(char, blasint, blasint, T, T, T*, blasint);    \
+  template blasint Lascl<T>(char, blasint, blasint, RealT<T>, RealT<T>, \
+                            blasint, blasint, T*, blasint);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
@@ -267,22 +464,35 @@ HWYBLAS_API void zlacgv_(const hwyblas_int* n, double* x,
   hwyblas::lapack::Lacgv(*n, As<c64>(x), *incx);
 }
 
-#define HWYBLAS_LAPACK_AUXILIARY(prefix, T, R)                               \
-  HWYBLAS_API void prefix##lacpy_(                                           \
-      const char* uplo, const hwyblas_int* m, const hwyblas_int* n,          \
-      const R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb) {    \
-    hwyblas::lapack::Lacpy(*uplo, *m, *n, As<const T>(a), *lda, As<T>(b),    \
-                           *ldb);                                            \
-  }                                                                          \
-  HWYBLAS_API hwyblas_int ila##prefix##lc_(const hwyblas_int* m,             \
-                                           const hwyblas_int* n, const R* a, \
-                                           const hwyblas_int* lda) {         \
-    return hwyblas::lapack::Ilalc(*m, *n, As<const T>(a), *lda);             \
-  }                                                                          \
-  HWYBLAS_API hwyblas_int ila##prefix##lr_(const hwyblas_int* m,             \
-                                           const hwyblas_int* n, const R* a, \
-                                           const hwyblas_int* lda) {         \
-    return hwyblas::lapack::Ilalr(*m, *n, As<const T>(a), *lda);             \
+#define HWYBLAS_LAPACK_AUXILIARY(prefix, T, R)                                 \
+  HWYBLAS_API void prefix##laset_(                                             \
+      const char* uplo, const hwyblas_int* m, const hwyblas_int* n,            \
+      const R* alpha, const R* beta, R* a, const hwyblas_int* lda) {           \
+    hwyblas::lapack::Laset(*uplo, *m, *n, *As<const T>(alpha),                 \
+                           *As<const T>(beta), As<T>(a), *lda);                \
+  }                                                                            \
+  HWYBLAS_API void prefix##lascl_(                                             \
+      const char* type, const hwyblas_int* kl, const hwyblas_int* ku,          \
+      const R* cfrom, const R* cto, const hwyblas_int* m,                      \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda, hwyblas_int* info) { \
+    *info = hwyblas::lapack::Lascl(*type, *kl, *ku, *cfrom, *cto, *m, *n,      \
+                                   As<T>(a), *lda);                            \
+  }                                                                            \
+  HWYBLAS_API void prefix##lacpy_(                                             \
+      const char* uplo, const hwyblas_int* m, const hwyblas_int* n,            \
+      const R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb) {      \
+    hwyblas::lapack::Lacpy(*uplo, *m, *n, As<const T>(a), *lda, As<T>(b),      \
+                           *ldb);                                              \
+  }                                                                            \
+  HWYBLAS_API hwyblas_int ila##prefix##lc_(const hwyblas_int* m,               \
+                                           const hwyblas_int* n, const R* a,   \
+                                           const hwyblas_int* lda) {           \
+    return hwyblas::lapack::Ilalc(*m, *n, As<const T>(a), *lda);               \
+  }                                                                            \
+  HWYBLAS_API hwyblas_int ila##prefix##lr_(const hwyblas_int* m,               \
+                                           const hwyblas_int* n, const R* a,   \
+                                           const hwyblas_int* lda) {           \
+    return hwyblas::lapack::Ilalr(*m, *n, As<const T>(a), *lda);               \
   }
 
 HWYBLAS_LAPACK_AUXILIARY(s, float, float)

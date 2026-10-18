@@ -3,6 +3,9 @@
 #  - readability-suspicious-call-argument: LAPACK passes its matrices to the
 #    BLAS and to other routines in roles with other names (e.g. its C, LDC
 #    as A, LDA of xGEMM), which this check reports as swapped arguments.
+#  - misc-confusable-identifiers: the ports keep LAPACK's names, which
+#    include pairs such as K1 and KL.
 InheritParentConfig: true
 Checks: >
-  -readability-suspicious-call-argument
+  -readability-suspicious-call-argument,
+  -misc-confusable-identifiers

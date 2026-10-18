@@ -9,8 +9,8 @@
 // symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
-// (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf
-// (their times include copying the input matrix, which they factor in
+// (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf,
+// geqp3 (their times include copying the input matrix, which they factor in
 // place). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
@@ -745,7 +745,8 @@ void BenchPotrf(const Options& opt, const Libraries& libs) {
     auto a = std::make_shared<std::vector<T>>(
         RandomVector<T>(static_cast<size_t>(lda) * n, rng));
     for (int j = 0; j < n; ++j) {
-      (*a)[j + static_cast<size_t>(j) * lda] = T(static_cast<float>(2 * n));
+      (*a)[j + static_cast<size_t>(j) * lda] =
+          T(static_cast<typename RealType<T>::type>(2 * n));
     }
 
     Case<T> c;
@@ -798,6 +799,61 @@ void BenchGeqrf(const Options& opt, const Libraries& libs) {
       int info = 0;
       reinterpret_cast<GeqrfFn<T>>(fn)(&s.m, &s.n, out, &lda, tau->data(),
                                        work->data(), &lwork, &info);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+// xGEQP3: the real routines without RWORK, the complex ones with it.
+template <typename T>
+using Geqp3RealFn = void (*)(const int*, const int*, T*, const int*, int*, T*,
+                             T*, const int*, int*);
+template <typename T>
+using Geqp3ComplexFn = void (*)(const int*, const int*, T*, const int*, int*,
+                                T*, T*, const int*, typename RealType<T>::type*,
+                                int*);
+
+// QR factorization with column pivoting of an m x n matrix (LAPACK), with
+// all columns free; the flops are counted as for geqrf. Each call factors a
+// fresh copy of the same random matrix.
+template <typename T>
+void BenchGeqp3(const Options& opt, const Libraries& libs) {
+  const std::string symbol = Symbol<T>("geqp3");
+  PrintHeader<T>(libs, symbol, "m x n");
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int lda = std::max(1, s.m);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * s.n, rng));
+    const int lwork = 256 * (std::max(1, s.n) + 1) + 2 * s.n;
+    const auto tau =
+        std::make_shared<std::vector<T>>(std::max(1, std::min(s.m, s.n)));
+    const auto jpvt = std::make_shared<std::vector<int>>(std::max(1, s.n));
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+    const auto rwork =
+        std::make_shared<std::vector<typename RealType<T>::type>>(
+            2 * std::max(1, s.n));
+
+    Case<T> c;
+    c.label = std::to_string(s.m) + " x " + std::to_string(s.n);
+    const double lo = std::min(s.m, s.n), hi = std::max(s.m, s.n);
+    c.flops =
+        (kIsComplex<T> ? 4.0 : 1.0) * (2 * hi * lo * lo - 2 * lo * lo * lo / 3);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      std::fill(jpvt->begin(), jpvt->end(), 0);
+      int info = 0;
+      if constexpr (kIsComplex<T>) {
+        reinterpret_cast<Geqp3ComplexFn<T>>(fn)(
+            &s.m, &s.n, out, &lda, jpvt->data(), tau->data(), work->data(),
+            &lwork, rwork->data(), &info);
+      } else {
+        reinterpret_cast<Geqp3RealFn<T>>(fn)(&s.m, &s.n, out, &lda,
+                                             jpvt->data(), tau->data(),
+                                             work->data(), &lwork, &info);
+      }
     };
     RunCase(opt, libs, symbol, c);
   }
@@ -984,6 +1040,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchPotrf<T>(opt, libs);
   } else if (opt.routine == "geqrf") {
     BenchGeqrf<T>(opt, libs);
+  } else if (opt.routine == "geqp3") {
+    BenchGeqp3<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

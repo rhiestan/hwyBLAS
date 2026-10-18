@@ -571,6 +571,159 @@ HWYBLAS_API void zunml2_(const char* side, const char* trans,
                          const hwyblas_int* ldc, double* work,
                          hwyblas_int* info);
 
+/* ------------------------------------------------------------------------ */
+/* Norms and scaling                                                        */
+
+/* Norms of matrices: norm = 'M' (max |a(i, j)|), '1' or 'O' (maximum
+ * column sum), 'I' (maximum row sum), 'F' or 'E' (Frobenius). ?lange:
+ * m x n general A (work: m elements, for 'I'); ?lansy: symmetric, ?lanhe:
+ * Hermitian A of order n, triangle uplo (work: n elements, for 'I', 'O',
+ * '1'). */
+HWYBLAS_API float slange_(const char* norm, const hwyblas_int* m,
+                          const hwyblas_int* n, const float* a,
+                          const hwyblas_int* lda, float* work);
+HWYBLAS_API double dlange_(const char* norm, const hwyblas_int* m,
+                           const hwyblas_int* n, const double* a,
+                           const hwyblas_int* lda, double* work);
+HWYBLAS_API float clange_(const char* norm, const hwyblas_int* m,
+                          const hwyblas_int* n, const float* a,
+                          const hwyblas_int* lda, float* work);
+HWYBLAS_API double zlange_(const char* norm, const hwyblas_int* m,
+                           const hwyblas_int* n, const double* a,
+                           const hwyblas_int* lda, double* work);
+HWYBLAS_API float slansy_(const char* norm, const char* uplo,
+                          const hwyblas_int* n, const float* a,
+                          const hwyblas_int* lda, float* work);
+HWYBLAS_API double dlansy_(const char* norm, const char* uplo,
+                           const hwyblas_int* n, const double* a,
+                           const hwyblas_int* lda, double* work);
+HWYBLAS_API float clansy_(const char* norm, const char* uplo,
+                          const hwyblas_int* n, const float* a,
+                          const hwyblas_int* lda, float* work);
+HWYBLAS_API double zlansy_(const char* norm, const char* uplo,
+                           const hwyblas_int* n, const double* a,
+                           const hwyblas_int* lda, double* work);
+HWYBLAS_API float clanhe_(const char* norm, const char* uplo,
+                          const hwyblas_int* n, const float* a,
+                          const hwyblas_int* lda, float* work);
+HWYBLAS_API double zlanhe_(const char* norm, const char* uplo,
+                           const hwyblas_int* n, const double* a,
+                           const hwyblas_int* lda, double* work);
+
+/* Updates scale and sumsq so that scale^2 * sumsq = sum |x(i)|^2 + (the
+ * previous scale^2 * sumsq), without unnecessary overflow and underflow. */
+HWYBLAS_API void slassq_(const hwyblas_int* n, const float* x,
+                         const hwyblas_int* incx, float* scale, float* sumsq);
+HWYBLAS_API void dlassq_(const hwyblas_int* n, const double* x,
+                         const hwyblas_int* incx, double* scale, double* sumsq);
+HWYBLAS_API void classq_(const hwyblas_int* n, const float* x,
+                         const hwyblas_int* incx, float* scale, float* sumsq);
+HWYBLAS_API void zlassq_(const hwyblas_int* n, const double* x,
+                         const hwyblas_int* incx, double* scale, double* sumsq);
+
+/* A := A * (cto / cfrom) without over- or underflow; type = 'G' (full),
+ * 'L' / 'U' (triangle), 'H' (upper Hessenberg), 'B' / 'Q' (lower / upper
+ * half of a symmetric band matrix), 'Z' (band matrix of ?gbtrf). */
+HWYBLAS_API void slascl_(const char* type, const hwyblas_int* kl,
+                         const hwyblas_int* ku, const float* cfrom,
+                         const float* cto, const hwyblas_int* m,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void dlascl_(const char* type, const hwyblas_int* kl,
+                         const hwyblas_int* ku, const double* cfrom,
+                         const double* cto, const hwyblas_int* m,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void clascl_(const char* type, const hwyblas_int* kl,
+                         const hwyblas_int* ku, const float* cfrom,
+                         const float* cto, const hwyblas_int* m,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void zlascl_(const char* type, const hwyblas_int* kl,
+                         const hwyblas_int* ku, const double* cfrom,
+                         const double* cto, const hwyblas_int* m,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+
+/* Sets the off-diagonal elements of A (the strictly upper ('U') or lower
+ * ('L') triangle, or all) to alpha and the diagonal to beta. */
+HWYBLAS_API void slaset_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const float* alpha,
+                         const float* beta, float* a, const hwyblas_int* lda);
+HWYBLAS_API void dlaset_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const double* alpha,
+                         const double* beta, double* a, const hwyblas_int* lda);
+HWYBLAS_API void claset_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const float* alpha,
+                         const float* beta, float* a, const hwyblas_int* lda);
+HWYBLAS_API void zlaset_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const double* alpha,
+                         const double* beta, double* a, const hwyblas_int* lda);
+
+/* ------------------------------------------------------------------------ */
+/* QR factorization with column pivoting                                    */
+
+/* A * P = Q * R. On entry, jpvt(j) != 0 makes column j a leading column
+ * (moved to the front), 0 a free one; on exit, jpvt(j) = k if column j
+ * of A * P was column k of A. lwork >= 3 * n + 1 (real) or n + 1
+ * (complex), or -1 for a workspace query; rwork has 2 * n elements.
+ * ?laqps (returning kb columns factored) and ?laqp2 factor a block
+ * of columns. */
+HWYBLAS_API void sgeqp3_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, float* tau,
+                         float* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dgeqp3_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, double* tau,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgeqp3_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, float* tau,
+                         float* work, const hwyblas_int* lwork, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zgeqp3_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, double* tau,
+                         double* work, const hwyblas_int* lwork, double* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void slaqps_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, const hwyblas_int* nb,
+                         hwyblas_int* kb, float* a, const hwyblas_int* lda,
+                         hwyblas_int* jpvt, float* tau, float* vn1, float* vn2,
+                         float* auxv, float* f, const hwyblas_int* ldf);
+HWYBLAS_API void dlaqps_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, const hwyblas_int* nb,
+                         hwyblas_int* kb, double* a, const hwyblas_int* lda,
+                         hwyblas_int* jpvt, double* tau, double* vn1,
+                         double* vn2, double* auxv, double* f,
+                         const hwyblas_int* ldf);
+HWYBLAS_API void slaqp2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, float* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, float* tau,
+                         float* vn1, float* vn2, float* work);
+HWYBLAS_API void dlaqp2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, double* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, double* tau,
+                         double* vn1, double* vn2, double* work);
+HWYBLAS_API void claqps_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, const hwyblas_int* nb,
+                         hwyblas_int* kb, float* a, const hwyblas_int* lda,
+                         hwyblas_int* jpvt, float* tau, float* vn1, float* vn2,
+                         float* auxv, float* f, const hwyblas_int* ldf);
+HWYBLAS_API void zlaqps_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, const hwyblas_int* nb,
+                         hwyblas_int* kb, double* a, const hwyblas_int* lda,
+                         hwyblas_int* jpvt, double* tau, double* vn1,
+                         double* vn2, double* auxv, double* f,
+                         const hwyblas_int* ldf);
+HWYBLAS_API void claqp2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, float* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, float* tau,
+                         float* vn1, float* vn2, float* work);
+HWYBLAS_API void zlaqp2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* offset, double* a,
+                         const hwyblas_int* lda, hwyblas_int* jpvt, double* tau,
+                         double* vn1, double* vn2, double* work);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

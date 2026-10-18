@@ -55,6 +55,15 @@ void Ladiv(R a, R b, R c, R d, R* p, R* q);
 template <typename T>
 T Ladiv(T x, T y);
 
+// xLASET: off-diagonal elements alpha and diagonal beta.
+template <typename T>
+void Laset(char uplo, blasint m, blasint n, T alpha, T beta, T* a, blasint lda);
+
+// xLASCL: A := A * (cto / cfrom), safely.
+template <typename T>
+blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
+              blasint m, blasint n, T* a, blasint lda);
+
 // ILAxLC: the last non-zero column of A, or 0 if A is zero.
 template <typename T>
 blasint Ilalc(blasint m, blasint n, const T* a, blasint lda);
@@ -62,6 +71,26 @@ blasint Ilalc(blasint m, blasint n, const T* a, blasint lda);
 // ILAxLR: the last non-zero row of A, or 0 if A is zero.
 template <typename T>
 blasint Ilalr(blasint m, blasint n, const T* a, blasint lda);
+
+// ---------------------------------------------------------------------------
+// Norms (norms.cc)
+
+template <typename T>
+void Lassq(blasint n, const T* x, blasint incx, RealT<T>* scale,
+           RealT<T>* sumsq);
+
+template <typename T>
+RealT<T> Lange(char norm, blasint m, blasint n, const T* a, blasint lda,
+               RealT<T>* work);
+
+template <typename T>
+RealT<T> Lansy(char norm, char uplo, blasint n, const T* a, blasint lda,
+               RealT<T>* work);
+
+// Complex T only.
+template <typename T>
+RealT<T> Lanhe(char norm, char uplo, blasint n, const T* a, blasint lda,
+               RealT<T>* work);
 
 // ---------------------------------------------------------------------------
 // Householder reflectors (householder.cc)
@@ -128,6 +157,24 @@ blasint Gelq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
 template <typename T>
 blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
               blasint lwork);
+
+// ---------------------------------------------------------------------------
+// QR factorization with column pivoting (geqp3.cc)
+
+template <typename T>
+void Laqp2(blasint m, blasint n, blasint offset, T* a, blasint lda,
+           blasint* jpvt, T* tau, RealT<T>* vn1, RealT<T>* vn2, T* work);
+
+// Returns KB, the number of columns factored.
+template <typename T>
+blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
+              blasint lda, blasint* jpvt, T* tau, RealT<T>* vn1, RealT<T>* vn2,
+              T* auxv, T* f, blasint ldf);
+
+// rwork (2 * n elements) is used for complex T only.
+template <typename T>
+blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
+              T* work, blasint lwork, RealT<T>* rwork);
 
 // ---------------------------------------------------------------------------
 // Orthogonal / unitary matrices from QR and LQ factorizations (ungqr.cc)
