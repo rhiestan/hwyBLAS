@@ -15,6 +15,7 @@ option(HWYBLAS_BUILD_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(HWYBLAS_BUILD_BENCH "Build the benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(BUILD_SHARED_LIBS "Build hwyblas as a shared library" ON)
 option(HWYBLAS_INSTALL "Generate the install target" ${PROJECT_IS_TOP_LEVEL})
+option(HWYBLAS_LAPACK "Include the LAPACK routines (and LAPACKE)" ON)
 option(HWYBLAS_CLANG_TIDY "Run clang-tidy (checks in .clang-tidy) while compiling"
        OFF)
 
@@ -112,6 +113,10 @@ if(HWYBLAS_INSTALL)
   install(DIRECTORY include/hwyblas
           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
   install(FILES LICENSE DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/hwyblas")
+  if(HWYBLAS_LAPACK)
+    install(FILES LICENSE-LAPACK
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/hwyblas")
+  endif()
 
   # A shared hwyblas contains Highway. A static one needs it at link time:
   # either the installed Highway package it was built against, or the

@@ -12,6 +12,15 @@ add_library(hwyblas
 )
 add_library(hwyblas::hwyblas ALIAS hwyblas)
 
+# LAPACK, ported from the reference implementation (see src/lapack/).
+if(HWYBLAS_LAPACK)
+  target_sources(hwyblas PRIVATE
+    lapack/environment.cc
+    lapack/getrf.cc
+    lapack/lapacke.cc
+  )
+endif()
+
 target_include_directories(hwyblas
   PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>

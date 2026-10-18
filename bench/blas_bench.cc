@@ -9,8 +9,9 @@
 // symv (hemv for complex), trmv, trsv, ger (geru for complex), syr (her),
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
-// (dotu for complex), nrm2, asum, iamax, rot. A square size n means
-// m = n = k; for syrk, C is m x m and A is m x k.
+// (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf (its time
+// includes copying the input matrix, which it factors in place). A square
+// size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
 //   --types=sdcz        precisions to run (default: d)
@@ -25,7 +26,7 @@
 //   --band=K            banded routines: K off-diagonals (gbmv: kl = ku = K;
 //                       default: n - 1, i.e. a full band)
 //
-// hwyBLAS from the benchmark's own directory is always included first.
+// hwyBLAS (the library built with the benchmark) is always included first.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -691,6 +692,41 @@ void BenchBandPacked(const Options& opt, const Libraries& libs) {
 // OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
 // G elements per second in the GFLOP/s columns.
 template <typename T>
+using GetrfFn = void (*)(const int*, const int*, T*, const int*, int*, int*);
+
+// LU factorization of an m x n matrix (LAPACK). Each call factors a fresh
+// copy of the same random matrix.
+template <typename T>
+void BenchGetrf(const Options& opt, const Libraries& libs) {
+  const std::string symbol = Symbol<T>("getrf");
+  PrintHeader<T>(libs, symbol, "m x n");
+
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int lda = std::max(1, s.m);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * s.n, rng));
+    const auto ipiv =
+        std::make_shared<std::vector<int>>(std::max(1, std::min(s.m, s.n)));
+
+    Case<T> c;
+    c.label = std::to_string(s.m) + " x " + std::to_string(s.n);
+    // m n^2 - n^3 / 3 multiply-adds for m >= n (m and n swapped otherwise),
+    // about 4 times as many flops for complex numbers.
+    const double lo = std::min(s.m, s.n), hi = std::max(s.m, s.n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * (hi * lo * lo - lo * lo * lo / 3);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      int info = 0;
+      reinterpret_cast<GetrfFn<T>>(fn)(&s.m, &s.n, out, &lda, ipiv->data(),
+                                       &info);
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
+template <typename T>
 void BenchOmatcopy(const Options& opt, const Libraries& libs) {
   const char trans = opt.trans.empty() ? 'N' : opt.trans[0];
   const std::string symbol = Symbol<T>("omatcopy");
@@ -863,6 +899,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchRankUpdate<T>(opt, libs);
   } else if (opt.routine == "omatcopy") {
     BenchOmatcopy<T>(opt, libs);
+  } else if (opt.routine == "getrf") {
+    BenchGetrf<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

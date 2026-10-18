@@ -53,6 +53,27 @@ in OpenBLAS:
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
+### LAPACK (in progress)
+
+LAPACK is being ported from the reference implementation (LAPACK 3.12.1),
+starting with the routines that Eigen calls with `EIGEN_USE_LAPACKE`. The
+ports follow the Fortran original line by line (same algorithms, INFO
+values, error exits and workspace rules, 1-based indexing), and are
+documented where they deviate, e.g. in block sizes or optimized kernels. The
+interfaces are the Fortran one (`hwyblas/lapack.h`, `dgetrf_` etc.) and
+LAPACKE (`hwyblas/lapacke.h`, compatible with the reference LAPACKE and
+Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
+
+| Routines | Precisions |
+|----------|------------|
+| `?getrf`, `?getrf2`, `?laswp` (LU factorization) | s d c z |
+| `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
+
+Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
+(`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
+place of the reference routines). The LAPACK code keeps LAPACK's license
+(`LICENSE-LAPACK`, modified BSD).
+
 ## Building
 
 Requirements: CMake ≥ 3.20 and a C++17 compiler. **clang (or clang-cl on

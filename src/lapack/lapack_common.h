@@ -1,0 +1,182 @@
+// Helpers shared by the LAPACK routines: 1-based array views, machine
+// constants, error reporting and block sizes.
+//
+// The LAPACK routines are ported from the Fortran reference implementation
+// (LAPACK 3.12.1) line by line. To keep them comparable with the original,
+// they use its names and its 1-based indexing: a Fortran array A(LDA, *) is
+// accessed through a view `A` with A(i, j), and passed on as A.ptr(i, j)
+// where Fortran passes A(I, J). Views are named like the Fortran arrays
+// (upper case); scalars are lower case. Each routine is a template over the
+// four precisions s, d, c, z (float, double, std::complex<float>,
+// std::complex<double>), and returns INFO instead of setting an argument.
+//
+// Derived from LAPACK, Copyright (c) 1992-2023 The University of Tennessee
+// and The University of Tennessee Research Foundation, The University of
+// California Berkeley, and The University of Colorado Denver. Modified BSD
+// license, see LICENSE-LAPACK.
+#ifndef HWYBLAS_SRC_LAPACK_LAPACK_COMMON_H_
+#define HWYBLAS_SRC_LAPACK_LAPACK_COMMON_H_
+
+#include <stddef.h>
+
+#include <cmath>
+#include <limits>
+
+#include "src/common.h"
+
+namespace hwyblas {
+namespace lapack {
+
+// ---------------------------------------------------------------------------
+// Views of Fortran arrays
+
+// A(LDA, *): column-major matrix with 1-based indices.
+template <typename T>
+class Matrix {
+ public:
+  Matrix(T* data, blasint ld) : data_(data), ld_(ld) {}
+
+  T& operator()(blasint i, blasint j) const { return *ptr(i, j); }
+  // Address of A(i, j), e.g. to pass the submatrix starting there. Like the
+  // Fortran original, this is also used for empty submatrices just past the
+  // end of the array, which are never accessed.
+  T* ptr(blasint i, blasint j) const {
+    return data_ + (i - 1) + static_cast<ptrdiff_t>(j - 1) * ld_;
+  }
+
+ private:
+  T* data_;
+  blasint ld_;
+};
+
+// X(*): vector with 1-based indices.
+template <typename T>
+class Vector {
+ public:
+  explicit Vector(T* data) : data_(data) {}
+
+  T& operator()(blasint i) const { return data_[i - 1]; }
+  T* ptr(blasint i) const { return data_ + (i - 1); }
+
+ private:
+  T* data_;
+};
+
+// The Fortran-style interface passes complex arrays as pointers to (re, im)
+// pairs of reals: As<c64>(p) is the double* p as a c64*. For real T it
+// does nothing.
+template <typename T, typename P>
+T* As(P* p) {
+  return reinterpret_cast<T*>(p);
+}
+
+// ---------------------------------------------------------------------------
+// Precisions
+
+// The precision letter of LAPACK's routine names: S, D, C or Z.
+template <typename T>
+constexpr char Prefix() {
+  if constexpr (std::is_same_v<T, float>) {
+    return 'S';
+  } else if constexpr (std::is_same_v<T, double>) {
+    return 'D';
+  } else if constexpr (std::is_same_v<T, c32>) {
+    return 'C';
+  } else {
+    static_assert(std::is_same_v<T, c64>, "Unsupported type");
+    return 'Z';
+  }
+}
+
+// A routine name such as "DGETRF": the precision letter of T and `rest`.
+class RoutineName {
+ public:
+  template <typename T>
+  static RoutineName Of(const char* rest) {
+    RoutineName name;
+    name.str_[0] = Prefix<T>();
+    size_t i = 0;
+    for (; rest[i] != '\0' && i + 2 < sizeof(name.str_); ++i) {
+      name.str_[i + 1] = rest[i];
+    }
+    name.str_[i + 1] = '\0';
+    return name;
+  }
+  const char* c_str() const { return str_; }
+
+ private:
+  char str_[16] = {};
+};
+
+// ---------------------------------------------------------------------------
+// Machine constants
+
+// xLAMCH(cmach) for the real type R ('E', 'S', 'B', 'P', 'N', 'R', 'M',
+// 'U', 'L', 'O'; case-insensitive; 0 for anything else). As in LAPACK, eps
+// ('E') is the unit roundoff, half the machine epsilon.
+template <typename R>
+R Lamch(char cmach) {
+  using Limits = std::numeric_limits<R>;
+  const R one = R(1);
+  const R rnd = one;
+  const R eps = (one == rnd) ? Limits::epsilon() * R(0.5) : Limits::epsilon();
+  switch (ToUpper(cmach)) {
+    case 'E':
+      return eps;
+    case 'S': {
+      R sfmin = Limits::min();
+      const R small = one / Limits::max();
+      if (small >= sfmin) {
+        // Use SMALL plus a bit, to avoid the possibility of rounding
+        // causing overflow when computing 1/sfmin.
+        sfmin = small * (one + eps);
+      }
+      return sfmin;
+    }
+    case 'B':
+      return R(Limits::radix);
+    case 'P':
+      return eps * R(Limits::radix);
+    case 'N':
+      return R(Limits::digits);
+    case 'R':
+      return rnd;
+    case 'M':
+      return R(Limits::min_exponent);
+    case 'U':
+      return Limits::min();
+    case 'L':
+      return R(Limits::max_exponent);
+    case 'O':
+      return Limits::max();
+    default:
+      return R(0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Errors and block sizes
+
+// CALL XERBLA(name, info): reports argument `info` (1-based) of the routine
+// `name` as invalid (through hwyBLAS's error handler, see hwyblas.h).
+inline void Xerbla(const char* name, blasint info) { ReportError(name, info); }
+template <typename T>
+void Xerbla(const char* rest, blasint info) {
+  Xerbla(RoutineName::Of<T>(rest).c_str(), info);
+}
+
+// ILAENV(ispec, name, opts, n1, n2, n3, n4): `name` and `opts` are
+// NUL-terminated. Calls the function installed with hwyblas_set_ilaenv, if
+// any (e.g. LAPACK's test programs, which vary the block sizes).
+blasint Ilaenv(blasint ispec, const char* name, const char* opts, blasint n1,
+               blasint n2, blasint n3, blasint n4);
+template <typename T>
+blasint Ilaenv(blasint ispec, const char* rest, const char* opts, blasint n1,
+               blasint n2, blasint n3, blasint n4) {
+  return Ilaenv(ispec, RoutineName::Of<T>(rest).c_str(), opts, n1, n2, n3, n4);
+}
+
+}  // namespace lapack
+}  // namespace hwyblas
+
+#endif  // HWYBLAS_SRC_LAPACK_LAPACK_COMMON_H_

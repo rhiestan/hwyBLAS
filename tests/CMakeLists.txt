@@ -102,6 +102,12 @@ add_executable(hwyblas_tests
   test_main.cc
 )
 target_link_libraries(hwyblas_tests PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
+target_include_directories(hwyblas_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+if(HWYBLAS_LAPACK)
+  target_sources(hwyblas_tests PRIVATE
+    lapack/getrf_test.cc
+  )
+endif()
 
 gtest_discover_tests(hwyblas_tests DISCOVERY_MODE PRE_TEST)
 hwyblas_add_gtest_target_tests(hwyblas_tests 4)
@@ -109,6 +115,9 @@ hwyblas_add_gtest_target_tests(hwyblas_tests 4)
 # The public headers must also work from C.
 add_executable(hwyblas_cblas_c_test cblas_c_test.c)
 target_link_libraries(hwyblas_cblas_c_test PRIVATE hwyblas::hwyblas)
+if(HWYBLAS_LAPACK)
+  target_compile_definitions(hwyblas_cblas_c_test PRIVATE HWYBLAS_TEST_LAPACK)
+endif()
 add_test(NAME CblasFromC COMMAND hwyblas_cblas_c_test)
 
 # Eigen integration test (EIGEN_USE_BLAS), if an Eigen checkout is available.
