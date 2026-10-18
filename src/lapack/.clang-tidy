@@ -5,7 +5,10 @@
 #    as A, LDA of xGEMM), which this check reports as swapped arguments.
 #  - misc-confusable-identifiers: the ports keep LAPACK's names, which
 #    include pairs such as K1 and KL.
+#  - readability-else-after-return: the ports keep LAPACK's control flow
+#    (IF ... RETURN ... ELSE), line by line.
 InheritParentConfig: true
 Checks: >
   -readability-suspicious-call-argument,
-  -misc-confusable-identifiers
+  -misc-confusable-identifiers,
+  -readability-else-after-return

@@ -182,6 +182,17 @@ void Copy(blasint n, const T* x, blasint incx, T* y, blasint incy) {
                            Raw(y), &incy);
 }
 
+// Applies the plane rotation (c, s) to the pairs (x_i, y_i): x := c*x + s*y,
+// y := c*y - s*x, with real c and s: xROT for real T, CSROT / ZDROT for
+// complex T.
+template <typename T>
+void Rot(blasint n, T* x, blasint incx, T* y, blasint incy, RealT<T> c,
+         RealT<T> s) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, srot_, drot_, csrot_, zdrot_, &n, Raw(x), &incx,
+                           Raw(y), &incy, &c, &s);
+}
+
 // x <-> y.
 template <typename T>
 void Swap(blasint n, T* x, blasint incx, T* y, blasint incy) {

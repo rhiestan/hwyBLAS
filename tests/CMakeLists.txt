@@ -107,6 +107,7 @@ if(HWYBLAS_LAPACK)
   target_sources(hwyblas_tests PRIVATE
     lapack/auxiliary_test.cc
     lapack/geqp3_test.cc
+    lapack/gesvd_test.cc
     lapack/getrf_test.cc
     lapack/householder_test.cc
     lapack/norms_test.cc

@@ -618,6 +618,50 @@ lapack_int LapackeSteqr(int layout, char compz, lapack_int n, RealT<T>* d,
 // Row-major LAPACKE calls give the same results as column-major ones (the
 // same arithmetic, only with other leading dimensions); for jobz = 'N', A
 // keeps the elements outside the triangle uplo.
+// xLASR from the left processes the columns in blocks (see there): the
+// result is identical to rotating the columns of A**T from the right,
+// which applies the same operations to each element in the same order.
+// Sizes with a partial block, and identity rotations.
+TYPED_TEST(SyevTest, LasrLeftIsRightOfTranspose) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  Random<T> rng(111);
+  Random<R> rrng(113);
+  for (const char pivot : {'V', 'T', 'B'}) {
+    for (const char direct : {'F', 'B'}) {
+      for (const hwyblas_int n : {1, 7, 8, 21}) {
+        const hwyblas_int m = 13, lda = m + 2, ldt = n + 1;
+        std::vector<R> c(m - 1), s(m - 1);
+        for (hwyblas_int k = 0; k < m - 1; ++k) {
+          const R angle = rrng.Next() * R(3);
+          c[k] = std::cos(angle);
+          s[k] = std::sin(angle);
+        }
+        c[2] = 1;
+        s[2] = 0;
+        std::vector<T> a = rng.Vector(lda * n), at(ldt * m);
+        for (hwyblas_int j = 0; j < n; ++j) {
+          for (hwyblas_int i = 0; i < m; ++i) {
+            At(at, j, i, ldt) = At(a, i, j, lda);
+          }
+        }
+        const char left = 'L', right = 'R';
+        HWYBLAS_CALL(T, lasr, &left, &pivot, &direct, &m, &n, c.data(),
+                     s.data(), P(a.data()), &lda);
+        HWYBLAS_CALL(T, lasr, &right, &pivot, &direct, &n, &m, c.data(),
+                     s.data(), P(at.data()), &ldt);
+        for (hwyblas_int j = 0; j < n; ++j) {
+          for (hwyblas_int i = 0; i < m; ++i) {
+            ASSERT_EQ(At(a, i, j, lda), At(at, j, i, ldt))
+                << pivot << direct << " n=" << n << " (" << i << ", " << j
+                << ")";
+          }
+        }
+      }
+    }
+  }
+}
+
 TYPED_TEST(SyevTest, LapackeLayouts) {
   using T = TypeParam;
   using R = RealT<T>;

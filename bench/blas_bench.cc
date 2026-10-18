@@ -10,9 +10,10 @@
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
 // (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf,
-// geqp3, syev (heev for complex) (their times include copying the input
-// matrix, which they overwrite; for syev, the outputs of the libraries
-// differ, as eigenvectors are unique only up to their sign). A square
+// geqp3, syev (heev for complex), gesvd (their times include copying the
+// input matrix, which they overwrite; for syev and gesvd, the outputs of the
+// libraries differ, as eigenvectors and singular vectors are unique only up
+// to their sign). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -915,6 +916,71 @@ void BenchSyev(const Options& opt, const Libraries& libs) {
   }
 }
 
+// xGESVD: the real routines without RWORK, the complex ones with it.
+template <typename T>
+using GesvdRealFn = void (*)(const char*, const char*, const int*, const int*,
+                             T*, const int*, typename RealType<T>::type*, T*,
+                             const int*, T*, const int*, T*, const int*, int*);
+template <typename T>
+using GesvdComplexFn = void (*)(const char*, const char*, const int*,
+                                const int*, T*, const int*,
+                                typename RealType<T>::type*, T*, const int*, T*,
+                                const int*, T*, const int*,
+                                typename RealType<T>::type*, int*);
+
+// Singular value decomposition of an m x n matrix (LAPACK, jobu = jobvt =
+// 'S': the singular values and min(m, n) left and right singular vectors).
+// Reports the time as GFLOP/s of the nominal min(14 m n^2 + 8 n^3, 6 m n^2
+// + 20 n^3) flops for m >= n (Golub and Van Loan's counts for the
+// Golub-Kahan-Reinsch SVD and the R-SVD with U1 and V; m and n swapped for
+// m < n; 4 times as many for complex numbers); each call works on a fresh
+// copy of the same random matrix.
+template <typename T>
+void BenchGesvd(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const char jobu = 'S', jobvt = 'S';
+  const std::string symbol = Symbol<T>("gesvd");
+  PrintHeader<T>(libs, symbol + "  jobu=S jobvt=S", "m x n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int m = s.m, n = s.n, lda = std::max(1, m);
+    const int mn = std::max(1, std::min(m, n));
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * n, rng));
+    const int lwork = 256 * (m + n) + 5 * mn + std::max(m, n) + 2 * mn * mn;
+    const auto sv = std::make_shared<std::vector<R>>(mn);
+    const auto u =
+        std::make_shared<std::vector<T>>(static_cast<size_t>(lda) * mn);
+    const auto vt =
+        std::make_shared<std::vector<T>>(static_cast<size_t>(mn) * n);
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+    const auto rwork = std::make_shared<std::vector<R>>(5 * mn);
+
+    Case<T> c;
+    c.label = std::to_string(m) + " x " + std::to_string(n);
+    const double hi = std::max(m, n), lo = std::min(m, n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) *
+              std::min(14 * hi * lo * lo + 8 * lo * lo * lo,
+                       6 * hi * lo * lo + 20 * lo * lo * lo);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      const int ldvt = mn;
+      int info = 0;
+      if constexpr (kIsComplex<T>) {
+        reinterpret_cast<GesvdComplexFn<T>>(fn)(
+            &jobu, &jobvt, &m, &n, out, &lda, sv->data(), u->data(), &lda,
+            vt->data(), &ldvt, work->data(), &lwork, rwork->data(), &info);
+      } else {
+        reinterpret_cast<GesvdRealFn<T>>(fn)(
+            &jobu, &jobvt, &m, &n, out, &lda, sv->data(), u->data(), &lda,
+            vt->data(), &ldvt, work->data(), &lwork, &info);
+      }
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
 // G elements per second in the GFLOP/s columns.
 template <typename T>
@@ -1100,6 +1166,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchGeqp3<T>(opt, libs);
   } else if (opt.routine == "syev") {
     BenchSyev<T>(opt, libs);
+  } else if (opt.routine == "gesvd") {
+    BenchGesvd<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

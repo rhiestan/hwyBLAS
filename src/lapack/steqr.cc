@@ -431,10 +431,11 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
   // Quick return if possible.
   if (m == 0 || n == 0) return;
 
-  // The rotation of rows (side 'L') or columns (side 'R') p and q with
-  // (c, s): x(q) := c*x(q) - s*x(p), x(p) := s*x(q) + c*x(p).
-  const auto rotate_rows = [&](blasint q, blasint p, R ctemp, R stemp) {
-    for (blasint i = 1; i <= n; ++i) {
+  // The rotation of rows (side 'L'; in columns i0:i1) or columns (side 'R')
+  // p and q with (c, s): x(q) := c*x(q) - s*x(p), x(p) := s*x(q) + c*x(p).
+  const auto rotate_rows = [&](blasint q, blasint p, R ctemp, R stemp,
+                               blasint i0, blasint i1) {
+    for (blasint i = i0; i <= i1; ++i) {
       const T temp = A(q, i);
       A(q, i) = ctemp * temp - stemp * A(p, i);
       A(p, i) = stemp * temp + ctemp * A(p, i);
@@ -448,8 +449,9 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
     }
   };
   // Pivot 'B': x(j) := s*x(z) + c*x(j), x(z) := c*x(z) - s*x(j).
-  const auto rotate_rows_bottom = [&](blasint j, R ctemp, R stemp) {
-    for (blasint i = 1; i <= n; ++i) {
+  const auto rotate_rows_bottom = [&](blasint j, R ctemp, R stemp, blasint i0,
+                                      blasint i1) {
+    for (blasint i = i0; i <= i1; ++i) {
       const T temp = A(j, i);
       A(j, i) = stemp * A(m, i) + ctemp * temp;
       A(m, i) = ctemp * A(m, i) - stemp * temp;
@@ -469,22 +471,34 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
   const bool forward = Lsame(direct, 'F');
   if (Lsame(side, 'L')) {
     // Form P * A.
-    if (Lsame(pivot, 'V')) {
-      for (blasint k = 1; k <= m - 1; ++k) {
-        const blasint j = forward ? k : m - k;
-        if (nontrivial(C(j), S(j))) rotate_rows(j + 1, j, C(j), S(j));
-      }
-    } else if (Lsame(pivot, 'T')) {
-      for (blasint k = 2; k <= m; ++k) {
-        const blasint j = forward ? k : m + 2 - k;
-        if (nontrivial(C(j - 1), S(j - 1))) {
-          rotate_rows(j, 1, C(j - 1), S(j - 1));
+    //
+    // Deviation (performance): LAPACK applies each rotation to all columns
+    // in turn, which accesses the rows of A with stride LDA. Here the
+    // columns are processed in blocks of kBlock, and each block takes all
+    // rotations in turn: every element undergoes the same operations in the
+    // same order as in LAPACK, so that the result is identical, but the
+    // accesses are contiguous (and the columns of a block are independent
+    // dependency chains).
+    constexpr blasint kBlock = 8;
+    for (blasint i0 = 1; i0 <= n; i0 += kBlock) {
+      const blasint i1 = std::min(n, i0 + kBlock - 1);
+      if (Lsame(pivot, 'V')) {
+        for (blasint k = 1; k <= m - 1; ++k) {
+          const blasint j = forward ? k : m - k;
+          if (nontrivial(C(j), S(j))) rotate_rows(j + 1, j, C(j), S(j), i0, i1);
         }
-      }
-    } else if (Lsame(pivot, 'B')) {
-      for (blasint k = 1; k <= m - 1; ++k) {
-        const blasint j = forward ? k : m - k;
-        if (nontrivial(C(j), S(j))) rotate_rows_bottom(j, C(j), S(j));
+      } else if (Lsame(pivot, 'T')) {
+        for (blasint k = 2; k <= m; ++k) {
+          const blasint j = forward ? k : m + 2 - k;
+          if (nontrivial(C(j - 1), S(j - 1))) {
+            rotate_rows(j, 1, C(j - 1), S(j - 1), i0, i1);
+          }
+        }
+      } else if (Lsame(pivot, 'B')) {
+        for (blasint k = 1; k <= m - 1; ++k) {
+          const blasint j = forward ? k : m - k;
+          if (nontrivial(C(j), S(j))) rotate_rows_bottom(j, C(j), S(j), i0, i1);
+        }
       }
     }
   } else if (Lsame(side, 'R')) {

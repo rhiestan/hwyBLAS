@@ -77,6 +77,10 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?heev` (Hermitian eigenproblem), `?hetrd`, `?hetd2`, `?ungtr`, `?ungql`, `?ung2l` | c z |
 | `?latrd`, `?steqr`, `?lasr` (tridiagonal reduction and QL / QR iteration) | s d c z |
 | `?sterf`, `?lae2`, `?laev2`, `?lartg`, `?lanst`, `?lasrt` | s d |
+| `?gesvd` (singular value decomposition), `?gebrd`, `?gebd2`, `?labrd` (bidiagonal reduction), `?bdsqr` (bidiagonal QR iteration) | s d c z |
+| `?orgbr`, `?ormbr` (Q and P of the bidiagonal reduction) | s d |
+| `?ungbr`, `?unmbr` | c z |
+| `?las2`, `?lasv2`, `?lasq1` - `?lasq6` (dqds) | s d |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
 | `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |
