@@ -112,6 +112,7 @@ if(HWYBLAS_LAPACK)
     lapack/norms_test.cc
     lapack/potrf_test.cc
     lapack/qr_test.cc
+    lapack/syev_test.cc
   )
 endif()
 

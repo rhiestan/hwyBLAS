@@ -107,6 +107,65 @@ void Gerc(blasint m, blasint n, T alpha, const T* x, blasint incx, const T* y,
                            Raw(x), &incx, Raw(y), &incy, Raw(a), &lda);
 }
 
+// y := alpha * A * x + beta * y for symmetric (xSYMV, real T) or Hermitian
+// (xHEMV, complex T) A, triangle uplo.
+template <typename T>
+void Hemv(char uplo, blasint n, T alpha, const T* a, blasint lda, const T* x,
+          blasint incx, T beta, T* y, blasint incy) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, ssymv_, dsymv_, chemv_, zhemv_, &uplo, &n,
+                           Raw(&alpha), Raw(a), &lda, Raw(x), &incx, Raw(&beta),
+                           Raw(y), &incy);
+}
+
+// A := alpha * x * y**H + conj(alpha) * y * x**H + A, triangle uplo: xSYR2
+// for real T, xHER2 for complex T.
+template <typename T>
+void Her2(char uplo, blasint n, T alpha, const T* x, blasint incx, const T* y,
+          blasint incy, T* a, blasint lda) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, ssyr2_, dsyr2_, cher2_, zher2_, &uplo, &n,
+                           Raw(&alpha), Raw(x), &incx, Raw(y), &incy, Raw(a),
+                           &lda);
+}
+
+// C := alpha * A * B**H + conj(alpha) * B * A**H + beta * C (trans = 'N'),
+// or with A**H * B etc., with real beta: xSYR2K for real T, xHER2K for
+// complex T.
+template <typename T>
+void Her2k(char uplo, char trans, blasint n, blasint k, T alpha, const T* a,
+           blasint lda, const T* b, blasint ldb, RealT<T> beta, T* c,
+           blasint ldc) {
+  using blas_detail::Raw;
+  if constexpr (IsComplex<T>::value) {
+    HWYBLAS_LAPACK_BLAS_CALL(T, ssyr2k_, dsyr2k_, cher2k_, zher2k_, &uplo,
+                             &trans, &n, &k, Raw(&alpha), Raw(a), &lda, Raw(b),
+                             &ldb, &beta, Raw(c), &ldc);
+  } else {
+    T beta_t = beta;
+    HWYBLAS_LAPACK_BLAS_CALL(T, ssyr2k_, dsyr2k_, cher2k_, zher2k_, &uplo,
+                             &trans, &n, &k, &alpha, a, &lda, b, &ldb, &beta_t,
+                             c, &ldc);
+  }
+}
+
+// x**H * y: xDOT for real T, xDOTC for complex T.
+template <typename T>
+T Dotc(blasint n, const T* x, blasint incx, const T* y, blasint incy) {
+  using blas_detail::Raw;
+  if constexpr (std::is_same_v<T, float>) {
+    return sdot_(&n, x, &incx, y, &incy);
+  } else if constexpr (std::is_same_v<T, double>) {
+    return ddot_(&n, x, &incx, y, &incy);
+  } else if constexpr (std::is_same_v<T, c32>) {
+    const hwyblas_complex_float r = cdotc_(&n, Raw(x), &incx, Raw(y), &incy);
+    return T(r.real, r.imag);
+  } else {
+    const hwyblas_complex_double r = zdotc_(&n, Raw(x), &incx, Raw(y), &incy);
+    return T(r.real, r.imag);
+  }
+}
+
 // y := alpha * x + y.
 template <typename T>
 void Axpy(blasint n, T alpha, const T* x, blasint incx, T* y, blasint incy) {

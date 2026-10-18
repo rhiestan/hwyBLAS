@@ -216,6 +216,70 @@ blasint Unmlq(char side, char trans, blasint m, blasint n, blasint k, T* a,
               blasint lda, const T* tau, T* c, blasint ldc, T* work,
               blasint lwork);
 
+// ---------------------------------------------------------------------------
+// QL factorization: Q (ungtr.cc)
+
+template <typename T>
+blasint Ung2l(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work);
+
+template <typename T>
+blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work, blasint lwork);
+
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) eigenproblems (tridiagonal.cc, ungtr.cc, steqr.cc,
+// syev.cc)
+
+template <typename T>
+blasint Hetd2(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
+              T* tau);
+
+template <typename T>
+void Latrd(char uplo, blasint n, blasint nb, T* a, blasint lda, RealT<T>* e,
+           T* tau, T* w, blasint ldw);
+
+template <typename T>
+blasint Hetrd(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
+              T* tau, T* work, blasint lwork);
+
+template <typename T>
+blasint Ungtr(char uplo, blasint n, T* a, blasint lda, const T* tau, T* work,
+              blasint lwork);
+
+// Real R only.
+template <typename R>
+void Lae2(R a, R b, R c, R* rt1, R* rt2);
+
+template <typename R>
+void Laev2(R a, R b, R c, R* rt1, R* rt2, R* cs1, R* sn1);
+
+template <typename R>
+void Lartg(R f, R g, R* c, R* s, R* r);
+
+template <typename R>
+R Lanst(char norm, blasint n, const R* d, const R* e);
+
+template <typename R>
+blasint Lasrt(char id, blasint n, R* d);
+
+template <typename R>
+blasint Sterf(blasint n, R* d, R* e);
+
+// The rotations are real also for complex T.
+template <typename T>
+void Lasr(char side, char pivot, char direct, blasint m, blasint n,
+          const RealT<T>* c, const RealT<T>* s, T* a, blasint lda);
+
+template <typename T>
+blasint Steqr(char compz, blasint n, RealT<T>* d, RealT<T>* e, T* z,
+              blasint ldz, RealT<T>* work);
+
+// rwork (max(1, 3 * n - 2) elements) is used for complex T only.
+template <typename T>
+blasint Heev(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
+             T* work, blasint lwork, RealT<T>* rwork);
+
 }  // namespace lapack
 }  // namespace hwyblas
 

@@ -10,8 +10,9 @@
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
 // (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf,
-// geqp3 (their times include copying the input matrix, which they factor in
-// place). A square
+// geqp3, syev (heev for complex) (their times include copying the input
+// matrix, which they overwrite; for syev, the outputs of the libraries
+// differ, as eigenvectors are unique only up to their sign). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -859,6 +860,61 @@ void BenchGeqp3(const Options& opt, const Libraries& libs) {
   }
 }
 
+// xSYEV (real) and xHEEV (complex, with RWORK).
+template <typename T>
+using SyevFn = void (*)(const char*, const char*, const int*, T*, const int*,
+                        typename RealType<T>::type*, T*, const int*, int*);
+template <typename T>
+using HeevFn = void (*)(const char*, const char*, const int*, T*, const int*,
+                        typename RealType<T>::type*, T*, const int*,
+                        typename RealType<T>::type*, int*);
+
+// Eigenvalues and eigenvectors of an n x n symmetric (Hermitian) matrix
+// (LAPACK, jobz = 'V', the triangle --uplo). Reports the time as GFLOP/s
+// of the nominal 9 n^3 flops (4 times as many for complex numbers); each
+// call works on a fresh copy of the same random matrix.
+template <typename T>
+void BenchSyev(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const char jobz = 'V', uplo = opt.uplo;
+  const std::string symbol = Symbol<T>(kIsComplex<T> ? "heev" : "syev");
+  PrintHeader<T>(libs, symbol + "  jobz=V uplo=" + uplo + "  (9 n^3 flops)",
+                 "n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int n = s.n, lda = std::max(1, n);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * n, rng));
+    for (int j = 0; j < n; ++j) {
+      // Real diagonal; the other triangle is not referenced.
+      (*a)[j + static_cast<size_t>(j) * lda] =
+          T(static_cast<R>(std::real((*a)[j + static_cast<size_t>(j) * lda])));
+    }
+    const int lwork = 256 * std::max(1, n) + 3 * n;
+    const auto w = std::make_shared<std::vector<R>>(std::max(1, n));
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+    const auto rwork = std::make_shared<std::vector<R>>(std::max(1, 3 * n));
+
+    Case<T> c;
+    c.label = std::to_string(n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) * 9.0 * n * n * n;
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      int info = 0;
+      if constexpr (kIsComplex<T>) {
+        reinterpret_cast<HeevFn<T>>(fn)(&jobz, &uplo, &n, out, &lda, w->data(),
+                                        work->data(), &lwork, rwork->data(),
+                                        &info);
+      } else {
+        reinterpret_cast<SyevFn<T>>(fn)(&jobz, &uplo, &n, out, &lda, w->data(),
+                                        work->data(), &lwork, &info);
+      }
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
 // G elements per second in the GFLOP/s columns.
 template <typename T>
@@ -1042,6 +1098,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchGeqrf<T>(opt, libs);
   } else if (opt.routine == "geqp3") {
     BenchGeqp3<T>(opt, libs);
+  } else if (opt.routine == "syev") {
+    BenchSyev<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

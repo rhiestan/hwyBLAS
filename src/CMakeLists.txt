@@ -24,7 +24,11 @@ if(HWYBLAS_LAPACK)
     lapack/lapacke.cc
     lapack/norms.cc
     lapack/potrf.cc
+    lapack/steqr.cc
+    lapack/syev.cc
+    lapack/tridiagonal.cc
     lapack/ungqr.cc
+    lapack/ungtr.cc
   )
 endif()
 

@@ -233,6 +233,12 @@ struct MatrixArg {
   // 'U' or 'L': only this triangle of the n x n matrix is copied
   // (LAPACKE_xtr_trans), as for xPOTRF; otherwise all of it.
   char uplo = 'G';
+  // Whether all of the matrix is copied back, also with uplo 'U' or 'L'
+  // (e.g. the eigenvectors of xSYEV that overwrite A).
+  bool out_general = false;
+  // false: the routine does not reference the matrix (e.g. Z of xSTEQR for
+  // COMPZ = 'N'), which then gets no temporary (a null pointer).
+  bool used = true;
 };
 
 // A matrix that the routine only reads.
@@ -245,7 +251,8 @@ MatrixArg<T> Input(const T* a, lapack_int rows, lapack_int cols, lapack_int ld,
 template <typename T>
 void Transpose(int matrix_layout, const MatrixArg<T>& arg, const T* in,
                lapack_int ldin, T* out, lapack_int ldout) {
-  if (arg.uplo == 'U' || arg.uplo == 'L') {
+  const bool back = matrix_layout == LAPACK_COL_MAJOR;
+  if ((arg.uplo == 'U' || arg.uplo == 'L') && !(back && arg.out_general)) {
     TrTrans(matrix_layout, arg.uplo, 'N', arg.rows, in, ldin, out, ldout);
   } else {
     GeTrans(matrix_layout, arg.rows, arg.cols, in, ldin, out, ldout);
@@ -303,6 +310,7 @@ lapack_int CallWork(int matrix_layout, const std::string& name, bool query,
     for (T* p : a) free(p);
   };
   for (size_t i = 0; i < N; ++i) {
+    if (!args[i].used) continue;
     a[i] = static_cast<T*>(malloc(sizeof(T) * static_cast<size_t>(ld[i]) *
                                   std::max<lapack_int>(1, args[i].cols)));
     if (a[i] == nullptr) {
@@ -313,7 +321,7 @@ lapack_int CallWork(int matrix_layout, const std::string& name, bool query,
   }
   // Transpose input matrices.
   for (size_t i = 0; i < N; ++i) {
-    if (args[i].in) {
+    if (args[i].used && args[i].in) {
       Transpose(LAPACK_ROW_MAJOR, args[i], args[i].data, args[i].ld, a[i],
                 ld[i]);
     }
@@ -323,7 +331,7 @@ lapack_int CallWork(int matrix_layout, const std::string& name, bool query,
   if (info < 0) info = info - 1;
   // Transpose output matrices.
   for (size_t i = 0; i < N; ++i) {
-    if (args[i].out) {
+    if (args[i].used && args[i].out) {
       Transpose(LAPACK_COL_MAJOR, args[i], a[i], ld[i], args[i].data,
                 args[i].ld);
     }
@@ -1001,6 +1009,206 @@ lapack_int Laset(int matrix_layout, char uplo, lapack_int m, lapack_int n,
   return LasetWork(matrix_layout, uplo, m, n, alpha, beta, a, lda);
 }
 
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) eigenproblems
+
+// xSYEV / xHEEV; rwork (max(1, 3*n-2) elements) for complex T only. In
+// row-major layout, the triangle uplo of A is copied in, and back, or all
+// of A (the eigenvectors) for jobz = 'V'.
+template <typename T>
+lapack_int HeevWork(int matrix_layout, char jobz, char uplo, lapack_int n, T* a,
+                    lapack_int lda, RealT<T>* w, T* work, lapack_int lwork,
+                    RealT<T>* rwork) {
+  MatrixArg<T> arg{a, n, n, lda, -6};
+  arg.uplo = lapack::Lsame(uplo, 'U') ? 'U' : 'L';
+  arg.out_general = lapack::Lsame(jobz, 'V');
+  return CallWork<T, 1>(
+      matrix_layout, Name<T>(RealOrComplex<T>("syev_work", "heev_work")),
+      lwork == -1, {{arg}}, [&](auto& p, auto& ld) {
+        return lapack::Heev(jobz, uplo, n, p[0], ld[0], w, work, lwork, rwork);
+      });
+}
+
+template <typename T>
+lapack_int Heev(int matrix_layout, char jobz, char uplo, lapack_int n, T* a,
+                lapack_int lda, RealT<T>* w) {
+  using R = RealT<T>;
+  const std::string name = Name<T>(RealOrComplex<T>("syev", "heev"));
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck() && TrNancheck(matrix_layout, uplo, 'N', n, a, lda)) {
+    return -5;
+  }
+  // Allocate memory for working array(s).
+  R* rwork = nullptr;
+  if constexpr (IsComplex<T>::value) {
+    rwork = static_cast<R*>(malloc(
+        sizeof(R) * static_cast<size_t>(std::max<lapack_int>(1, 3 * n - 2))));
+    if (rwork == nullptr) {
+      Xerbla(name, LAPACK_WORK_MEMORY_ERROR);
+      return LAPACK_WORK_MEMORY_ERROR;
+    }
+  }
+  const lapack_int info =
+      WithWorkspace<T>(name, [&](T* work, lapack_int lwork) {
+        return HeevWork(matrix_layout, jobz, uplo, n, a, lda, w, work, lwork,
+                        rwork);
+      });
+  free(rwork);
+  return info;
+}
+
+// xSYTRD / xHETRD.
+template <typename T>
+lapack_int HetrdWork(int matrix_layout, char uplo, lapack_int n, T* a,
+                     lapack_int lda, RealT<T>* d, RealT<T>* e, T* tau, T* work,
+                     lapack_int lwork) {
+  MatrixArg<T> arg{a, n, n, lda, -5};
+  arg.uplo = lapack::Lsame(uplo, 'U') ? 'U' : 'L';
+  return CallWork<T, 1>(
+      matrix_layout, Name<T>(RealOrComplex<T>("sytrd_work", "hetrd_work")),
+      lwork == -1, {{arg}}, [&](auto& p, auto& ld) {
+        return lapack::Hetrd(uplo, n, p[0], ld[0], d, e, tau, work, lwork);
+      });
+}
+
+template <typename T>
+lapack_int Hetrd(int matrix_layout, char uplo, lapack_int n, T* a,
+                 lapack_int lda, RealT<T>* d, RealT<T>* e, T* tau) {
+  const std::string name = Name<T>(RealOrComplex<T>("sytrd", "hetrd"));
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck() && TrNancheck(matrix_layout, uplo, 'N', n, a, lda)) {
+    return -4;
+  }
+  return WithWorkspace<T>(name, [&](T* work, lapack_int lwork) {
+    return HetrdWork(matrix_layout, uplo, n, a, lda, d, e, tau, work, lwork);
+  });
+}
+
+// xORGTR / xUNGTR.
+template <typename T>
+lapack_int UngtrWork(int matrix_layout, char uplo, lapack_int n, T* a,
+                     lapack_int lda, const T* tau, T* work, lapack_int lwork) {
+  return CallWork<T, 1>(
+      matrix_layout, Name<T>(RealOrComplex<T>("orgtr_work", "ungtr_work")),
+      lwork == -1, {{{a, n, n, lda, -5}}}, [&](auto& p, auto& ld) {
+        return lapack::Ungtr(uplo, n, p[0], ld[0], tau, work, lwork);
+      });
+}
+
+template <typename T>
+lapack_int Ungtr(int matrix_layout, char uplo, lapack_int n, T* a,
+                 lapack_int lda, const T* tau) {
+  const std::string name = Name<T>(RealOrComplex<T>("orgtr", "ungtr"));
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    if (TrNancheck(matrix_layout, uplo, 'N', n, a, lda)) return -4;
+    if (VectorNancheck(n - 1, tau, 1)) return -6;
+  }
+  return WithWorkspace<T>(name, [&](T* work, lapack_int lwork) {
+    return UngtrWork(matrix_layout, uplo, n, a, lda, tau, work, lwork);
+  });
+}
+
+// xORGQL / xUNGQL.
+template <typename T>
+lapack_int UngqlWork(int matrix_layout, lapack_int m, lapack_int n,
+                     lapack_int k, T* a, lapack_int lda, const T* tau, T* work,
+                     lapack_int lwork) {
+  return CallWork<T, 1>(
+      matrix_layout, Name<T>(RealOrComplex<T>("orgql_work", "ungql_work")),
+      lwork == -1, {{{a, m, n, lda, -6}}}, [&](auto& p, auto& ld) {
+        return lapack::Ungql(m, n, k, p[0], ld[0], tau, work, lwork);
+      });
+}
+
+template <typename T>
+lapack_int Ungql(int matrix_layout, lapack_int m, lapack_int n, lapack_int k,
+                 T* a, lapack_int lda, const T* tau) {
+  const std::string name = Name<T>(RealOrComplex<T>("orgql", "ungql"));
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    if (GeNancheck(matrix_layout, m, n, a, lda)) return -5;
+    if (VectorNancheck(k, tau, 1)) return -7;
+  }
+  return WithWorkspace<T>(name, [&](T* work, lapack_int lwork) {
+    return UngqlWork(matrix_layout, m, n, k, a, lda, tau, work, lwork);
+  });
+}
+
+// xSTEQR: in row-major layout, Z is copied in for compz = 'V' and back for
+// 'V' and 'I'; for 'N', it gets no temporary.
+template <typename T>
+lapack_int SteqrWork(int matrix_layout, char compz, lapack_int n, RealT<T>* d,
+                     RealT<T>* e, T* z, lapack_int ldz, RealT<T>* work) {
+  MatrixArg<T> arg{z, n, n, ldz, -7};
+  arg.in = lapack::Lsame(compz, 'V');
+  arg.used = arg.in || lapack::Lsame(compz, 'I');
+  arg.out = arg.used;
+  return CallWork<T, 1>(matrix_layout, Name<T>("steqr_work"), false, {{arg}},
+                        [&](auto& p, auto& ld) {
+                          return lapack::Steqr(compz, n, d, e, p[0], ld[0],
+                                               work);
+                        });
+}
+
+template <typename T>
+lapack_int Steqr(int matrix_layout, char compz, lapack_int n, RealT<T>* d,
+                 RealT<T>* e, T* z, lapack_int ldz) {
+  using R = RealT<T>;
+  const std::string name = Name<T>("steqr");
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    if (VectorNancheck(n, d, 1)) return -4;
+    if (VectorNancheck(n - 1, e, 1)) return -5;
+    if (lapack::Lsame(compz, 'V') && GeNancheck(matrix_layout, n, n, z, ldz)) {
+      return -6;
+    }
+  }
+  // Allocate memory for working array(s).
+  const lapack_int lwork =
+      lapack::Lsame(compz, 'N') ? 1 : std::max<lapack_int>(1, 2 * n - 2);
+  R* work = static_cast<R*>(malloc(sizeof(R) * static_cast<size_t>(lwork)));
+  if (work == nullptr) {
+    Xerbla(name, LAPACK_WORK_MEMORY_ERROR);
+    return LAPACK_WORK_MEMORY_ERROR;
+  }
+  const lapack_int info =
+      SteqrWork(matrix_layout, compz, n, d, e, z, ldz, work);
+  free(work);
+  return info;
+}
+
+// xSTERF and xLASRT (real only; no matrix_layout).
+template <typename R>
+lapack_int Sterf(lapack_int n, R* d, R* e) {
+  if (NanCheck()) {
+    if (VectorNancheck(n, d, 1)) return -2;
+    if (VectorNancheck(n - 1, e, 1)) return -3;
+  }
+  return lapack::Sterf(n, d, e);
+}
+
+template <typename R>
+lapack_int Lasrt(char id, lapack_int n, R* d) {
+  if (NanCheck() && VectorNancheck(n, d, 1)) return -3;
+  return lapack::Lasrt(id, n, d);
+}
+
 }  // namespace
 }  // namespace lapacke
 }  // namespace hwyblas
@@ -1340,5 +1548,101 @@ HWYBLAS_API double LAPACKE_zlanhe_work(int layout, char norm, char uplo,
                                        lapack_int lda, double* work) {
   return lapacke::LansyWork(layout, norm, uplo, n, a, lda, work, true);
 }
+
+// The eigenvalue routines: `sy`/`og` are "sy"/"org" (real) or "he"/"ung"
+// (complex).
+#define HWYBLAS_LAPACKE_3(p, T, R, sy, og)                                     \
+  HWYBLAS_API lapack_int LAPACKE_##p##sy##ev(int layout, char jobz, char uplo, \
+                                             lapack_int n, T* a,               \
+                                             lapack_int lda, R* w) {           \
+    return lapacke::Heev(layout, jobz, uplo, n, a, lda, w);                    \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##sy##trd(                                 \
+      int layout, char uplo, lapack_int n, T* a, lapack_int lda, R* d, R* e,   \
+      T* tau) {                                                                \
+    return lapacke::Hetrd(layout, uplo, n, a, lda, d, e, tau);                 \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##sy##trd_work(                            \
+      int layout, char uplo, lapack_int n, T* a, lapack_int lda, R* d, R* e,   \
+      T* tau, T* work, lapack_int lwork) {                                     \
+    return lapacke::HetrdWork(layout, uplo, n, a, lda, d, e, tau, work,        \
+                              lwork);                                          \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##og##tr(int layout, char uplo,            \
+                                             lapack_int n, T* a,               \
+                                             lapack_int lda, const T* tau) {   \
+    return lapacke::Ungtr(layout, uplo, n, a, lda, tau);                       \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##og##tr_work(                             \
+      int layout, char uplo, lapack_int n, T* a, lapack_int lda, const T* tau, \
+      T* work, lapack_int lwork) {                                             \
+    return lapacke::UngtrWork(layout, uplo, n, a, lda, tau, work, lwork);      \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##og##ql(int layout, lapack_int m,         \
+                                             lapack_int n, lapack_int k, T* a, \
+                                             lapack_int lda, const T* tau) {   \
+    return lapacke::Ungql(layout, m, n, k, a, lda, tau);                       \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##og##ql_work(                             \
+      int layout, lapack_int m, lapack_int n, lapack_int k, T* a,              \
+      lapack_int lda, const T* tau, T* work, lapack_int lwork) {               \
+    return lapacke::UngqlWork(layout, m, n, k, a, lda, tau, work, lwork);      \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##steqr(int layout, char compz,            \
+                                            lapack_int n, R* d, R* e, T* z,    \
+                                            lapack_int ldz) {                  \
+    return lapacke::Steqr(layout, compz, n, d, e, z, ldz);                     \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##steqr_work(                              \
+      int layout, char compz, lapack_int n, R* d, R* e, T* z, lapack_int ldz,  \
+      R* work) {                                                               \
+    return lapacke::SteqrWork(layout, compz, n, d, e, z, ldz, work);           \
+  }
+
+HWYBLAS_LAPACKE_3(s, float, float, sy, org)
+HWYBLAS_LAPACKE_3(d, double, double, sy, org)
+HWYBLAS_LAPACKE_3(c, c32, float, he, ung)
+HWYBLAS_LAPACKE_3(z, c64, double, he, ung)
+
+#undef HWYBLAS_LAPACKE_3
+
+#define HWYBLAS_LAPACKE_3_REAL(p, R)                                         \
+  HWYBLAS_API lapack_int LAPACKE_##p##syev_work(                             \
+      int layout, char jobz, char uplo, lapack_int n, R* a, lapack_int lda,  \
+      R* w, R* work, lapack_int lwork) {                                     \
+    return lapacke::HeevWork(layout, jobz, uplo, n, a, lda, w, work, lwork,  \
+                             static_cast<R*>(nullptr));                      \
+  }                                                                          \
+  HWYBLAS_API lapack_int LAPACKE_##p##sterf(lapack_int n, R* d, R* e) {      \
+    return lapacke::Sterf(n, d, e);                                          \
+  }                                                                          \
+  HWYBLAS_API lapack_int LAPACKE_##p##sterf_work(lapack_int n, R* d, R* e) { \
+    return hwyblas::lapack::Sterf(n, d, e);                                  \
+  }                                                                          \
+  HWYBLAS_API lapack_int LAPACKE_##p##lasrt(char id, lapack_int n, R* d) {   \
+    return lapacke::Lasrt(id, n, d);                                         \
+  }                                                                          \
+  HWYBLAS_API lapack_int LAPACKE_##p##lasrt_work(char id, lapack_int n,      \
+                                                 R* d) {                     \
+    return hwyblas::lapack::Lasrt(id, n, d);                                 \
+  }
+
+HWYBLAS_LAPACKE_3_REAL(s, float)
+HWYBLAS_LAPACKE_3_REAL(d, double)
+
+#undef HWYBLAS_LAPACKE_3_REAL
+
+#define HWYBLAS_LAPACKE_3_COMPLEX(p, T, R)                                  \
+  HWYBLAS_API lapack_int LAPACKE_##p##heev_work(                            \
+      int layout, char jobz, char uplo, lapack_int n, T* a, lapack_int lda, \
+      R* w, T* work, lapack_int lwork, R* rwork) {                          \
+    return lapacke::HeevWork(layout, jobz, uplo, n, a, lda, w, work, lwork, \
+                             rwork);                                        \
+  }
+
+HWYBLAS_LAPACKE_3_COMPLEX(c, c32, float)
+HWYBLAS_LAPACKE_3_COMPLEX(z, c64, double)
+
+#undef HWYBLAS_LAPACKE_3_COMPLEX
 
 }  // extern "C"

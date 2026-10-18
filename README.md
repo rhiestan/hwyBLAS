@@ -73,6 +73,10 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?orgqr`, `?org2r`, `?orglq`, `?orgl2`, `?ormqr`, `?orm2r`, `?ormlq`, `?orml2` (Q of QR / LQ) | s d |
 | `?ungqr`, `?ung2r`, `?unglq`, `?ungl2`, `?unmqr`, `?unm2r`, `?unmlq`, `?unml2` | c z |
 | `?larfg`, `?larf`, `?larf1f`, `?larf1l`, `?larft`, `?larfb` (Householder reflectors) | s d c z |
+| `?syev` (symmetric eigenproblem), `?sytrd`, `?sytd2`, `?orgtr`, `?orgql`, `?org2l` | s d |
+| `?heev` (Hermitian eigenproblem), `?hetrd`, `?hetd2`, `?ungtr`, `?ungql`, `?ung2l` | c z |
+| `?latrd`, `?steqr`, `?lasr` (tridiagonal reduction and QL / QR iteration) | s d c z |
+| `?sterf`, `?lae2`, `?laev2`, `?lartg`, `?lanst`, `?lasrt` | s d |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
 | `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |
