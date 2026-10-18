@@ -10,10 +10,10 @@
 // syr2 (her2), banded and packed: gbmv, sbmv (hbmv), spmv (hpmv), tbmv,
 // tbsv, tpmv, tpsv, spr (hpr), spr2 (hpr2), and level 1: axpy, scal, dot
 // (dotu for complex), nrm2, asum, iamax, rot. LAPACK: getrf, potrf, geqrf,
-// geqp3, syev (heev for complex), gesvd (their times include copying the
-// input matrix, which they overwrite; for syev and gesvd, the outputs of the
-// libraries differ, as eigenvectors and singular vectors are unique only up
-// to their sign). A square
+// geqp3, syev (heev for complex), gesvd, gesdd (their times include copying
+// the input matrix, which they overwrite; for syev, gesvd and gesdd, the
+// outputs of the libraries differ, as eigenvectors and singular vectors are
+// unique only up to their sign). A square
 // size n means m = n = k; for syrk, C is m x m and A is m x k.
 //
 // Options:
@@ -981,6 +981,70 @@ void BenchGesvd(const Options& opt, const Libraries& libs) {
   }
 }
 
+// xGESDD: the real routines without RWORK, the complex ones with it.
+template <typename T>
+using GesddRealFn = void (*)(const char*, const int*, const int*, T*,
+                             const int*, typename RealType<T>::type*, T*,
+                             const int*, T*, const int*, T*, const int*, int*,
+                             int*);
+template <typename T>
+using GesddComplexFn = void (*)(const char*, const int*, const int*, T*,
+                                const int*, typename RealType<T>::type*, T*,
+                                const int*, T*, const int*, T*, const int*,
+                                typename RealType<T>::type*, int*, int*);
+
+// Singular value decomposition by divide and conquer of an m x n matrix
+// (LAPACK, jobz = 'S'), reported as GFLOP/s of the nominal flops of gesvd
+// (see BenchGesvd), so that the two compare by their times.
+template <typename T>
+void BenchGesdd(const Options& opt, const Libraries& libs) {
+  using R = typename RealType<T>::type;
+  const char jobz = 'S';
+  const std::string symbol = Symbol<T>("gesdd");
+  PrintHeader<T>(libs, symbol + "  jobz=S", "m x n");
+  std::mt19937 rng(42);
+  for (const Shape& s : opt.shapes) {
+    const int m = s.m, n = s.n, lda = std::max(1, m);
+    const int mn = std::max(1, std::min(m, n)), mx = std::max(m, n);
+    const auto a = std::make_shared<std::vector<T>>(
+        RandomVector<T>(static_cast<size_t>(lda) * n, rng));
+    // More than the optimal workspace of all paths.
+    const int lwork = 4 * mn * mn + 7 * mn + 256 * (m + n) + mx * mn;
+    const auto sv = std::make_shared<std::vector<R>>(mn);
+    const auto u =
+        std::make_shared<std::vector<T>>(static_cast<size_t>(lda) * mn);
+    const auto vt =
+        std::make_shared<std::vector<T>>(static_cast<size_t>(mn) * n);
+    const auto work = std::make_shared<std::vector<T>>(lwork);
+    const auto rwork = std::make_shared<std::vector<R>>(
+        std::max(5 * mn * mn + 5 * mn, 2 * mx * mn + 2 * mn * mn + mn));
+    const auto iwork = std::make_shared<std::vector<int>>(8 * mn);
+
+    Case<T> c;
+    c.label = std::to_string(m) + " x " + std::to_string(n);
+    const double hi = mx, lo = std::min(m, n);
+    c.flops = (kIsComplex<T> ? 4.0 : 1.0) *
+              std::min(14 * hi * lo * lo + 8 * lo * lo * lo,
+                       6 * hi * lo * lo + 20 * lo * lo * lo);
+    c.initial_out = *a;
+    c.call = [=](void* fn, T* out) {
+      std::copy(a->begin(), a->end(), out);
+      const int ldvt = mn;
+      int info = 0;
+      if constexpr (kIsComplex<T>) {
+        reinterpret_cast<GesddComplexFn<T>>(fn)(
+            &jobz, &m, &n, out, &lda, sv->data(), u->data(), &lda, vt->data(),
+            &ldvt, work->data(), &lwork, rwork->data(), iwork->data(), &info);
+      } else {
+        reinterpret_cast<GesddRealFn<T>>(fn)(
+            &jobz, &m, &n, out, &lda, sv->data(), u->data(), &lda, vt->data(),
+            &ldvt, work->data(), &lwork, iwork->data(), &info);
+      }
+    };
+    RunCase(opt, libs, symbol, c);
+  }
+}
+
 // OMATCOPY: B := alpha * op(A) for an m x n column-major A. Reports
 // G elements per second in the GFLOP/s columns.
 template <typename T>
@@ -1168,6 +1232,8 @@ bool RunRoutine(const Options& opt, const Libraries& libs) {
     BenchSyev<T>(opt, libs);
   } else if (opt.routine == "gesvd") {
     BenchGesvd<T>(opt, libs);
+  } else if (opt.routine == "gesdd") {
+    BenchGesdd<T>(opt, libs);
   } else if (opt.routine == "axpy" || opt.routine == "axpby" ||
              opt.routine == "scal" || opt.routine == "dot" ||
              opt.routine == "nrm2" || opt.routine == "asum" ||

@@ -1169,6 +1169,262 @@ HWYBLAS_API void dlasq6_(const hwyblas_int* i0, const hwyblas_int* n0,
                          double* dmin1, double* dmin2, double* dn, double* dnm1,
                          double* dnm2);
 
+/* ------------------------------------------------------------------------ */
+/* Singular value decomposition by divide and conquer                       */
+
+/* The singular values (s, decreasing) and, for jobz = 'A', 'S' or 'O',
+ * all, the first min(m, n) or those left and right singular vectors
+ * (U, VT = V^H; for 'O' the first min(m, n) overwrite A) of the m x n
+ * matrix A = U * SIGMA * V^H by divide and conquer ('N': none). See
+ * LAPACK's ?gesdd for the sizes of work (lwork = -1: query) and rwork;
+ * iwork: 8*min(m,n) elements. info = -4: A has a NaN; info > 0: ?bdsdc
+ * did not converge. */
+HWYBLAS_API void sgesdd_(const char* jobz, const hwyblas_int* m,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         float* s, float* u, const hwyblas_int* ldu, float* vt,
+                         const hwyblas_int* ldvt, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dgesdd_(const char* jobz, const hwyblas_int* m,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* s, double* u,
+                         const hwyblas_int* ldu, double* vt,
+                         const hwyblas_int* ldvt, double* work,
+                         const hwyblas_int* lwork, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgesdd_(const char* jobz, const hwyblas_int* m,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         float* s, float* u, const hwyblas_int* ldu, float* vt,
+                         const hwyblas_int* ldvt, float* work,
+                         const hwyblas_int* lwork, float* rwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void zgesdd_(const char* jobz, const hwyblas_int* m,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* s, double* u,
+                         const hwyblas_int* ldu, double* vt,
+                         const hwyblas_int* ldvt, double* work,
+                         const hwyblas_int* lwork, double* rwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+
+/* The SVD B = U * S * VT of the real n x n upper ('U') or lower ('L')
+ * bidiagonal matrix (d, e) by divide and conquer: d returns the
+ * singular values (decreasing); compq = 'N': values only, 'P': also
+ * the vectors in compact form (q, iq), 'I': U and VT. work: 4*n ('N'),
+ * 6*n ('P') or 3*n^2 + 4*n ('I') elements; iwork: 8*n. */
+HWYBLAS_API void sbdsdc_(const char* uplo, const char* compq,
+                         const hwyblas_int* n, float* d, float* e, float* u,
+                         const hwyblas_int* ldu, float* vt,
+                         const hwyblas_int* ldvt, float* q, hwyblas_int* iq,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dbdsdc_(const char* uplo, const char* compq,
+                         const hwyblas_int* n, double* d, double* e, double* u,
+                         const hwyblas_int* ldu, double* vt,
+                         const hwyblas_int* ldvt, double* q, hwyblas_int* iq,
+                         double* work, hwyblas_int* iwork, hwyblas_int* info);
+
+/* The steps of ?bdsdc: ?lasdq (the SVD of an n x (n+sqre) bidiagonal
+ * matrix with ?bdsqr), ?lasd0 / ?lasda (divide and conquer with / without
+ * the explicit singular vectors), ?lasd1 / ?lasd6 (merging two
+ * subproblems), ?lasd2 / ?lasd7 (deflation), ?lasd3 / ?lasd8 (the secular
+ * equation and the vectors), ?lasd4 / ?lasd5 (one root of the secular
+ * equation), ?laed6 (one Newton step; orgati is a Fortran LOGICAL),
+ * ?lasdt (the tree of subproblems) and ?lamrg (merging sorted lists). */
+HWYBLAS_API void slasdq_(const char* uplo, const hwyblas_int* sqre,
+                         const hwyblas_int* n, const hwyblas_int* ncvt,
+                         const hwyblas_int* nru, const hwyblas_int* ncc,
+                         float* d, float* e, float* vt, const hwyblas_int* ldvt,
+                         float* u, const hwyblas_int* ldu, float* c,
+                         const hwyblas_int* ldc, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dlasdq_(const char* uplo, const hwyblas_int* sqre,
+                         const hwyblas_int* n, const hwyblas_int* ncvt,
+                         const hwyblas_int* nru, const hwyblas_int* ncc,
+                         double* d, double* e, double* vt,
+                         const hwyblas_int* ldvt, double* u,
+                         const hwyblas_int* ldu, double* c,
+                         const hwyblas_int* ldc, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void slasd0_(const hwyblas_int* n, const hwyblas_int* sqre,
+                         float* d, float* e, float* u, const hwyblas_int* ldu,
+                         float* vt, const hwyblas_int* ldvt,
+                         const hwyblas_int* smlsiz, hwyblas_int* iwork,
+                         float* work, hwyblas_int* info);
+HWYBLAS_API void dlasd0_(const hwyblas_int* n, const hwyblas_int* sqre,
+                         double* d, double* e, double* u,
+                         const hwyblas_int* ldu, double* vt,
+                         const hwyblas_int* ldvt, const hwyblas_int* smlsiz,
+                         hwyblas_int* iwork, double* work, hwyblas_int* info);
+HWYBLAS_API void slasda_(const hwyblas_int* icompq, const hwyblas_int* smlsiz,
+                         const hwyblas_int* n, const hwyblas_int* sqre,
+                         float* d, float* e, float* u, const hwyblas_int* ldu,
+                         float* vt, hwyblas_int* k, float* difl, float* difr,
+                         float* z, float* poles, hwyblas_int* givptr,
+                         hwyblas_int* givcol, const hwyblas_int* ldgcol,
+                         hwyblas_int* perm, float* givnum, float* c, float* s,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dlasda_(const hwyblas_int* icompq, const hwyblas_int* smlsiz,
+                         const hwyblas_int* n, const hwyblas_int* sqre,
+                         double* d, double* e, double* u,
+                         const hwyblas_int* ldu, double* vt, hwyblas_int* k,
+                         double* difl, double* difr, double* z, double* poles,
+                         hwyblas_int* givptr, hwyblas_int* givcol,
+                         const hwyblas_int* ldgcol, hwyblas_int* perm,
+                         double* givnum, double* c, double* s, double* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void slasd1_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, float* d, float* alpha,
+                         float* beta, float* u, const hwyblas_int* ldu,
+                         float* vt, const hwyblas_int* ldvt, hwyblas_int* idxq,
+                         hwyblas_int* iwork, float* work, hwyblas_int* info);
+HWYBLAS_API void dlasd1_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, double* d, double* alpha,
+                         double* beta, double* u, const hwyblas_int* ldu,
+                         double* vt, const hwyblas_int* ldvt, hwyblas_int* idxq,
+                         hwyblas_int* iwork, double* work, hwyblas_int* info);
+HWYBLAS_API void slasd2_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, hwyblas_int* k, float* d,
+                         float* z, const float* alpha, const float* beta,
+                         float* u, const hwyblas_int* ldu, float* vt,
+                         const hwyblas_int* ldvt, float* dsigma, float* u2,
+                         const hwyblas_int* ldu2, float* vt2,
+                         const hwyblas_int* ldvt2, hwyblas_int* idxp,
+                         hwyblas_int* idx, hwyblas_int* idxc, hwyblas_int* idxq,
+                         hwyblas_int* coltyp, hwyblas_int* info);
+HWYBLAS_API void dlasd2_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, hwyblas_int* k, double* d,
+                         double* z, const double* alpha, const double* beta,
+                         double* u, const hwyblas_int* ldu, double* vt,
+                         const hwyblas_int* ldvt, double* dsigma, double* u2,
+                         const hwyblas_int* ldu2, double* vt2,
+                         const hwyblas_int* ldvt2, hwyblas_int* idxp,
+                         hwyblas_int* idx, hwyblas_int* idxc, hwyblas_int* idxq,
+                         hwyblas_int* coltyp, hwyblas_int* info);
+HWYBLAS_API void slasd3_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, const hwyblas_int* k,
+                         float* d, float* q, const hwyblas_int* ldq,
+                         float* dsigma, float* u, const hwyblas_int* ldu,
+                         float* u2, const hwyblas_int* ldu2, float* vt,
+                         const hwyblas_int* ldvt, float* vt2,
+                         const hwyblas_int* ldvt2, const hwyblas_int* idxc,
+                         const hwyblas_int* ctot, float* z, hwyblas_int* info);
+HWYBLAS_API void dlasd3_(const hwyblas_int* nl, const hwyblas_int* nr,
+                         const hwyblas_int* sqre, const hwyblas_int* k,
+                         double* d, double* q, const hwyblas_int* ldq,
+                         double* dsigma, double* u, const hwyblas_int* ldu,
+                         double* u2, const hwyblas_int* ldu2, double* vt,
+                         const hwyblas_int* ldvt, double* vt2,
+                         const hwyblas_int* ldvt2, const hwyblas_int* idxc,
+                         const hwyblas_int* ctot, double* z, hwyblas_int* info);
+HWYBLAS_API void slasd4_(const hwyblas_int* n, const hwyblas_int* i,
+                         const float* d, const float* z, float* delta,
+                         const float* rho, float* sigma, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dlasd4_(const hwyblas_int* n, const hwyblas_int* i,
+                         const double* d, const double* z, double* delta,
+                         const double* rho, double* sigma, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void slasd5_(const hwyblas_int* i, const float* d, const float* z,
+                         float* delta, const float* rho, float* dsigma,
+                         float* work);
+HWYBLAS_API void dlasd5_(const hwyblas_int* i, const double* d, const double* z,
+                         double* delta, const double* rho, double* dsigma,
+                         double* work);
+HWYBLAS_API void slasd6_(const hwyblas_int* icompq, const hwyblas_int* nl,
+                         const hwyblas_int* nr, const hwyblas_int* sqre,
+                         float* d, float* vf, float* vl, float* alpha,
+                         float* beta, hwyblas_int* idxq, hwyblas_int* perm,
+                         hwyblas_int* givptr, hwyblas_int* givcol,
+                         const hwyblas_int* ldgcol, float* givnum,
+                         const hwyblas_int* ldgnum, float* poles, float* difl,
+                         float* difr, float* z, hwyblas_int* k, float* c,
+                         float* s, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dlasd6_(const hwyblas_int* icompq, const hwyblas_int* nl,
+                         const hwyblas_int* nr, const hwyblas_int* sqre,
+                         double* d, double* vf, double* vl, double* alpha,
+                         double* beta, hwyblas_int* idxq, hwyblas_int* perm,
+                         hwyblas_int* givptr, hwyblas_int* givcol,
+                         const hwyblas_int* ldgcol, double* givnum,
+                         const hwyblas_int* ldgnum, double* poles, double* difl,
+                         double* difr, double* z, hwyblas_int* k, double* c,
+                         double* s, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void slasd7_(const hwyblas_int* icompq, const hwyblas_int* nl,
+                         const hwyblas_int* nr, const hwyblas_int* sqre,
+                         hwyblas_int* k, float* d, float* z, float* zw,
+                         float* vf, float* vfw, float* vl, float* vlw,
+                         const float* alpha, const float* beta, float* dsigma,
+                         hwyblas_int* idx, hwyblas_int* idxp, hwyblas_int* idxq,
+                         hwyblas_int* perm, hwyblas_int* givptr,
+                         hwyblas_int* givcol, const hwyblas_int* ldgcol,
+                         float* givnum, const hwyblas_int* ldgnum, float* c,
+                         float* s, hwyblas_int* info);
+HWYBLAS_API void dlasd7_(
+    const hwyblas_int* icompq, const hwyblas_int* nl, const hwyblas_int* nr,
+    const hwyblas_int* sqre, hwyblas_int* k, double* d, double* z, double* zw,
+    double* vf, double* vfw, double* vl, double* vlw, const double* alpha,
+    const double* beta, double* dsigma, hwyblas_int* idx, hwyblas_int* idxp,
+    hwyblas_int* idxq, hwyblas_int* perm, hwyblas_int* givptr,
+    hwyblas_int* givcol, const hwyblas_int* ldgcol, double* givnum,
+    const hwyblas_int* ldgnum, double* c, double* s, hwyblas_int* info);
+HWYBLAS_API void slasd8_(const hwyblas_int* icompq, const hwyblas_int* k,
+                         float* d, float* z, float* vf, float* vl, float* difl,
+                         float* difr, const hwyblas_int* lddifr, float* dsigma,
+                         float* work, hwyblas_int* info);
+HWYBLAS_API void dlasd8_(const hwyblas_int* icompq, const hwyblas_int* k,
+                         double* d, double* z, double* vf, double* vl,
+                         double* difl, double* difr, const hwyblas_int* lddifr,
+                         double* dsigma, double* work, hwyblas_int* info);
+HWYBLAS_API void slaed6_(const hwyblas_int* kniter, const hwyblas_int* orgati,
+                         const float* rho, const float* d, const float* z,
+                         const float* finit, float* tau, hwyblas_int* info);
+HWYBLAS_API void dlaed6_(const hwyblas_int* kniter, const hwyblas_int* orgati,
+                         const double* rho, const double* d, const double* z,
+                         const double* finit, double* tau, hwyblas_int* info);
+HWYBLAS_API void slasdt_(const hwyblas_int* n, hwyblas_int* lvl,
+                         hwyblas_int* nd, hwyblas_int* inode,
+                         hwyblas_int* ndiml, hwyblas_int* ndimr,
+                         const hwyblas_int* msub);
+HWYBLAS_API void dlasdt_(const hwyblas_int* n, hwyblas_int* lvl,
+                         hwyblas_int* nd, hwyblas_int* inode,
+                         hwyblas_int* ndiml, hwyblas_int* ndimr,
+                         const hwyblas_int* msub);
+HWYBLAS_API void slamrg_(const hwyblas_int* n1, const hwyblas_int* n2,
+                         const float* a, const hwyblas_int* dtrd1,
+                         const hwyblas_int* dtrd2, hwyblas_int* index);
+HWYBLAS_API void dlamrg_(const hwyblas_int* n1, const hwyblas_int* n2,
+                         const double* a, const hwyblas_int* dtrd1,
+                         const hwyblas_int* dtrd2, hwyblas_int* index);
+
+/* Complex matrices with real ones: B := A for a real m x n A (?lacp2,
+ * all or the upper / lower part like ?lacpy), C := A * B for a complex m
+ * x n A and a real n x n B (?lacrm), C := A * B for a real m x m A and a
+ * complex m x n B (?larcm); rwork: 2*m*n elements. */
+HWYBLAS_API void clacp2_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, float* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void zlacp2_(const char* uplo, const hwyblas_int* m,
+                         const hwyblas_int* n, const double* a,
+                         const hwyblas_int* lda, double* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void clacrm_(const hwyblas_int* m, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, const float* b,
+                         const hwyblas_int* ldb, float* c,
+                         const hwyblas_int* ldc, float* rwork);
+HWYBLAS_API void zlacrm_(const hwyblas_int* m, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* b, const hwyblas_int* ldb, double* c,
+                         const hwyblas_int* ldc, double* rwork);
+HWYBLAS_API void clarcm_(const hwyblas_int* m, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, const float* b,
+                         const hwyblas_int* ldb, float* c,
+                         const hwyblas_int* ldc, float* rwork);
+HWYBLAS_API void zlarcm_(const hwyblas_int* m, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* b, const hwyblas_int* ldb, double* c,
+                         const hwyblas_int* ldc, double* rwork);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

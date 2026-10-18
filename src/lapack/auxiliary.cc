@@ -1,5 +1,6 @@
 // LAPACK's auxiliary routines for vectors and matrices: xLACGV, xLACPY,
-// xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC and ILAxLR.
+// xLACP2, xLACRM, xLARCM, xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC
+// and ILAxLR.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -9,6 +10,7 @@
 #include <cmath>
 
 #include "hwyblas/lapack.h"
+#include "src/lapack/blas.h"
 #include "src/lapack/lapack_common.h"
 #include "src/lapack/lapack_routines.h"
 
@@ -55,6 +57,100 @@ void Lacpy(char uplo, blasint m, blasint n, const T* a, blasint lda, T* b,
   } else {
     for (blasint j = 1; j <= n; ++j) {
       for (blasint i = 1; i <= m; ++i) B(i, j) = A(i, j);
+    }
+  }
+}
+
+// xLACP2: copies all (UPLO other than 'U' or 'L') or part of the real M-by-N
+// matrix A to the complex matrix B, like xLACPY. Complex T only.
+template <typename T>
+void Lacp2(char uplo, blasint m, blasint n, const RealT<T>* a, blasint lda,
+           T* b, blasint ldb) {
+  const Matrix<const RealT<T>> A(a, lda);
+  const Matrix<T> B(b, ldb);
+  if (Lsame(uplo, 'U')) {
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = 1; i <= std::min(j, m); ++i) B(i, j) = A(i, j);
+    }
+  } else if (Lsame(uplo, 'L')) {
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = j; i <= m; ++i) B(i, j) = A(i, j);
+    }
+  } else {
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = 1; i <= m; ++i) B(i, j) = A(i, j);
+    }
+  }
+}
+
+// xLACRM: C := A * B for the complex M-by-N matrix A and the real N-by-N
+// matrix B, as two real products of the real and imaginary parts of A.
+// RWORK has 2*M*N elements. Complex T only.
+template <typename T>
+void Lacrm(blasint m, blasint n, const T* a, blasint lda, const RealT<T>* b,
+           blasint ldb, T* c, blasint ldc, RealT<T>* rwork) {
+  using R = RealT<T>;
+  const R one = R(1);
+  const R zero = R(0);
+  const Matrix<const T> A(a, lda);
+  const Matrix<T> C(c, ldc);
+  const Vector<R> RWORK(rwork);
+  if ((m == 0) || (n == 0)) return;
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      RWORK((j - 1) * m + i) = std::real(A(i, j));
+    }
+  }
+  const blasint l = m * n + 1;
+  Gemm<R>('N', 'N', m, n, n, one, rwork, m, b, ldb, zero, RWORK.ptr(l), m);
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) C(i, j) = RWORK(l + (j - 1) * m + i - 1);
+  }
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      RWORK((j - 1) * m + i) = std::imag(A(i, j));
+    }
+  }
+  Gemm<R>('N', 'N', m, n, n, one, rwork, m, b, ldb, zero, RWORK.ptr(l), m);
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      C(i, j) = T(std::real(C(i, j)), RWORK(l + (j - 1) * m + i - 1));
+    }
+  }
+}
+
+// xLARCM: C := A * B for the real M-by-M matrix A and the complex M-by-N
+// matrix B, as two real products with the real and imaginary parts of B.
+// RWORK has 2*M*N elements. Complex T only.
+template <typename T>
+void Larcm(blasint m, blasint n, const RealT<T>* a, blasint lda, const T* b,
+           blasint ldb, T* c, blasint ldc, RealT<T>* rwork) {
+  using R = RealT<T>;
+  const R one = R(1);
+  const R zero = R(0);
+  const Matrix<const T> B(b, ldb);
+  const Matrix<T> C(c, ldc);
+  const Vector<R> RWORK(rwork);
+  if ((m == 0) || (n == 0)) return;
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      RWORK((j - 1) * m + i) = std::real(B(i, j));
+    }
+  }
+  const blasint l = m * n + 1;
+  Gemm<R>('N', 'N', m, n, m, one, a, lda, rwork, m, zero, RWORK.ptr(l), m);
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) C(i, j) = RWORK(l + (j - 1) * m + i - 1);
+  }
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      RWORK((j - 1) * m + i) = std::imag(B(i, j));
+    }
+  }
+  Gemm<R>('N', 'N', m, n, m, one, a, lda, rwork, m, zero, RWORK.ptr(l), m);
+  for (blasint j = 1; j <= n; ++j) {
+    for (blasint i = 1; i <= m; ++i) {
+      C(i, j) = T(std::real(C(i, j)), RWORK(l + (j - 1) * m + i - 1));
     }
   }
 }
@@ -446,6 +542,17 @@ template void Ladiv<double>(double, double, double, double, double*, double*);
 template c32 Ladiv<c32>(c32, c32);
 template c64 Ladiv<c64>(c64, c64);
 
+#define HWYBLAS_LAPACK_INSTANTIATE(T)                                          \
+  template void Lacp2<T>(char, blasint, blasint, const RealT<T>*, blasint, T*, \
+                         blasint);                                             \
+  template void Lacrm<T>(blasint, blasint, const T*, blasint, const RealT<T>*, \
+                         blasint, T*, blasint, RealT<T>*);                     \
+  template void Larcm<T>(blasint, blasint, const RealT<T>*, blasint, const T*, \
+                         blasint, T*, blasint, RealT<T>*);
+HWYBLAS_LAPACK_INSTANTIATE(c32)
+HWYBLAS_LAPACK_INSTANTIATE(c64)
+#undef HWYBLAS_LAPACK_INSTANTIATE
+
 }  // namespace lapack
 }  // namespace hwyblas
 
@@ -501,6 +608,32 @@ HWYBLAS_LAPACK_AUXILIARY(c, c32, float)
 HWYBLAS_LAPACK_AUXILIARY(z, c64, double)
 
 #undef HWYBLAS_LAPACK_AUXILIARY
+
+#define HWYBLAS_LAPACK_AUXILIARY_COMPLEX(prefix, T, R)                        \
+  HWYBLAS_API void prefix##lacp2_(                                            \
+      const char* uplo, const hwyblas_int* m, const hwyblas_int* n,           \
+      const R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb) {     \
+    hwyblas::lapack::Lacp2(*uplo, *m, *n, a, *lda, As<T>(b), *ldb);           \
+  }                                                                           \
+  HWYBLAS_API void prefix##lacrm_(const hwyblas_int* m, const hwyblas_int* n, \
+                                  const R* a, const hwyblas_int* lda,         \
+                                  const R* b, const hwyblas_int* ldb, R* c,   \
+                                  const hwyblas_int* ldc, R* rwork) {         \
+    hwyblas::lapack::Lacrm(*m, *n, As<const T>(a), *lda, b, *ldb, As<T>(c),   \
+                           *ldc, rwork);                                      \
+  }                                                                           \
+  HWYBLAS_API void prefix##larcm_(const hwyblas_int* m, const hwyblas_int* n, \
+                                  const R* a, const hwyblas_int* lda,         \
+                                  const R* b, const hwyblas_int* ldb, R* c,   \
+                                  const hwyblas_int* ldc, R* rwork) {         \
+    hwyblas::lapack::Larcm(*m, *n, a, *lda, As<const T>(b), *ldb, As<T>(c),   \
+                           *ldc, rwork);                                      \
+  }
+
+HWYBLAS_LAPACK_AUXILIARY_COMPLEX(c, c32, float)
+HWYBLAS_LAPACK_AUXILIARY_COMPLEX(z, c64, double)
+
+#undef HWYBLAS_LAPACK_AUXILIARY_COMPLEX
 
 #define HWYBLAS_LAPACK_AUXILIARY_REAL(prefix, R)                      \
   HWYBLAS_API R prefix##lapy2_(const R* x, const R* y) {              \

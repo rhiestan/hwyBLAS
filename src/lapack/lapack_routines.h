@@ -284,17 +284,16 @@ blasint Heev(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
 // Bidiagonal reduction (bidiagonal.cc)
 
 template <typename T>
-blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d,
-              RealT<T>* e, T* tauq, T* taup, T* work);
+blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
+              T* tauq, T* taup, T* work);
 
 template <typename T>
 void Labrd(blasint m, blasint n, blasint nb, T* a, blasint lda, RealT<T>* d,
-           RealT<T>* e, T* tauq, T* taup, T* x, blasint ldx, T* y,
-           blasint ldy);
+           RealT<T>* e, T* tauq, T* taup, T* x, blasint ldx, T* y, blasint ldy);
 
 template <typename T>
-blasint Gebrd(blasint m, blasint n, T* a, blasint lda, RealT<T>* d,
-              RealT<T>* e, T* tauq, T* taup, T* work, blasint lwork);
+blasint Gebrd(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
+              T* tauq, T* taup, T* work, blasint lwork);
 
 template <typename T>
 blasint Ungbr(char vect, blasint m, blasint n, blasint k, T* a, blasint lda,
@@ -303,9 +302,9 @@ blasint Ungbr(char vect, blasint m, blasint n, blasint k, T* a, blasint lda,
 // A is changed (conjugated) for complex T and VECT = 'P', but restored on
 // exit.
 template <typename T>
-blasint Unmbr(char vect, char side, char trans, blasint m, blasint n,
-              blasint k, T* a, blasint lda, const T* tau, T* c, blasint ldc,
-              T* work, blasint lwork);
+blasint Unmbr(char vect, char side, char trans, blasint m, blasint n, blasint k,
+              T* a, blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork);
 
 // ---------------------------------------------------------------------------
 // Singular value decomposition (bdsqr.cc, lasq.cc, gesvd.cc)
@@ -315,28 +314,25 @@ template <typename R>
 void Las2(R f, R g, R h, R* ssmin, R* ssmax);
 
 template <typename R>
-void Lasv2(R f, R g, R h, R* ssmin, R* ssmax, R* snr, R* csr, R* snl,
-           R* csl);
+void Lasv2(R f, R g, R h, R* ssmin, R* ssmax, R* snr, R* csr, R* snl, R* csl);
 
 template <typename R>
 void Lasq6(blasint i0, blasint n0, R* z, blasint pp, R* dmin, R* dmin1,
            R* dmin2, R* dn, R* dnm1, R* dnm2);
 
 template <typename R>
-void Lasq5(blasint i0, blasint n0, R* z, blasint pp, R* tau, R sigma,
-           R* dmin, R* dmin1, R* dmin2, R* dn, R* dnm1, R* dnm2, bool ieee,
-           R eps);
+void Lasq5(blasint i0, blasint n0, R* z, blasint pp, R* tau, R sigma, R* dmin,
+           R* dmin1, R* dmin2, R* dn, R* dnm1, R* dnm2, bool ieee, R eps);
 
 template <typename R>
-void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in,
-           R dmin, R dmin1, R dmin2, R dn, R dn1, R dn2, R* tau,
-           blasint* ttype, R* g);
+void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
+           R dmin1, R dmin2, R dn, R dn1, R dn2, R* tau, blasint* ttype, R* g);
 
 template <typename R>
 void Lasq3(blasint i0, blasint* n0, R* z, blasint* pp, R* dmin, R* sigma,
            R* desig, R* qmax, blasint* nfail, blasint* iter, blasint* ndiv,
-           bool ieee, blasint* ttype, R* dmin1, R* dmin2, R* dn, R* dn1,
-           R* dn2, R* g, R* tau);
+           bool ieee, blasint* ttype, R* dmin1, R* dmin2, R* dn, R* dn1, R* dn2,
+           R* g, R* tau);
 
 template <typename R>
 blasint Lasq2(blasint n, R* z);
@@ -347,14 +343,114 @@ blasint Lasq1(blasint n, R* d, R* e, R* work);
 // The rotations are real also for complex T.
 template <typename T>
 blasint Bdsqr(char uplo, blasint n, blasint ncvt, blasint nru, blasint ncc,
-              RealT<T>* d, RealT<T>* e, T* vt, blasint ldvt, T* u,
-              blasint ldu, T* c, blasint ldc, RealT<T>* work);
+              RealT<T>* d, RealT<T>* e, T* vt, blasint ldvt, T* u, blasint ldu,
+              T* c, blasint ldc, RealT<T>* work);
 
 // rwork (5 * min(m, n) elements) is used for complex T only.
 template <typename T>
 blasint Gesvd(char jobu, char jobvt, blasint m, blasint n, T* a, blasint lda,
               RealT<T>* s, T* u, blasint ldu, T* vt, blasint ldvt, T* work,
               blasint lwork, RealT<T>* rwork);
+
+// ---------------------------------------------------------------------------
+// Divide and conquer singular value decomposition (bdsdc.cc, gesdd.cc)
+
+// Real R only.
+template <typename R>
+void Lamrg(blasint n1, blasint n2, const R* a, blasint dtrd1, blasint dtrd2,
+           blasint* index);
+
+template <typename R>
+void Lasdt(blasint n, blasint* lvl, blasint* nd, blasint* inode, blasint* ndiml,
+           blasint* ndimr, blasint msub);
+
+template <typename R>
+blasint Laed6(blasint kniter, bool orgati, R rho, const R* d, const R* z,
+              R finit, R* tau);
+
+template <typename R>
+void Lasd5(blasint i, const R* d, const R* z, R* delta, R rho, R* dsigma,
+           R* work);
+
+template <typename R>
+blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
+              R* sigma, R* work);
+
+template <typename R>
+blasint Lasd8(blasint icompq, blasint k, R* d, R* z, R* vf, R* vl, R* difl,
+              R* difr, blasint lddifr, R* dsigma, R* work);
+
+template <typename R>
+blasint Lasd7(blasint icompq, blasint nl, blasint nr, blasint sqre, blasint* k,
+              R* d, R* z, R* zw, R* vf, R* vfw, R* vl, R* vlw, R alpha, R beta,
+              R* dsigma, blasint* idx, blasint* idxp, blasint* idxq,
+              blasint* perm, blasint* givptr, blasint* givcol, blasint ldgcol,
+              R* givnum, blasint ldgnum, R* c, R* s);
+
+template <typename R>
+blasint Lasd6(blasint icompq, blasint nl, blasint nr, blasint sqre, R* d, R* vf,
+              R* vl, R* alpha, R* beta, blasint* idxq, blasint* perm,
+              blasint* givptr, blasint* givcol, blasint ldgcol, R* givnum,
+              blasint ldgnum, R* poles, R* difl, R* difr, R* z, blasint* k,
+              R* c, R* s, R* work, blasint* iwork);
+
+template <typename R>
+blasint Lasd3(blasint nl, blasint nr, blasint sqre, blasint k, R* d, R* q,
+              blasint ldq, R* dsigma, R* u, blasint ldu, R* u2, blasint ldu2,
+              R* vt, blasint ldvt, R* vt2, blasint ldvt2, const blasint* idxc,
+              const blasint* ctot, R* z);
+
+template <typename R>
+blasint Lasd2(blasint nl, blasint nr, blasint sqre, blasint* k, R* d, R* z,
+              R alpha, R beta, R* u, blasint ldu, R* vt, blasint ldvt,
+              R* dsigma, R* u2, blasint ldu2, R* vt2, blasint ldvt2,
+              blasint* idxp, blasint* idx, blasint* idxc, blasint* idxq,
+              blasint* coltyp);
+
+template <typename R>
+blasint Lasd1(blasint nl, blasint nr, blasint sqre, R* d, R* alpha, R* beta,
+              R* u, blasint ldu, R* vt, blasint ldvt, blasint* idxq,
+              blasint* iwork, R* work);
+
+template <typename R>
+blasint Lasdq(char uplo, blasint sqre, blasint n, blasint ncvt, blasint nru,
+              blasint ncc, R* d, R* e, R* vt, blasint ldvt, R* u, blasint ldu,
+              R* c, blasint ldc, R* work);
+
+template <typename R>
+blasint Lasd0(blasint n, blasint sqre, R* d, R* e, R* u, blasint ldu, R* vt,
+              blasint ldvt, blasint smlsiz, blasint* iwork, R* work);
+
+template <typename R>
+blasint Lasda(blasint icompq, blasint smlsiz, blasint n, blasint sqre, R* d,
+              R* e, R* u, blasint ldu, R* vt, blasint* k, R* difl, R* difr,
+              R* z, R* poles, blasint* givptr, blasint* givcol, blasint ldgcol,
+              blasint* perm, R* givnum, R* c, R* s, R* work, blasint* iwork);
+
+template <typename R>
+blasint Bdsdc(char uplo, char compq, blasint n, R* d, R* e, R* u, blasint ldu,
+              R* vt, blasint ldvt, R* q, blasint* iq, R* work, blasint* iwork);
+
+// Complex T only: B := A for real A (xLACP2), C := A * B for complex A and
+// real B (xLACRM), C := A * B for real A and complex B (xLARCM).
+template <typename T>
+void Lacp2(char uplo, blasint m, blasint n, const RealT<T>* a, blasint lda,
+           T* b, blasint ldb);
+
+template <typename T>
+void Lacrm(blasint m, blasint n, const T* a, blasint lda, const RealT<T>* b,
+           blasint ldb, T* c, blasint ldc, RealT<T>* rwork);
+
+template <typename T>
+void Larcm(blasint m, blasint n, const RealT<T>* a, blasint lda, const T* b,
+           blasint ldb, T* c, blasint ldc, RealT<T>* rwork);
+
+// rwork is used for complex T only (see xGESDD for its size); iwork has
+// 8 * min(m, n) elements.
+template <typename T>
+blasint Gesdd(char jobz, blasint m, blasint n, T* a, blasint lda, RealT<T>* s,
+              T* u, blasint ldu, T* vt, blasint ldvt, T* work, blasint lwork,
+              RealT<T>* rwork, blasint* iwork);
 
 }  // namespace lapack
 }  // namespace hwyblas

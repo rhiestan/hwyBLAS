@@ -81,6 +81,9 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?orgbr`, `?ormbr` (Q and P of the bidiagonal reduction) | s d |
 | `?ungbr`, `?unmbr` | c z |
 | `?las2`, `?lasv2`, `?lasq1` - `?lasq6` (dqds) | s d |
+| `?gesdd` (singular value decomposition by divide and conquer) | s d c z |
+| `?bdsdc`, `?lasdq`, `?lasd0` - `?lasd8`, `?lasda`, `?lasdt`, `?lamrg`, `?laed6` (bidiagonal divide and conquer) | s d |
+| `?lacp2`, `?lacrm`, `?larcm` (complex matrices with real ones) | c z |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
 | `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |
@@ -94,7 +97,8 @@ for `?larft` and `?larfb` (not yet).
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
 place of the reference routines). The LAPACK code keeps LAPACK's license
-(`LICENSE-LAPACK`, modified BSD).
+(`LICENSE-LAPACK`, modified BSD). How the Fortran is translated, and the
+scripts used for it, are described in `doc/fortran_port.md`.
 
 ## Building
 

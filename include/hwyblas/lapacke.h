@@ -1148,6 +1148,137 @@ HWYBLAS_API lapack_int LAPACKE_zbdsqr_work(
     lapack_int ldvt, lapack_complex_double* u, lapack_int ldu,
     lapack_complex_double* c, lapack_int ldc, double* work);
 
+/* ------------------------------------------------------------------------ */
+/* Singular value decomposition by divide and conquer (see lapack.h)        */
+
+HWYBLAS_API lapack_int LAPACKE_sgesdd(int matrix_layout, char jobz,
+                                      lapack_int m, lapack_int n, float* a,
+                                      lapack_int lda, float* s, float* u,
+                                      lapack_int ldu, float* vt,
+                                      lapack_int ldvt);
+HWYBLAS_API lapack_int LAPACKE_dgesdd(int matrix_layout, char jobz,
+                                      lapack_int m, lapack_int n, double* a,
+                                      lapack_int lda, double* s, double* u,
+                                      lapack_int ldu, double* vt,
+                                      lapack_int ldvt);
+HWYBLAS_API lapack_int LAPACKE_cgesdd(int matrix_layout, char jobz,
+                                      lapack_int m, lapack_int n,
+                                      lapack_complex_float* a, lapack_int lda,
+                                      float* s, lapack_complex_float* u,
+                                      lapack_int ldu, lapack_complex_float* vt,
+                                      lapack_int ldvt);
+HWYBLAS_API lapack_int LAPACKE_zgesdd(int matrix_layout, char jobz,
+                                      lapack_int m, lapack_int n,
+                                      lapack_complex_double* a, lapack_int lda,
+                                      double* s, lapack_complex_double* u,
+                                      lapack_int ldu, lapack_complex_double* vt,
+                                      lapack_int ldvt);
+HWYBLAS_API lapack_int LAPACKE_sgesdd_work(int matrix_layout, char jobz,
+                                           lapack_int m, lapack_int n, float* a,
+                                           lapack_int lda, float* s, float* u,
+                                           lapack_int ldu, float* vt,
+                                           lapack_int ldvt, float* work,
+                                           lapack_int lwork, lapack_int* iwork);
+HWYBLAS_API lapack_int LAPACKE_dgesdd_work(
+    int matrix_layout, char jobz, lapack_int m, lapack_int n, double* a,
+    lapack_int lda, double* s, double* u, lapack_int ldu, double* vt,
+    lapack_int ldvt, double* work, lapack_int lwork, lapack_int* iwork);
+HWYBLAS_API lapack_int LAPACKE_cgesdd_work(
+    int matrix_layout, char jobz, lapack_int m, lapack_int n,
+    lapack_complex_float* a, lapack_int lda, float* s, lapack_complex_float* u,
+    lapack_int ldu, lapack_complex_float* vt, lapack_int ldvt,
+    lapack_complex_float* work, lapack_int lwork, float* rwork,
+    lapack_int* iwork);
+HWYBLAS_API lapack_int LAPACKE_zgesdd_work(
+    int matrix_layout, char jobz, lapack_int m, lapack_int n,
+    lapack_complex_double* a, lapack_int lda, double* s,
+    lapack_complex_double* u, lapack_int ldu, lapack_complex_double* vt,
+    lapack_int ldvt, lapack_complex_double* work, lapack_int lwork,
+    double* rwork, lapack_int* iwork);
+
+HWYBLAS_API lapack_int LAPACKE_sbdsdc(int matrix_layout, char uplo, char compq,
+                                      lapack_int n, float* d, float* e,
+                                      float* u, lapack_int ldu, float* vt,
+                                      lapack_int ldvt, float* q,
+                                      lapack_int* iq);
+HWYBLAS_API lapack_int LAPACKE_dbdsdc(int matrix_layout, char uplo, char compq,
+                                      lapack_int n, double* d, double* e,
+                                      double* u, lapack_int ldu, double* vt,
+                                      lapack_int ldvt, double* q,
+                                      lapack_int* iq);
+HWYBLAS_API lapack_int LAPACKE_sbdsdc_work(int matrix_layout, char uplo,
+                                           char compq, lapack_int n, float* d,
+                                           float* e, float* u, lapack_int ldu,
+                                           float* vt, lapack_int ldvt, float* q,
+                                           lapack_int* iq, float* work,
+                                           lapack_int* iwork);
+HWYBLAS_API lapack_int LAPACKE_dbdsdc_work(int matrix_layout, char uplo,
+                                           char compq, lapack_int n, double* d,
+                                           double* e, double* u, lapack_int ldu,
+                                           double* vt, lapack_int ldvt,
+                                           double* q, lapack_int* iq,
+                                           double* work, lapack_int* iwork);
+
+/* Complex matrices with real ones (see lapack.h). */
+HWYBLAS_API lapack_int LAPACKE_clacp2(int matrix_layout, char uplo,
+                                      lapack_int m, lapack_int n,
+                                      const float* a, lapack_int lda,
+                                      lapack_complex_float* b, lapack_int ldb);
+HWYBLAS_API lapack_int LAPACKE_zlacp2(int matrix_layout, char uplo,
+                                      lapack_int m, lapack_int n,
+                                      const double* a, lapack_int lda,
+                                      lapack_complex_double* b, lapack_int ldb);
+HWYBLAS_API lapack_int LAPACKE_clacp2_work(int matrix_layout, char uplo,
+                                           lapack_int m, lapack_int n,
+                                           const float* a, lapack_int lda,
+                                           lapack_complex_float* b,
+                                           lapack_int ldb);
+HWYBLAS_API lapack_int LAPACKE_zlacp2_work(int matrix_layout, char uplo,
+                                           lapack_int m, lapack_int n,
+                                           const double* a, lapack_int lda,
+                                           lapack_complex_double* b,
+                                           lapack_int ldb);
+HWYBLAS_API lapack_int LAPACKE_clacrm(int matrix_layout, lapack_int m,
+                                      lapack_int n,
+                                      const lapack_complex_float* a,
+                                      lapack_int lda, const float* b,
+                                      lapack_int ldb, lapack_complex_float* c,
+                                      lapack_int ldc);
+HWYBLAS_API lapack_int LAPACKE_zlacrm(int matrix_layout, lapack_int m,
+                                      lapack_int n,
+                                      const lapack_complex_double* a,
+                                      lapack_int lda, const double* b,
+                                      lapack_int ldb, lapack_complex_double* c,
+                                      lapack_int ldc);
+HWYBLAS_API lapack_int LAPACKE_clacrm_work(
+    int matrix_layout, lapack_int m, lapack_int n,
+    const lapack_complex_float* a, lapack_int lda, const float* b,
+    lapack_int ldb, lapack_complex_float* c, lapack_int ldc, float* rwork);
+HWYBLAS_API lapack_int LAPACKE_zlacrm_work(
+    int matrix_layout, lapack_int m, lapack_int n,
+    const lapack_complex_double* a, lapack_int lda, const double* b,
+    lapack_int ldb, lapack_complex_double* c, lapack_int ldc, double* rwork);
+HWYBLAS_API lapack_int LAPACKE_clarcm(int matrix_layout, lapack_int m,
+                                      lapack_int n, const float* a,
+                                      lapack_int lda,
+                                      const lapack_complex_float* b,
+                                      lapack_int ldb, lapack_complex_float* c,
+                                      lapack_int ldc);
+HWYBLAS_API lapack_int LAPACKE_zlarcm(int matrix_layout, lapack_int m,
+                                      lapack_int n, const double* a,
+                                      lapack_int lda,
+                                      const lapack_complex_double* b,
+                                      lapack_int ldb, lapack_complex_double* c,
+                                      lapack_int ldc);
+HWYBLAS_API lapack_int LAPACKE_clarcm_work(
+    int matrix_layout, lapack_int m, lapack_int n, const float* a,
+    lapack_int lda, const lapack_complex_float* b, lapack_int ldb,
+    lapack_complex_float* c, lapack_int ldc, float* rwork);
+HWYBLAS_API lapack_int LAPACKE_zlarcm_work(
+    int matrix_layout, lapack_int m, lapack_int n, const double* a,
+    lapack_int lda, const lapack_complex_double* b, lapack_int ldb,
+    lapack_complex_double* c, lapack_int ldc, double* rwork);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
