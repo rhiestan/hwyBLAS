@@ -21,6 +21,7 @@
 #include "src/lapack/blas.h"
 #include "src/lapack/lapack_common.h"
 #include "src/lapack/lapack_routines.h"
+#include "src/lapack/rotation_kernels.h"
 
 namespace hwyblas {
 namespace lapack {
@@ -586,6 +587,14 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
   // Quick return if possible.
   if (m == 0 || n == 0) return;
 
+  // PIVOT = 'V', the pivot of xBDSQR, xSTEQR and xBDSDC, by a SIMD kernel
+  // with the same operations on each element, in the same order (see
+  // rotation_kernels.h).
+  if (Lsame(pivot, 'V')) {
+    LasrVariable(Lsame(side, 'L'), Lsame(direct, 'F'), m, n, c, s, a, lda);
+    return;
+  }
+
   // The rotation of rows (side 'L'; in columns i0:i1) or columns (side 'R')
   // p and q with (c, s): x(q) := c*x(q) - s*x(p), x(p) := s*x(q) + c*x(p).
   const auto rotate_rows = [&](blasint q, blasint p, R ctemp, R stemp,
@@ -637,12 +646,7 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
     constexpr blasint kBlock = 8;
     for (blasint i0 = 1; i0 <= n; i0 += kBlock) {
       const blasint i1 = Min(n, i0 + kBlock - 1);
-      if (Lsame(pivot, 'V')) {
-        for (blasint k = 1; k <= m - 1; ++k) {
-          const blasint j = forward ? k : m - k;
-          if (nontrivial(C(j), S(j))) rotate_rows(j + 1, j, C(j), S(j), i0, i1);
-        }
-      } else if (Lsame(pivot, 'T')) {
+      if (Lsame(pivot, 'T')) {
         for (blasint k = 2; k <= m; ++k) {
           const blasint j = forward ? k : m + 2 - k;
           if (nontrivial(C(j - 1), S(j - 1))) {
@@ -658,12 +662,7 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
     }
   } else if (Lsame(side, 'R')) {
     // Form A * P**T.
-    if (Lsame(pivot, 'V')) {
-      for (blasint k = 1; k <= n - 1; ++k) {
-        const blasint j = forward ? k : n - k;
-        if (nontrivial(C(j), S(j))) rotate_columns(j + 1, j, C(j), S(j));
-      }
-    } else if (Lsame(pivot, 'T')) {
+    if (Lsame(pivot, 'T')) {
       for (blasint k = 2; k <= n; ++k) {
         const blasint j = forward ? k : n + 2 - k;
         if (nontrivial(C(j - 1), S(j - 1))) {

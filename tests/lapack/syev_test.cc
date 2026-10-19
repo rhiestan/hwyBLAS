@@ -615,9 +615,6 @@ lapack_int LapackeSteqr(int layout, char compz, lapack_int n, RealT<T>* d,
   }
 }
 
-// Row-major LAPACKE calls give the same results as column-major ones (the
-// same arithmetic, only with other leading dimensions); for jobz = 'N', A
-// keeps the elements outside the triangle uplo.
 // xLASR from the left processes the columns in blocks (see there): the
 // result is identical to rotating the columns of A**T from the right,
 // which applies the same operations to each element in the same order.
@@ -662,6 +659,88 @@ TYPED_TEST(SyevTest, LasrLeftIsRightOfTranspose) {
   }
 }
 
+// The loops of the reference xLASR for PIVOT = 'V': one rotation at a time,
+// over all rows (side 'R') or columns of A, with each operation in a
+// statement of its own.
+template <typename T>
+void ReferenceLasrVariable(char side, char direct, hwyblas_int m,
+                           hwyblas_int n, const RealT<T>* c,
+                           const RealT<T>* s, std::vector<T>& a,
+                           hwyblas_int lda) {
+  using R = RealT<T>;
+  const bool left = side == 'L';
+  const hwyblas_int z = left ? m : n;
+  for (hwyblas_int k = 0; k < z - 1; ++k) {
+    const hwyblas_int j = direct == 'F' ? k : z - 2 - k;
+    const R ctemp = c[j], stemp = s[j];
+    if (ctemp == R(1) && stemp == R(0)) continue;
+    for (hwyblas_int i = 0; i < (left ? n : m); ++i) {
+      T& x = left ? At(a, j, i, lda) : At(a, i, j, lda);
+      T& y = left ? At(a, j + 1, i, lda) : At(a, i, j + 1, lda);
+      const T temp = y;
+      const T ct = ctemp * temp;
+      const T sx = stemp * x;
+      const T st = stemp * temp;
+      const T cx = ctemp * x;
+      y = ct - sx;
+      x = st + cx;
+    }
+  }
+}
+
+// xLASR with PIVOT = 'V' (a SIMD kernel) gives exactly the results of the
+// reference loops, on every target: sizes around the vector lengths and
+// tiles, both sides and directions. Rotations 1 and 2 are identities, which
+// must leave the infinities in row (side 'L') or column 2 unchanged.
+TYPED_TEST(SyevTest, LasrVariableIsExact) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  ForEachTarget([] {
+    Random<T> rng(115);
+    Random<R> rrng(117);
+    const hwyblas_int sizes[] = {1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 16, 17, 33, 70};
+    for (const char side : {'L', 'R'}) {
+      for (const char direct : {'F', 'B'}) {
+        for (const hwyblas_int m : sizes) {
+          for (const hwyblas_int n : sizes) {
+            const hwyblas_int lda = m + 3;
+            const hwyblas_int z = side == 'L' ? m : n;
+            std::vector<R> c(z), s(z);
+            for (hwyblas_int k = 0; k < z; ++k) {
+              const R angle = rrng.Next() * R(3);
+              c[k] = std::cos(angle);
+              s[k] = std::sin(angle);
+            }
+            std::vector<T> a = rng.Vector(lda * n);
+            if (z >= 4) {
+              c[1] = c[2] = 1;
+              s[1] = s[2] = 0;
+              const R inf = std::numeric_limits<R>::infinity();
+              for (hwyblas_int i = 0; i < (side == 'L' ? n : m); i += 3) {
+                (side == 'L' ? At(a, 2, i, lda) : At(a, i, 2, lda)) = T(inf);
+              }
+            }
+            std::vector<T> expected = a;
+            ReferenceLasrVariable(side, direct, m, n, c.data(), s.data(),
+                                  expected, lda);
+            const char pivot = 'V';
+            HWYBLAS_CALL(T, lasr, &side, &pivot, &direct, &m, &n, c.data(),
+                         s.data(), P(a.data()), &lda);
+            for (size_t k = 0; k < a.size(); ++k) {
+              ASSERT_EQ(a[k], expected[k])
+                  << side << direct << " m=" << m << " n=" << n << " ("
+                  << k % lda << ", " << k / lda << ")";
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Row-major LAPACKE calls give the same results as column-major ones (the
+// same arithmetic, only with other leading dimensions); for jobz = 'N', A
+// keeps the elements outside the triangle uplo.
 TYPED_TEST(SyevTest, LapackeLayouts) {
   using T = TypeParam;
   using R = RealT<T>;

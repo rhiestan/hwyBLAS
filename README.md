@@ -105,8 +105,11 @@ place of the reference routines), and the real drivers give bitwise
 identical results to the reference LAPACK on the same BLAS
 (`tests/lapack/compare_reference.sh`), except where a documented kernel
 rounds differently (the leaves of `?getrf2` and `?potrf2`, which make
-small LU and Cholesky factorizations several times faster). The LAPACK code keeps LAPACK's license
-(`LICENSE-LAPACK`, modified BSD). How the Fortran is translated, and the
+small LU and Cholesky factorizations several times faster). Other kernels
+keep the reference's arithmetic: the plane rotations of `?lasr`, most of
+the time of `?gesvd` and `?syev`, run in a SIMD kernel with the same
+operations on each element, in the same order. The LAPACK code keeps
+LAPACK's license (`LICENSE-LAPACK`, modified BSD). How the Fortran is translated, and the
 scripts used for it, are described in `doc/fortran_port.md`.
 
 ## Building

@@ -18,6 +18,7 @@ if(HWYBLAS_LAPACK)
     lapack/auxiliary.cc
     lapack/environment.cc
     lapack/factor_kernels.cc
+    lapack/rotation_kernels.cc
     lapack/bdsdc.cc
     lapack/bdsqr.cc
     lapack/bidiagonal.cc
