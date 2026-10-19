@@ -126,6 +126,60 @@ bool TrNancheck(int matrix_layout, char uplo, char diag, lapack_int n,
   return false;
 }
 
+// LAPACKE_xtz_nancheck: whether the m x n trapezoidal matrix A contains a
+// NaN: its triangle uplo (without the diagonal for diag = 'U') at the front
+// (direct = 'F') or back ('B'), and the rectangular rest. Returns false for
+// invalid arguments.
+template <typename T>
+bool TzNancheck(int matrix_layout, char direct, char uplo, char diag,
+                lapack_int m, lapack_int n, const T* a, lapack_int lda) {
+  if (a == nullptr) return false;
+  const bool colmaj = (matrix_layout == LAPACK_COL_MAJOR);
+  const bool front = lapack::Lsame(direct, 'F');
+  const bool lower = lapack::Lsame(uplo, 'L');
+  const bool unit = lapack::Lsame(diag, 'U');
+  if ((!colmaj && matrix_layout != LAPACK_ROW_MAJOR) ||
+      (!front && !lapack::Lsame(direct, 'B')) ||
+      (!lower && !lapack::Lsame(uplo, 'U')) ||
+      (!unit && !lapack::Lsame(diag, 'N'))) {
+    // Just exit if any of input parameters are wrong.
+    return false;
+  }
+  // Initial offsets and sizes of triangular and rectangular parts.
+  const lapack_int tri_n = std::min(m, n);
+  const lapack_int rect_m = m > n ? m - n : m;
+  const lapack_int rect_n = n > m ? n - m : n;
+  // Offset of k rows (along_ld false: k elements, else k leading dimensions).
+  const auto offset = [lda](lapack_int k, bool along_ld) {
+    return static_cast<ptrdiff_t>(k) * (along_ld ? lda : 1);
+  };
+  ptrdiff_t tri_offset = 0;
+  ptrdiff_t rect_offset = -1;
+  // Fix offsets depending on the shape of the matrix.
+  if (front) {
+    if (lower && m > n) {
+      rect_offset = offset(tri_n, !colmaj);
+    } else if (!lower && n > m) {
+      rect_offset = offset(tri_n, colmaj);
+    }
+  } else {
+    if (m > n) {
+      tri_offset = offset(rect_m, !colmaj);
+      if (!lower) rect_offset = 0;
+    } else if (n > m) {
+      tri_offset = offset(rect_n, colmaj);
+      if (lower) rect_offset = 0;
+    }
+  }
+  // Check rectangular part.
+  if (rect_offset >= 0 &&
+      GeNancheck(matrix_layout, rect_m, rect_n, a + rect_offset, lda)) {
+    return true;
+  }
+  // Check triangular part.
+  return TrNancheck(matrix_layout, uplo, diag, tri_n, a + tri_offset, lda);
+}
+
 // LAPACKE_xpo_nancheck: the triangle uplo of the symmetric (Hermitian)
 // matrix A.
 template <typename T>
@@ -685,6 +739,132 @@ lapack_int Larfg(lapack_int n, T* alpha, T* x, lapack_int incx, T* tau) {
   }
   lapack::Larfg(n, alpha, x, incx, tau);
   return 0;
+}
+
+// The dimensions of V of xLARFT: n x k for STOREV = 'C', k x n for 'R'
+// (1 x 1 otherwise).
+inline std::array<lapack_int, 2> LarftVDims(char storev, lapack_int n,
+                                            lapack_int k) {
+  if (lapack::Lsame(storev, 'C')) return {n, k};
+  if (lapack::Lsame(storev, 'R')) return {k, n};
+  return {1, 1};
+}
+
+template <typename T>
+lapack_int LarftWork(int matrix_layout, char direct, char storev, lapack_int n,
+                     lapack_int k, const T* v, lapack_int ldv, const T* tau,
+                     T* t, lapack_int ldt) {
+  const auto [nrows_v, ncols_v] = LarftVDims(storev, n, k);
+  MatrixArg<T> t_arg{t, k, k, ldt, -10};
+  t_arg.in = false;
+  return CallWork<T, 2>(
+      matrix_layout, Name<T>("larft_work"), false,
+      {{t_arg, Input(v, nrows_v, ncols_v, ldv, -7)}}, [&](auto& p, auto& ld) {
+        lapack::Larft(direct, storev, n, k, p[1], ld[1], tau, p[0], ld[0]);
+        return lapack_int{0};
+      });
+}
+
+template <typename T>
+lapack_int Larft(int matrix_layout, char direct, char storev, lapack_int n,
+                 lapack_int k, const T* v, lapack_int ldv, const T* tau, T* t,
+                 lapack_int ldt) {
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(Name<T>("larft"), -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    const auto [nrows_v, ncols_v] = LarftVDims(storev, n, k);
+    if (VectorNancheck(k, tau, 1)) return -8;
+    if (GeNancheck(matrix_layout, nrows_v, ncols_v, v, ldv)) return -6;
+  }
+  return LarftWork(matrix_layout, direct, storev, n, k, v, ldv, tau, t, ldt);
+}
+
+// The dimensions of V of xLARFB, and the triangle of its unit triangular
+// part.
+struct LarfbV {
+  lapack_int rows;
+  lapack_int cols;
+  char uplo;
+  bool k_too_large;  // K exceeds the order of the triangle: INFO = -8
+};
+
+inline LarfbV LarfbVShape(char side, char direct, char storev, lapack_int m,
+                          lapack_int n, lapack_int k) {
+  const bool left = lapack::Lsame(side, 'L');
+  const bool col = lapack::Lsame(storev, 'C');
+  const bool forward = lapack::Lsame(direct, 'F');
+  LarfbV v{};
+  v.rows = (col && left) ? m : ((col && !left) ? n : (!col ? k : 1));
+  v.cols = (!col && left) ? m : ((!col && !left) ? n : (col ? k : 1));
+  v.uplo = ((forward && col) || !(forward || col)) ? 'L' : 'U';
+  v.k_too_large = (col && k > v.rows) || (!col && k > v.cols);
+  return v;
+}
+
+// V is copied in full (the reference copies only its trapezoidal part,
+// LAPACKE_xtz_trans; xLARFB reads no other element).
+template <typename T>
+lapack_int LarfbWork(int matrix_layout, char side, char trans, char direct,
+                     char storev, lapack_int m, lapack_int n, lapack_int k,
+                     const T* v, lapack_int ldv, const T* t, lapack_int ldt,
+                     T* c, lapack_int ldc, T* work, lapack_int ldwork) {
+  const std::string name = Name<T>("larfb_work");
+  const LarfbV shape = LarfbVShape(side, direct, storev, m, n, k);
+  // In row-major layout, the reference checks K after the leading
+  // dimensions (which CallWork checks).
+  if (matrix_layout == LAPACK_ROW_MAJOR && ldc >= n && ldt >= k &&
+      ldv >= shape.cols && shape.k_too_large) {
+    Xerbla(name, -8);
+    return -8;
+  }
+  return CallWork<T, 3>(matrix_layout, name, false,
+                        {{{c, m, n, ldc, -14},
+                          Input(t, k, k, ldt, -12),
+                          Input(v, shape.rows, shape.cols, ldv, -10)}},
+                        [&](auto& p, auto& ld) {
+                          lapack::Larfb(side, trans, direct, storev, m, n, k,
+                                        p[2], ld[2], p[1], ld[1], p[0], ld[0],
+                                        work, ldwork);
+                          return lapack_int{0};
+                        });
+}
+
+template <typename T>
+lapack_int Larfb(int matrix_layout, char side, char trans, char direct,
+                 char storev, lapack_int m, lapack_int n, lapack_int k,
+                 const T* v, lapack_int ldv, const T* t, lapack_int ldt, T* c,
+                 lapack_int ldc) {
+  const std::string name = Name<T>("larfb");
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    const LarfbV shape = LarfbVShape(side, direct, storev, m, n, k);
+    if (shape.k_too_large) {
+      Xerbla(name, -8);
+      return -8;
+    }
+    if (TzNancheck(matrix_layout, direct, shape.uplo, 'U', shape.rows,
+                   shape.cols, v, ldv)) {
+      return -9;
+    }
+    if (GeNancheck(matrix_layout, k, k, t, ldt)) return -11;
+    if (GeNancheck(matrix_layout, m, n, c, ldc)) return -13;
+  }
+  lapack_int ldwork = 1;
+  if (lapack::Lsame(side, 'L')) {
+    ldwork = n;
+  } else if (lapack::Lsame(side, 'R')) {
+    ldwork = m;
+  }
+  return WithWorkArray<T>(
+      name, ldwork * std::max<lapack_int>(1, k), [&](T* work) {
+        return LarfbWork(matrix_layout, side, trans, direct, storev, m, n, k, v,
+                         ldv, t, ldt, c, ldc, work, ldwork);
+      });
 }
 
 template <typename T>
@@ -2470,6 +2650,32 @@ HWYBLAS_API int LAPACKE_get_nancheck(void) {
                                                  lapack_int incx, T* tau) {    \
     hwyblas::lapack::Larfg(n, alpha, x, incx, tau);                            \
     return 0;                                                                  \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##larft(                                   \
+      int layout, char direct, char storev, lapack_int n, lapack_int k,        \
+      const T* v, lapack_int ldv, const T* tau, T* t, lapack_int ldt) {        \
+    return lapacke::Larft(layout, direct, storev, n, k, v, ldv, tau, t, ldt);  \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##larft_work(                              \
+      int layout, char direct, char storev, lapack_int n, lapack_int k,        \
+      const T* v, lapack_int ldv, const T* tau, T* t, lapack_int ldt) {        \
+    return lapacke::LarftWork(layout, direct, storev, n, k, v, ldv, tau, t,    \
+                              ldt);                                            \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##larfb(                                   \
+      int layout, char side, char trans, char direct, char storev,             \
+      lapack_int m, lapack_int n, lapack_int k, const T* v, lapack_int ldv,    \
+      const T* t, lapack_int ldt, T* c, lapack_int ldc) {                      \
+    return lapacke::Larfb(layout, side, trans, direct, storev, m, n, k, v,     \
+                          ldv, t, ldt, c, ldc);                                \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##larfb_work(                              \
+      int layout, char side, char trans, char direct, char storev,             \
+      lapack_int m, lapack_int n, lapack_int k, const T* v, lapack_int ldv,    \
+      const T* t, lapack_int ldt, T* c, lapack_int ldc, T* work,               \
+      lapack_int ldwork) {                                                     \
+    return lapacke::LarfbWork(layout, side, trans, direct, storev, m, n, k, v, \
+                              ldv, t, ldt, c, ldc, work, ldwork);              \
   }
 
 HWYBLAS_LAPACKE(s, float, orgqr, orglq, ormqr, ormlq)

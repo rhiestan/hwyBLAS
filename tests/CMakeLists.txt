@@ -140,13 +140,28 @@ if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
   target_link_libraries(hwyblas_eigen_test PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
   gtest_discover_tests(hwyblas_eigen_test DISCOVERY_MODE PRE_TEST)
   hwyblas_add_gtest_target_tests(hwyblas_eigen_test 1)
+  if(HWYBLAS_LAPACK)
+    # The same with EIGEN_USE_LAPACKE: Eigen's decompositions call hwyBLAS's
+    # LAPACKE functions.
+    add_executable(hwyblas_eigen_lapacke_test eigen_lapacke_test.cc test_main.cc)
+    target_include_directories(hwyblas_eigen_lapacke_test SYSTEM PRIVATE ${HWYBLAS_EIGEN_DIR})
+    target_link_libraries(hwyblas_eigen_lapacke_test PRIVATE hwyblas::hwyblas GTest::gtest hwyblas_options)
+    if(MSVC)
+      target_compile_options(hwyblas_eigen_lapacke_test PRIVATE /bigobj)
+    endif()
+    gtest_discover_tests(hwyblas_eigen_lapacke_test DISCOVERY_MODE PRE_TEST)
+    hwyblas_add_gtest_target_tests(hwyblas_eigen_lapacke_test 1)
+  endif()
 
   # Eigen's own test suite, compiled with EIGEN_USE_BLAS against hwyBLAS
-  # (about 900 programs: building them takes a while). It runs as the test
-  # EigenTestSuite, and once per target that the CPU supports
-  # (<target>.EigenTestSuite; not in SDE).
+  # (about 900 programs: building them takes a while), and with
+  # EIGEN_USE_LAPACKE if hwyBLAS has LAPACK and HWYBLAS_EIGEN_TESTSUITE_LAPACKE
+  # is on. It runs as the test EigenTestSuite, and once per target that the
+  # CPU supports (<target>.EigenTestSuite; not in SDE).
   option(HWYBLAS_EIGEN_TESTSUITE
          "Build and run Eigen's test suite against hwyBLAS" OFF)
+  option(HWYBLAS_EIGEN_TESTSUITE_LAPACKE
+         "Compile Eigen's test suite with EIGEN_USE_LAPACKE (needs HWYBLAS_LAPACK)" ON)
   # Tests that fail with any BLAS because of Eigen's EIGEN_USE_BLAS code:
   # nomalloc and product_notemporary (its BLAS wrappers allocate
   # temporaries), product_extra (passes negative strides, which BLAS
@@ -174,21 +189,61 @@ if(EXISTS "${HWYBLAS_EIGEN_DIR}/Eigen/Core")
       "-DBLAS_LIBRARIES=$<TARGET_LINKER_FILE:hwyblas>"
       -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF
       -DEIGEN_BUILD_DEMOS=OFF -DEIGEN_BUILD_DOC=OFF)
+    set(_eigen_flags "")
     if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-      list(APPEND _eigen_args "-DEIGEN_TEST_CUSTOM_CXX_FLAGS=/FI${CMAKE_CURRENT_SOURCE_DIR}/eigen/clang_cl_compat.h")
+      list(APPEND _eigen_flags "/FI${CMAKE_CURRENT_SOURCE_DIR}/eigen/clang_cl_compat.h")
+    endif()
+    set(_eigen_exclude "${HWYBLAS_EIGEN_TESTSUITE_EXCLUDE}")
+    set(_eigen_keep_going "")
+    if(HWYBLAS_LAPACK AND HWYBLAS_EIGEN_TESTSUITE_LAPACKE)
+      # Eigen declares the LAPACKE functions itself; hwyblas provides them.
+      # Eigen links only its official tests with BLAS_LIBRARIES; the others
+      # (not run) call LAPACKE too.
+      list(APPEND _eigen_flags "-DEIGEN_USE_LAPACKE")
+      list(APPEND _eigen_args
+           "-DEIGEN_TEST_CUSTOM_LINKER_FLAGS=$<TARGET_LINKER_FILE:hwyblas>")
+      # Tests that fail with any LAPACKE because of Eigen's EIGEN_USE_LAPACKE
+      # code:
+      # - jacobisvd_41 and _42 (svd_inf_nan) do not compile: Eigen's
+      #   JacobiSVD_LAPACKE.h calls the non-const outerStride() of its input,
+      #   an expression there. The build keeps going past them (a program
+      #   that fails to build for another reason still fails its test,
+      #   which cannot run).
+      # - bdcsvd_37 to _40 corrupt the heap: JacobiSVD_LAPACKE.h passes the
+      #   outer stride of its input as LDA of its own compact copy, and
+      #   BDCSVD gives JacobiSVD blocks of a larger matrix.
+      # - jacobisvd_54 (svd_preallocate) forbids allocations, which the
+      #   LAPACKE wrappers make.
+      # - schur_real_2, eigensolver_generic_2 and eigensolver_complex_2
+      #   expect NoConvergence after setMaxIterations(1), which the LAPACKE
+      #   path ignores.
+      string(APPEND _eigen_exclude
+             "|^(jacobisvd_(4[12]|54)|bdcsvd_(3[7-9]|40)|schur_real_2"
+             "|eigensolver_(generic|complex)_2)$")
+      if(CMAKE_GENERATOR MATCHES "Ninja")
+        set(_eigen_keep_going "-k 0")
+      elseif(CMAKE_GENERATOR MATCHES "Makefiles")
+        set(_eigen_keep_going "-k")
+      endif()
+    endif()
+    if(_eigen_flags)
+      list(JOIN _eigen_flags " " _eigen_flags)
+      list(APPEND _eigen_args "-DEIGEN_TEST_CUSTOM_CXX_FLAGS=${_eigen_flags}")
     endif()
     ExternalProject_Add(eigen_testsuite
       SOURCE_DIR "${HWYBLAS_EIGEN_DIR}"
       BINARY_DIR "${_eigen_build}"
       CMAKE_ARGS ${_eigen_args}
-      BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target buildtests
+      BUILD_COMMAND ${CMAKE_COMMAND} -DEIGEN_BUILD=<BINARY_DIR>
+                    "-DKEEP_GOING=${_eigen_keep_going}"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/eigen/build_testsuite.cmake"
       INSTALL_COMMAND ""
       DEPENDS hwyblas)
     set(_run ${CMAKE_COMMAND} -DEIGEN_BUILD=${_eigen_build}
         -DHWYBLAS_DIR=$<TARGET_FILE_DIR:hwyblas> -DCTEST=${CMAKE_CTEST_COMMAND}
         -DJOBS=${HWYBLAS_EIGEN_TESTSUITE_JOBS}
         -DSEED=${HWYBLAS_EIGEN_TESTSUITE_SEED}
-        "-DEXCLUDE=${HWYBLAS_EIGEN_TESTSUITE_EXCLUDE}")
+        "-DEXCLUDE=${_eigen_exclude}")
     set(_script "${CMAKE_CURRENT_SOURCE_DIR}/eigen/run_testsuite.cmake")
     add_test(NAME EigenTestSuite COMMAND ${_run} -P "${_script}")
     # It runs many tests in parallel itself.

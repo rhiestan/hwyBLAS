@@ -3,10 +3,13 @@
 #include <cmath>
 #include <complex>
 #include <limits>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
 #include "hwyblas/lapack.h"
+#include "hwyblas/lapacke.h"
 #include "lapack/lapack_test_util.h"
 #include "test_util.h"
 
@@ -445,6 +448,215 @@ TYPED_TEST(HouseholderTest, Larfb) {
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// LAPACKE
+
+#define LAPACKE_CALL(T, name, ...)                                 \
+  [&] {                                                            \
+    if constexpr (std::is_same_v<T, float>) {                      \
+      return LAPACKE_s##name(__VA_ARGS__);                         \
+    } else if constexpr (std::is_same_v<T, double>) {              \
+      return LAPACKE_d##name(__VA_ARGS__);                         \
+    } else if constexpr (std::is_same_v<T, std::complex<float>>) { \
+      return LAPACKE_c##name(__VA_ARGS__);                         \
+    } else {                                                       \
+      return LAPACKE_z##name(__VA_ARGS__);                         \
+    }                                                              \
+  }()
+
+// The rows x cols matrix `col` (leading dimension ldc) in row-major order
+// with leading dimension ldr.
+template <typename T>
+std::vector<T> ToRowMajor(const std::vector<T>& col, size_t rows, size_t cols,
+                          size_t ldc, size_t ldr) {
+  std::vector<T> row(rows * ldr, T(0));
+  for (size_t i = 0; i < rows; ++i) {
+    for (size_t j = 0; j < cols; ++j) row[i * ldr + j] = col[i + j * ldc];
+  }
+  return row;
+}
+
+// LAPACKE_?larft and ?larfb in both layouts give the results of the Fortran
+// routines.
+TYPED_TEST(HouseholderTest, LapackeLarftLarfb) {
+  using T = TypeParam;
+  Random<T> rng(31);
+  for (const char direct : {'F', 'B'}) {
+    for (const char storev : {'C', 'R'}) {
+      const bool col = storev == 'C';
+      // xLARFT.
+      {
+        SCOPED_TRACE(::testing::Message()
+                     << "larft direct=" << direct << " storev=" << storev);
+        const hwyblas_int n = 7, k = 3;
+        const hwyblas_int rows = col ? n : k, cols = col ? k : n;
+        const hwyblas_int ldv = rows + 1, ldvr = cols + 2;
+        std::vector<T> v;
+        StoredReflectors<T>(direct, storev, n, k, v, ldv, rng);
+        // LAPACKE_?larft checks all of V for NaNs.
+        for (T& x : v) {
+          if (std::isnan(std::abs(x))) x = T(0);
+        }
+        const std::vector<T> vr = ToRowMajor(v, rows, cols, ldv, ldvr);
+        std::vector<T> tau(k);
+        for (T& x : tau) x = rng.Next() + T(1);
+        const hwyblas_int ldt = k + 1;
+        std::vector<T> t(static_cast<size_t>(ldt) * k, T(0));
+        std::vector<T> tc = t, tr = t;
+        Larft(direct, storev, n, k, v, ldv, tau, t, ldt);
+        ASSERT_EQ(LAPACKE_CALL(T, larft, LAPACK_COL_MAJOR, direct, storev, n, k,
+                               v.data(), ldv, tau.data(), tc.data(), ldt),
+                  0);
+        EXPECT_EQ(tc, t);
+        ASSERT_EQ(LAPACKE_CALL(T, larft, LAPACK_ROW_MAJOR, direct, storev, n, k,
+                               vr.data(), ldvr, tau.data(), tr.data(), ldt),
+                  0);
+        for (hwyblas_int i = 0; i < k; ++i) {
+          for (hwyblas_int j = 0; j < k; ++j) {
+            // Only the triangle of T is defined.
+            if (direct == 'F' ? i <= j : i >= j) {
+              EXPECT_EQ(tr[i * ldt + j], t[i + j * ldt]) << i << ", " << j;
+            }
+          }
+        }
+      }
+      // xLARFB, with T from xLARFT.
+      for (const char side : {'L', 'R'}) {
+        for (const char trans : {'N', ConjTrans<T>()}) {
+          SCOPED_TRACE(::testing::Message()
+                       << "larfb direct=" << direct << " storev=" << storev
+                       << " side=" << side << " trans=" << trans);
+          const hwyblas_int m = 6, n = 5, k = 3;
+          const hwyblas_int order = side == 'L' ? m : n;
+          const hwyblas_int rows = col ? order : k, cols = col ? k : order;
+          const hwyblas_int ldv = rows + 1, ldvr = cols + 1;
+          // NaN in the elements that are 1 or 0 by definition: they are
+          // neither read nor checked for NaNs.
+          std::vector<T> v;
+          StoredReflectors<T>(direct, storev, order, k, v, ldv, rng);
+          const std::vector<T> vr = ToRowMajor(v, rows, cols, ldv, ldvr);
+          std::vector<T> tau(k);
+          for (T& x : tau) x = rng.Next() + T(1);
+          const hwyblas_int ldt = k;
+          std::vector<T> t(static_cast<size_t>(ldt) * k, T(0));
+          Larft(direct, storev, order, k, v, ldv, tau, t, ldt);
+          const std::vector<T> trow = ToRowMajor(t, k, k, ldt, ldt);
+          const hwyblas_int ldc = m + 1, ldcr = n + 2;
+          const std::vector<T> c0 = rng.Vector(static_cast<size_t>(ldc) * n);
+          std::vector<T> c = c0, cc = c0;
+          std::vector<T> cr = ToRowMajor(c0, m, n, ldc, ldcr);
+          const hwyblas_int ldwork = side == 'L' ? n : m;
+          std::vector<T> work(static_cast<size_t>(ldwork) * k);
+          HWYBLAS_CALL(T, larfb, &side, &trans, &direct, &storev, &m, &n, &k,
+                       P(v.data()), &ldv, P(t.data()), &ldt, P(c.data()), &ldc,
+                       P(work.data()), &ldwork);
+          ASSERT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, side, trans,
+                                 direct, storev, m, n, k, v.data(), ldv,
+                                 t.data(), ldt, cc.data(), ldc),
+                    0);
+          EXPECT_EQ(cc, c);
+          ASSERT_EQ(LAPACKE_CALL(T, larfb, LAPACK_ROW_MAJOR, side, trans,
+                                 direct, storev, m, n, k, vr.data(), ldvr,
+                                 trow.data(), ldt, cr.data(), ldcr),
+                    0);
+          EXPECT_EQ(cr, ToRowMajor(c, m, n, ldc, ldcr));
+        }
+      }
+    }
+  }
+}
+
+TYPED_TEST(HouseholderTest, LapackeLarftLarfbErrors) {
+  using T = TypeParam;
+  const hwyblas_int n = 4, k = 2, ld = 4;
+  std::vector<T> v(16, T(1)), tau(2, T(1)), t(16, T(0)), c(16, T(1));
+  std::vector<T> work(16);
+  // LAPACKE_xerbla prints the errors.
+  ::testing::internal::CaptureStdout();
+  // Invalid layout.
+  EXPECT_EQ(LAPACKE_CALL(T, larft, 0, 'F', 'C', n, k, v.data(), ld, tau.data(),
+                         t.data(), ld),
+            -1);
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, 0, 'L', 'N', 'F', 'C', n, n, k, v.data(), ld,
+                         t.data(), ld, c.data(), ld),
+            -1);
+  // Row-major leading dimensions, in the order of the reference.
+  EXPECT_EQ(LAPACKE_CALL(T, larft_work, LAPACK_ROW_MAJOR, 'F', 'C', n, k,
+                         v.data(), k, tau.data(), t.data(), k - 1),
+            -10);
+  EXPECT_EQ(LAPACKE_CALL(T, larft_work, LAPACK_ROW_MAJOR, 'F', 'C', n, k,
+                         v.data(), k - 1, tau.data(), t.data(), k),
+            -7);
+  EXPECT_EQ(
+      LAPACKE_CALL(T, larfb_work, LAPACK_ROW_MAJOR, 'L', 'N', 'F', 'C', n, n, k,
+                   v.data(), k, t.data(), k, c.data(), n - 1, work.data(), n),
+      -14);
+  EXPECT_EQ(
+      LAPACKE_CALL(T, larfb_work, LAPACK_ROW_MAJOR, 'L', 'N', 'F', 'C', n, n, k,
+                   v.data(), k, t.data(), k - 1, c.data(), n, work.data(), n),
+      -12);
+  EXPECT_EQ(
+      LAPACKE_CALL(T, larfb_work, LAPACK_ROW_MAJOR, 'L', 'N', 'F', 'C', n, n, k,
+                   v.data(), k - 1, t.data(), k, c.data(), n, work.data(), n),
+      -10);
+  // K larger than the order of the reflectors (k = 3 > m = 2).
+  EXPECT_EQ(
+      LAPACKE_CALL(T, larfb_work, LAPACK_ROW_MAJOR, 'L', 'N', 'F', 'C', 2, n, 3,
+                   v.data(), 3, t.data(), 3, c.data(), n, work.data(), n),
+      -8);
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, 'L', 'N', 'F', 'C', 2, n,
+                         3, v.data(), ld, t.data(), ld, c.data(), ld),
+            -8);
+  std::string expected;
+  for (const auto& [name, position] :
+       std::vector<std::pair<const char*, int>>{{"larft", 1},
+                                                {"larfb", 1},
+                                                {"larft_work", 10},
+                                                {"larft_work", 7},
+                                                {"larfb_work", 14},
+                                                {"larfb_work", 12},
+                                                {"larfb_work", 10},
+                                                {"larfb_work", 8},
+                                                {"larfb", 8}}) {
+    expected += "Wrong parameter " + std::to_string(position) + " in " +
+                LapackeName<T>(name) + "\n";
+  }
+  EXPECT_EQ(::testing::internal::GetCapturedStdout(), expected);
+  // NaN checks.
+  std::vector<T> bad = tau;
+  bad[1] = NaN<T>();
+  EXPECT_EQ(LAPACKE_CALL(T, larft, LAPACK_COL_MAJOR, 'F', 'C', n, k, v.data(),
+                         ld, bad.data(), t.data(), ld),
+            -8);
+  bad = v;
+  bad[ld * 1] = NaN<T>();  // V(1, 2): above the unit diagonal
+  EXPECT_EQ(LAPACKE_CALL(T, larft, LAPACK_COL_MAJOR, 'F', 'C', n, k, bad.data(),
+                         ld, tau.data(), t.data(), ld),
+            -6);
+  // xLARFB does not read V(1, 2), and its NaN check skips it.
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, 'L', 'N', 'F', 'C', n, n,
+                         k, bad.data(), ld, t.data(), ld, c.data(), ld),
+            0);
+  c.assign(16, T(1));
+  bad = v;
+  bad[3] = NaN<T>();  // V(4, 1)
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, 'L', 'N', 'F', 'C', n, n,
+                         k, bad.data(), ld, t.data(), ld, c.data(), ld),
+            -9);
+  bad = t;
+  bad[1] = NaN<T>();
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, 'L', 'N', 'F', 'C', n, n,
+                         k, v.data(), ld, bad.data(), ld, c.data(), ld),
+            -11);
+  bad = c;
+  bad[ld * 3] = NaN<T>();
+  EXPECT_EQ(LAPACKE_CALL(T, larfb, LAPACK_COL_MAJOR, 'L', 'N', 'F', 'C', n, n,
+                         k, v.data(), ld, t.data(), ld, bad.data(), ld),
+            -13);
+}
+
+#undef LAPACKE_CALL
 
 }  // namespace
 }  // namespace hwyblas_test

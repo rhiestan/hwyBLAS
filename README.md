@@ -9,7 +9,7 @@ Goals:
 1. **Clean, simple, well-documented code.** One portable source per routine;
    Highway generates code for each SIMD target and picks the best one at runtime.
 2. **High performance.** On par with OpenBLAS and MKL (single-threaded).
-3. **Pluggable into Eigen** via `EIGEN_USE_BLAS`.
+3. **Pluggable into Eigen** via `EIGEN_USE_BLAS` (and `EIGEN_USE_LAPACKE`).
 4. **Correct**, verified by tests against a reference implementation on every
    SIMD target that the CPU supports.
 5. **Single-threaded** by design.
@@ -97,8 +97,7 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?lapy2`, `?lapy3`, `?ladiv` | s d |
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
-LAPACKE has the reference LAPACKE's functions for these routines, except
-for `?larft` and `?larfb` (not yet).
+LAPACKE has the reference LAPACKE's functions for these routines.
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
@@ -168,12 +167,20 @@ build/bin/blas_fuzz --repro=dgemm:0x1234...  OpenBLAS=...   # rerun one failure
 
 `-DHWYBLAS_EIGEN_TESTSUITE=ON` also builds Eigen's own test suite (from the
 Eigen checkout, about 900 programs; this takes a while) with
-`EIGEN_USE_BLAS` against hwyBLAS, and runs its official tests as the test
-`EigenTestSuite`, also once per target. A few Eigen tests are excluded
-because they fail with any BLAS (`HWYBLAS_EIGEN_TESTSUITE_EXCLUDE`): Eigen's
-BLAS wrappers allocate temporaries (`nomalloc`, `product_notemporary`), and
-pass negative strides, which BLAS interprets differently (`product_extra`).
+`EIGEN_USE_BLAS` against hwyBLAS, and with LAPACK also with
+`EIGEN_USE_LAPACKE` (`-DHWYBLAS_EIGEN_TESTSUITE_LAPACKE=OFF` leaves it
+out), and runs its official tests as the test `EigenTestSuite`, also once
+per target. A few Eigen tests are excluded because they fail with any BLAS
+(`HWYBLAS_EIGEN_TESTSUITE_EXCLUDE`): Eigen's BLAS wrappers allocate
+temporaries (`nomalloc`, `product_notemporary`), and pass negative strides,
+which BLAS interprets differently (`product_extra`).
 `threads_non_blocking_thread_pool` is also excluded: it occasionally hangs.
+With `EIGEN_USE_LAPACKE`, these also fail with any LAPACKE (see
+`tests/CMakeLists.txt`): `jacobisvd_41`/`42` do not compile and
+`bdcsvd_37`-`40` corrupt the heap (Eigen's `JacobiSVD_LAPACKE.h` takes LDA
+from its input instead of its copy of it), `jacobisvd_54` forbids
+allocations, and `schur_real_2` and `eigensolver_generic_2`/`complex_2` set
+an iteration limit that the LAPACKE path ignores.
 
 ### clang-tidy
 
@@ -248,15 +255,21 @@ as part of a project that defines `hwy::hwy`, shares that Highway: then
 
 ## Using hwyBLAS with Eigen
 
-Define `EIGEN_USE_BLAS` before including Eigen and link against `hwyblas`:
+Define `EIGEN_USE_BLAS` before including Eigen and link against `hwyblas`;
+with LAPACK, also `EIGEN_USE_LAPACKE` (Eigen declares the LAPACKE functions
+itself, in its copy of `lapacke.h`):
 
 ```cmake
-target_compile_definitions(my_app PRIVATE EIGEN_USE_BLAS)
+target_compile_definitions(my_app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 target_link_libraries(my_app PRIVATE hwyblas::hwyblas)
 ```
 
 `tests/eigen_test.cc` checks the integration: products, triangular and
 self-adjoint views, rank updates and the LLT, LDLT and LU decompositions.
+`tests/eigen_lapacke_test.cc` checks that with `EIGEN_USE_LAPACKE` Eigen's
+LLT, PartialPivLU, HouseholderQR, ColPivHouseholderQR, JacobiSVD, BDCSVD,
+SelfAdjointEigenSolver, RealSchur and ComplexSchur run hwyBLAS's LAPACK, in
+both storage orders.
 
 ## Using the CBLAS interface
 
