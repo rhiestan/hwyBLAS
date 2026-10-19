@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -98,9 +99,11 @@ void CheckFactorization(const std::vector<T>& a, const std::vector<T>& lu,
 struct Shape {
   hwyblas_int m, n;
 };
-const Shape kShapes[] = {{1, 1},   {1, 6},    {6, 1},    {2, 2},    {3, 7},
-                         {7, 3},   {10, 10},  {33, 17},  {17, 33},  {64, 64},
-                         {65, 70}, {90, 150}, {150, 90}, {200, 200}};
+// Including shapes around the leaf size of xGETRF2 (16).
+const Shape kShapes[] = {{1, 1},    {1, 6},    {6, 1},    {2, 2},   {3, 7},
+                         {7, 3},    {10, 10},  {16, 16},  {16, 40}, {40, 16},
+                         {17, 17},  {33, 17},  {17, 33},  {64, 64}, {65, 70},
+                         {90, 150}, {150, 90}, {200, 200}};
 
 TYPED_TEST(GetrfTest, Factorization) {
   using T = TypeParam;
@@ -156,6 +159,41 @@ TYPED_TEST(GetrfTest, ExactlySingular) {
         EXPECT_EQ(Getrf(recursive, m, n, lu, lda, ipiv), k);
         EXPECT_EQ(At(lu, k - 1, k - 1, lda), T(0));
         CheckFactorization(a, lu, ipiv, m, n, lda);
+      }
+    }
+  }
+}
+
+// Pivots below the safe minimum: their reciprocal would overflow, so the
+// column is divided by them instead. The first column is
+// tiny * (1, 1/2, 1/4, ...), which gives L(i, 1) = 2**-i exactly; the other
+// columns have a dominant diagonal, so that no later interchange moves these
+// rows of L.
+TYPED_TEST(GetrfTest, TinyPivots) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  for (const bool recursive : {false, true}) {
+    for (const hwyblas_int n : {5, 40}) {
+      SCOPED_TRACE(::testing::Message()
+                   << (recursive ? "getrf2" : "getrf") << " n=" << n);
+      const hwyblas_int m = n, lda = m;
+      std::vector<T> a(static_cast<size_t>(lda) * n);
+      const R tiny = std::numeric_limits<R>::min() / 4;
+      const auto power = [](hwyblas_int i) { return -std::min<int>(i, 20); };
+      for (hwyblas_int i = 0; i < m; ++i) {
+        At(a, i, 0, lda) = T(std::ldexp(tiny, power(i)));
+      }
+      for (hwyblas_int k = 1; k < n; ++k) {
+        At(a, 0, k, lda) = T(1);
+        At(a, k, k, lda) = T(4);
+      }
+      std::vector<T> lu = a;
+      std::vector<hwyblas_int> ipiv(n);
+      EXPECT_EQ(Getrf(recursive, m, n, lu, lda, ipiv), 0);
+      for (hwyblas_int i = 0; i < n; ++i) EXPECT_EQ(ipiv[i], i + 1);
+      for (hwyblas_int i = 1; i < m; ++i) {
+        ASSERT_EQ(At(lu, i, 0, lda), T(std::ldexp(R(1), power(i))))
+            << "L(" << i << ", 0)";
       }
     }
   }

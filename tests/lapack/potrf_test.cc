@@ -103,7 +103,9 @@ TYPED_TEST(PotrfTest, Factorization) {
         if (recursive && nb != 0) continue;  // xPOTRF2 does not block
         const ScopedBlockSize block_size(nb);
         for (const char uplo : {'U', 'L'}) {
-          for (const hwyblas_int n : {1, 2, 3, 7, 16, 33, 64, 65, 130}) {
+          // Including sizes around the leaf size of xPOTRF2 (32).
+          for (const hwyblas_int n :
+               {1, 2, 3, 7, 16, 31, 32, 33, 64, 65, 130}) {
             for (const hwyblas_int pad : {0, 3}) {
               const hwyblas_int lda = n + pad;
               SCOPED_TRACE(::testing::Message()
@@ -136,27 +138,30 @@ TYPED_TEST(PotrfTest, Factorization) {
 
 // A leading minor of order k that is not positive (here: A(k, k) <= 0 with
 // zeros beside it, or NaN) gives INFO = k; the first k - 1 columns are then
-// factored.
+// factored. n = 70 also has k in the recursion beyond the leaf.
 TYPED_TEST(PotrfTest, NotPositiveDefinite) {
   using T = TypeParam;
-  const hwyblas_int n = 9;
-  for (const bool recursive : {false, true}) {
-    for (const hwyblas_int nb : BlockSizes()) {
-      if (recursive && nb != 0) continue;
-      const ScopedBlockSize block_size(nb);
-      for (const char uplo : {'U', 'L'}) {
-        for (const hwyblas_int k : {1, 2, 4, 9}) {
-          for (const double value :
-               {0.0, -1.0, std::numeric_limits<double>::quiet_NaN()}) {
-            SCOPED_TRACE(::testing::Message()
-                         << (recursive ? "potrf2" : "potrf") << " uplo=" << uplo
-                         << " k=" << k << " value=" << value << " nb=" << nb);
-            std::vector<T> a(n * n);
-            for (hwyblas_int i = 0; i < n; ++i) At(a, i, i, n) = T(4);
-            At(a, k - 1, k - 1, n) = T(static_cast<RealT<T>>(value));
-            EXPECT_EQ(Potrf(recursive, uplo, n, a, n), k);
-            for (hwyblas_int i = 0; i < k - 1; ++i) {
-              EXPECT_EQ(At(a, i, i, n), T(2));
+  for (const hwyblas_int n : {9, 70}) {
+    for (const bool recursive : {false, true}) {
+      for (const hwyblas_int nb : BlockSizes()) {
+        if (recursive && nb != 0) continue;
+        const ScopedBlockSize block_size(nb);
+        for (const char uplo : {'U', 'L'}) {
+          for (const hwyblas_int k : {1, 2, 4, 9, 33, 70}) {
+            if (k > n) continue;
+            for (const double value :
+                 {0.0, -1.0, std::numeric_limits<double>::quiet_NaN()}) {
+              SCOPED_TRACE(::testing::Message()
+                           << (recursive ? "potrf2" : "potrf")
+                           << " uplo=" << uplo << " n=" << n << " k=" << k
+                           << " value=" << value << " nb=" << nb);
+              std::vector<T> a(n * n);
+              for (hwyblas_int i = 0; i < n; ++i) At(a, i, i, n) = T(4);
+              At(a, k - 1, k - 1, n) = T(static_cast<RealT<T>>(value));
+              EXPECT_EQ(Potrf(recursive, uplo, n, a, n), k);
+              for (hwyblas_int i = 0; i < k - 1; ++i) {
+                EXPECT_EQ(At(a, i, i, n), T(2));
+              }
             }
           }
         }

@@ -210,7 +210,10 @@ and calls every driver (xGETRF, xPOTRF, xGEQRF, xGELQF, xGEQP3,
 xSYEV/xHEEV, xGESVD, xGESDD, xGEES, with all job options) in both on the
 same matrices of orders 0 to 401. With the same BLAS and parameters, the
 real results are bitwise identical, and mutations of the heuristics change
-them. The complex results differ in the last bits, because flang evaluates
+them. The exceptions are deviations that change rounding by design: the
+leaf kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
+factors the tool compares with a tolerance (their pivots and INFO
+exactly). The complex results differ in the last bits, because flang evaluates
 some complex divisions differently (for COMPLEX / REAL it performs a full
 complex division, the standard's conversion to COMPLEX first, while C++
 and gfortran divide the two parts); the multishift QR algorithm amplifies

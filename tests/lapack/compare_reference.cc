@@ -19,6 +19,11 @@
 // order can change), and only the number of bitwise identical results is shown
 // for the other outputs.
 //
+// Routines with a documented deviation that changes rounding (the leaf
+// kernels of xGETRF2 and xPOTRF2, see src/lapack/factor_kernels.h) compute
+// different last bits also in real precision: their factors are compared
+// with the tolerance, and their pivots and INFO exactly.
+//
 // The comparison catches changes that keep the results valid, which the
 // residual tests cannot: a different shift strategy, deflation criterion or
 // pivot choice. It is not part of the build or of ctest.
@@ -82,6 +87,7 @@ enum class Kind {
   kValues,       // singular values, eigenvalues: with a tolerance (complex)
   kEigenvalues,  // nonsymmetric eigenvalues: as a set (complex)
   kOther,        // factors, vectors: bitwise identity counted (complex)
+  kRounded,      // factors rounded differently by design: with a tolerance
 };
 
 struct Output {
@@ -220,7 +226,7 @@ Result Getrf(const BlasLibrary& lib, std::vector<T> a, I m, I n, I) {
   Result r;
   AddInt(r, "info", info);
   Add(r, "ipiv", Kind::kInteger, ipiv);
-  Add(r, "a", Kind::kOther, a);
+  Add(r, "a", Kind::kRounded, a);
   return r;
 }
 
@@ -233,7 +239,7 @@ Result Potrf(const BlasLibrary& lib, std::vector<T> a, I n, char uplo) {
   f(&uplo, &n, a.data(), &lda, &info, 1);
   Result r;
   AddInt(r, "info", info);
-  Add(r, "a", Kind::kOther, a);
+  Add(r, "a", Kind::kRounded, a);
   return r;
 }
 
@@ -496,7 +502,8 @@ void Compare(const std::string& routine, const std::string& what, I n,
     if (same) continue;
     identical = false;
     std::string detail;
-    if (!kComplex<T> || x.kind == Kind::kInteger) {
+    if ((!kComplex<T> && x.kind != Kind::kRounded) ||
+        x.kind == Kind::kInteger) {
       failed = true;
       size_t i = 0;
       while (i < x.values.size() && i < y.values.size() &&
@@ -660,7 +667,7 @@ int main(int argc, char** argv) {
       if (name[0] != p[0]) continue;
       printf("%-8s %6d %10d %11d", name.c_str(), t.cases, t.identical,
              t.mismatches);
-      if (p[0] == 'c' || p[0] == 'z') {
+      if (p[0] == 'c' || p[0] == 'z' || t.worst > 0) {
         printf(" %13.3g", t.worst);
       }
       printf("\n");

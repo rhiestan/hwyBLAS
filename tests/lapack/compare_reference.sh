@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Compares the ported LAPACK drivers with the reference LAPACK on the same
 # inputs (see compare_reference.cc): the real results must be bitwise
-# identical, the complex ones agree to rounding.
+# identical (except where a documented kernel rounds differently), the
+# complex ones agree to rounding.
 #
 #   tests/lapack/compare_reference.sh <hwyblas build> <LAPACK source> <work dir> [sizes]
 #
@@ -19,7 +20,7 @@
 set -euo pipefail
 
 if [ $# -lt 3 ]; then
-  sed -n '2,12p' "$0"
+  sed -n '2,13p' "$0"
   exit 1
 fi
 hwy_build=$(cd "$1" && pwd)

@@ -103,7 +103,9 @@ Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
 place of the reference routines), and the real drivers give bitwise
 identical results to the reference LAPACK on the same BLAS
-(`tests/lapack/compare_reference.sh`). The LAPACK code keeps LAPACK's license
+(`tests/lapack/compare_reference.sh`), except where a documented kernel
+rounds differently (the leaves of `?getrf2` and `?potrf2`, which make
+small LU and Cholesky factorizations several times faster). The LAPACK code keeps LAPACK's license
 (`LICENSE-LAPACK`, modified BSD). How the Fortran is translated, and the
 scripts used for it, are described in `doc/fortran_port.md`.
 

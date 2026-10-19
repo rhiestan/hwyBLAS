@@ -17,6 +17,7 @@ if(HWYBLAS_LAPACK)
   target_sources(hwyblas PRIVATE
     lapack/auxiliary.cc
     lapack/environment.cc
+    lapack/factor_kernels.cc
     lapack/bdsdc.cc
     lapack/bdsqr.cc
     lapack/bidiagonal.cc

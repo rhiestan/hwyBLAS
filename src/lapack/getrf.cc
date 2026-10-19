@@ -11,6 +11,7 @@
 
 #include "hwyblas/lapack.h"
 #include "src/lapack/blas.h"
+#include "src/lapack/factor_kernels.h"
 #include "src/lapack/lapack_common.h"
 #include "src/lapack/lapack_routines.h"
 
@@ -96,6 +97,13 @@ void Laswp(blasint n, T* a, blasint lda, blasint k1, blasint k2,
 // [A12; A22], solves A12, updates A22, then calls itself to factor A22 and
 // does the swaps on A21.
 //
+// Deviation: the recursion stops at matrices with kGetrfLeaf rows or
+// columns or fewer, which a kernel factors with the unblocked algorithm
+// (see factor_kernels.h): the same pivots (chosen as by xIAMAX) and results
+// up to rounding, several times faster for small matrices and panels. The
+// reference's cases of one row or column are therefore not reached; they
+// are kept for the comparison with the reference.
+//
 // Returns INFO: 0 on success, -i if argument i had an illegal value, or
 // i > 0 if U(i, i) is exactly zero. The factorization has then been
 // completed, but U is exactly singular, and division by zero will occur if
@@ -123,6 +131,11 @@ blasint Getrf2(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
 
   // Quick return if possible.
   if (m == 0 || n == 0) return info;
+
+  // Deviation: matrices with few rows or columns are factored by a kernel.
+  if (Min(m, n) <= kGetrfLeaf) {
+    return GetrfLeaf(m, n, a, lda, ipiv);
+  }
 
   if (m == 1) {
     // Use unblocked code for one row case. Just need to handle IPIV and

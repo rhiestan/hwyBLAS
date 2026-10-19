@@ -10,6 +10,7 @@
 
 #include "hwyblas/lapack.h"
 #include "src/lapack/blas.h"
+#include "src/lapack/factor_kernels.h"
 #include "src/lapack/lapack_common.h"
 #include "src/lapack/lapack_routines.h"
 
@@ -33,6 +34,12 @@ namespace lapack {
 //
 // The subroutine calls itself to factor A11. Update and scale A21 or A12,
 // update A22 then call itself to factor A22.
+//
+// Deviation: the recursion stops at matrices of order kPotrfLeaf or less,
+// which a kernel factors with the unblocked algorithm (see
+// factor_kernels.h): same results up to rounding, several times faster for
+// small matrices. The reference's case N = 1 is therefore not reached; it
+// is kept for the comparison with the reference.
 //
 // Returns INFO: 0 on success, -i if argument i had an illegal value, or
 // i > 0 if the leading principal minor of order i is not positive (or NaN),
@@ -61,6 +68,9 @@ blasint Potrf2(char uplo, blasint n, T* a, blasint lda) {
 
   // Quick return if possible.
   if (n == 0) return info;
+
+  // Deviation: small matrices are factored by a kernel.
+  if (n <= kPotrfLeaf) return PotrfLeaf(upper, n, a, lda);
 
   if (n == 1) {
     // N=1 case: test for non-positive-definiteness.
