@@ -805,9 +805,9 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
       dtipsq = WORK(ip1) * DELTA(ip1);
       dtisq = WORK(i) * DELTA(i);
       if (orgati) {
-        c = w - dtipsq * dw + delsq * (Z(i) / dtisq) * (Z(i) / dtisq);
+        c = w - dtipsq * dw + delsq * ((Z(i) / dtisq) * (Z(i) / dtisq));
       } else {
-        c = w - dtisq * dw - delsq * (Z(ip1) / dtipsq) * (Z(ip1) / dtipsq);
+        c = w - dtisq * dw - delsq * ((Z(ip1) / dtipsq) * (Z(ip1) / dtipsq));
       }
       a = (dtipsq + dtisq) * w - dtipsq * dtisq * dw;
       b = dtipsq * dtisq * w;
@@ -866,9 +866,9 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
         dtipsq = WORK(ip1) * DELTA(ip1);
         dtisq = WORK(i) * DELTA(i);
         if (orgati) {
-          c = w - dtipsq * dw + delsq * (Z(i) / dtisq) * (Z(i) / dtisq);
+          c = w - dtipsq * dw + delsq * ((Z(i) / dtisq) * (Z(i) / dtisq));
         } else {
-          c = w - dtisq * dw - delsq * (Z(ip1) / dtipsq) * (Z(ip1) / dtipsq);
+          c = w - dtisq * dw - delsq * ((Z(ip1) / dtipsq) * (Z(ip1) / dtipsq));
         }
         a = (dtipsq + dtisq) * w - dtipsq * dtisq * dw;
         b = dtipsq * dtisq * w;
@@ -974,9 +974,10 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
         dtisq = WORK(i) * DELTA(i);
         if (!swtch) {
           if (orgati) {
-            c = w - dtipsq * dw + delsq * (Z(i) / dtisq) * (Z(i) / dtisq);
+            c = w - dtipsq * dw + delsq * ((Z(i) / dtisq) * (Z(i) / dtisq));
           } else {
-            c = w - dtisq * dw - delsq * (Z(ip1) / dtipsq) * (Z(ip1) / dtipsq);
+            c = w - dtisq * dw -
+                delsq * ((Z(ip1) / dtipsq) * (Z(ip1) / dtipsq));
           }
         } else {
           temp = Z(ii) / (WORK(ii) * DELTA(ii));
@@ -1054,10 +1055,10 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
           dtisq = WORK(i) * DELTA(i);
           if (!swtch) {
             if (orgati) {
-              c = w - dtipsq * dw + delsq * (Z(i) / dtisq) * (Z(i) / dtisq);
+              c = w - dtipsq * dw + delsq * ((Z(i) / dtisq) * (Z(i) / dtisq));
             } else {
               c = w - dtisq * dw -
-                  delsq * (Z(ip1) / dtipsq) * (Z(ip1) / dtipsq);
+                  delsq * ((Z(ip1) / dtipsq) * (Z(ip1) / dtipsq));
             }
           } else {
             temp = Z(ii) / (WORK(ii) * DELTA(ii));

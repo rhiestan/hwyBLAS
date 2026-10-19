@@ -45,7 +45,7 @@ The translator produces the conventions described in
 - **Intrinsics**: `MAX/MIN` (`std::max<blasint>` for integer arguments,
   initializer lists for more than two), `ABS`, `SQRT`, `SIGN`
   (`std::copysign`), `DBLE`/`REAL`, `CONJG`, `MOD`, `NINT`, `LSAME`, `**`
-  (`x * x` for `**2`, otherwise `std::pow`).
+  (`(x * x)` for `**2`, otherwise `std::pow`).
 - **Calls**: one template per real/complex pair, named after the complex
   routine (`DORGBR` and `ZUNGBR` both become `Ungbr`). A real routine called
   from a complex one gets `<R>`. `INFO` is not an argument: internal routines
@@ -160,6 +160,10 @@ attention:
   parameter and is renamed `Tm`. A regex that renames `T(` must catch every
   index expression: `T(*ns, *ns)` once stayed the complex number
   `T(ns, ns)`, which compiled and broke xLAQR3's deflation test;
+- `**` binds tighter than `*`: `A*B**2` is `A*(B*B)`. Without the
+  parentheses, `a * b * b` rounds differently (and `A/B**2` would even be
+  wrong). The translator once emitted them so; it changed xLASD4's
+  iterations (found by the comparison below) and three other routines;
 - `DATA` tables become `static const` arrays with views, `EQUIVALENCE`d
   arrays one array with two views (xLALN2);
 - `INT(WORK(1))` of a complex workspace query needs `std::real`;
@@ -185,15 +189,25 @@ A ported routine is accepted when:
   `tests/lapack/run_lapack_testers.sh`, link the ported routines in place of
   the reference ones and show no new failures.
 
+- **Comparison with the reference LAPACK**, run by hand with
+  `tests/lapack/compare_reference.sh`: the drivers give the same results
+  as the reference.
+
 Residual checks cannot see changes to heuristics that only steer the
-convergence (shifts, deflation criteria, the NIBBLE crossover of xLAQR0):
-the result is still a valid factorization. For those, the port was also
-compared with the reference LAPACK itself, built as a DLL (with flang and
-`-ffp-contract=off`) against hwyBLAS's BLAS and loaded next to hwyBLAS in
-one process. With the same BLAS, the real routines (xGEES and below) give
-bitwise identical results on random and structured matrices of orders 3 to
-200, and mutations of the heuristics change them. The complex routines
-differ in the last bits: for COMPLEX / REAL, flang performs a full complex
-division (the standard's conversion to COMPLEX first), while C++ (and
-gfortran) divide the two parts; the multishift QR algorithm then amplifies
-such differences into a different order of the eigenvalues.
+convergence (shifts, deflation criteria, the NIBBLE crossover of xLAQR0),
+or a different rounding: the result is still a valid factorization. The
+comparison sees them. It builds the reference LAPACK as a shared library
+(without floating-point contraction) against hwyBLAS's BLAS, loads it next
+to hwyBLAS in one process, redirects hwyBLAS's ILAENV to the reference one
+and calls every driver (xGETRF, xPOTRF, xGEQRF, xGELQF, xGEQP3,
+xSYEV/xHEEV, xGESVD, xGESDD, xGEES, with all job options) in both on the
+same matrices of orders 0 to 401. With the same BLAS and parameters, the
+real results are bitwise identical, and mutations of the heuristics change
+them. The complex results differ in the last bits, because flang evaluates
+some complex divisions differently (for COMPLEX / REAL it performs a full
+complex division, the standard's conversion to COMPLEX first, while C++
+and gfortran divide the two parts); the multishift QR algorithm amplifies
+such differences into a different order of the eigenvalues. The tool
+therefore compares the complex singular values and eigenvalues with a
+tolerance (the nonsymmetric eigenvalues as sets), and only counts the
+bitwise identical results otherwise.

@@ -358,7 +358,7 @@ RealT<T> Lanhe(char norm, char uplo, blasint n, const T* a, blasint lda,
       if (std::real(A(i, i)) != zero) {
         const R absa = std::abs(std::real(A(i, i)));
         if (scale < absa) {
-          sum = one + sum * (scale / absa) * (scale / absa);
+          sum = one + sum * ((scale / absa) * (scale / absa));
           scale = absa;
         } else {
           sum = sum + (absa / scale) * (absa / scale);

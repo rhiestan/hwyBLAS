@@ -255,7 +255,8 @@ def expr(toks, r):
                 else:
                     ex = ex.lower()
             if ex == '2':
-                out.append(base + ' * ' + base)
+                # Parenthesized: A*B**2 is A*(B*B).
+                out.append('(' + base + ' * ' + base + ')')
             else:
                 out.append('std::pow(' + base + ', ' + ex + ')')
             continue

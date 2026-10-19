@@ -80,7 +80,7 @@ void Laqp2(blasint m, blasint n, blasint offset, T* a, blasint lda,
         R temp = one - ratio * ratio;
         temp = std::max(temp, zero);
         const R vratio = VN1(j) / VN2(j);
-        const R temp2 = temp * vratio * vratio;
+        const R temp2 = temp * (vratio * vratio);
         if (temp2 <= tol3z) {
           if (offpi < m) {
             VN1(j) = Nrm2(m - offpi, A.ptr(offpi + 1, j), 1);
@@ -207,7 +207,7 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
           R temp = std::abs(A(rk, j)) / VN1(j);
           temp = std::max(zero, (one + temp) * (one - temp));
           const R vratio = VN1(j) / VN2(j);
-          const R temp2 = temp * vratio * vratio;
+          const R temp2 = temp * (vratio * vratio);
           if (temp2 <= tol3z) {
             // VN2(J) links the columns whose norms must be recomputed.
             VN2(j) = R(lsticc);
