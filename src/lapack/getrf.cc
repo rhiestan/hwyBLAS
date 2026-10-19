@@ -1,5 +1,6 @@
 // LU factorization with partial pivoting: xGETRF (blocked), xGETRF2
-// (recursive) and xLASWP (row interchanges).
+// (recursive) and xLASWP (row interchanges); solution of linear systems
+// with it (xGETRS, xGESV) and the inverse (xGETRI).
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -278,11 +279,219 @@ blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
   return info;
 }
 
-#define HWYBLAS_LAPACK_INSTANTIATE(T)                                  \
-  template void Laswp<T>(blasint, T*, blasint, blasint, blasint,       \
-                         const blasint*, blasint);                     \
-  template blasint Getrf2<T>(blasint, blasint, T*, blasint, blasint*); \
-  template blasint Getrf<T>(blasint, blasint, T*, blasint, blasint*);
+// xGETRS: solves A * X = B, A**T * X = B or A**H * X = B (TRANS = 'N', 'T'
+// or 'C') for the N-by-NRHS matrix X, with the LU factorization of the
+// N-by-N matrix A computed by xGETRF (A and IPIV). X overwrites B.
+//
+// Returns INFO: 0 on success, or -i if argument i had an illegal value.
+template <typename T>
+blasint Getrs(char trans, blasint n, blasint nrhs, const T* a, blasint lda,
+              const blasint* ipiv, T* b, blasint ldb) {
+  const T one = T(1);
+
+  // Test the input parameters.
+  blasint info = 0;
+  const bool notran = Lsame(trans, 'N');
+  if (!notran && !Lsame(trans, 'T') && !Lsame(trans, 'C')) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (nrhs < 0) {
+    info = -3;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -5;
+  } else if (ldb < Max<blasint>(1, n)) {
+    info = -8;
+  }
+  if (info != 0) {
+    Xerbla<T>("GETRS", -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0 || nrhs == 0) return info;
+
+  if (notran) {
+    // Solve A * X = B.
+
+    // Apply row interchanges to the right hand sides.
+    Laswp(nrhs, b, ldb, 1, n, ipiv, 1);
+
+    // Solve L*X = B, overwriting B with X.
+    Trsm('L', 'L', 'N', 'U', n, nrhs, one, a, lda, b, ldb);
+
+    // Solve U*X = B, overwriting B with X.
+    Trsm('L', 'U', 'N', 'N', n, nrhs, one, a, lda, b, ldb);
+  } else {
+    // Solve A**T * X = B or A**H * X = B. (The real routine passes 'T'
+    // where this passes TRANS, which the BLAS treat alike for real T.)
+
+    // Solve U**T *X = B or U**H *X = B, overwriting B with X.
+    Trsm('L', 'U', trans, 'N', n, nrhs, one, a, lda, b, ldb);
+
+    // Solve L**T *X = B, or L**H *X = B overwriting B with X.
+    Trsm('L', 'L', trans, 'U', n, nrhs, one, a, lda, b, ldb);
+
+    // Apply row interchanges to the solution vectors.
+    Laswp(nrhs, b, ldb, 1, n, ipiv, -1);
+  }
+  return info;
+}
+
+// xGESV: solves A * X = B for the N-by-N matrix A and the N-by-NRHS
+// matrices X and B, with the LU factorization of A (xGETRF), which
+// overwrites A (with IPIV). X overwrites B.
+//
+// Returns INFO: 0 on success, -i if argument i had an illegal value, or
+// i > 0 if U(i, i) is exactly zero: the factorization has been completed,
+// but U is exactly singular, so the solution could not be computed.
+template <typename T>
+blasint Gesv(blasint n, blasint nrhs, T* a, blasint lda, blasint* ipiv, T* b,
+             blasint ldb) {
+  // Test the input parameters.
+  blasint info = 0;
+  if (n < 0) {
+    info = -1;
+  } else if (nrhs < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -4;
+  } else if (ldb < Max<blasint>(1, n)) {
+    info = -7;
+  }
+  if (info != 0) {
+    Xerbla<T>("GESV", -info);
+    return info;
+  }
+
+  // Compute the LU factorization of A.
+  info = Getrf(n, n, a, lda, ipiv);
+  if (info == 0) {
+    // Solve the system A*X = B, overwriting B with X.
+    info = Getrs('N', n, nrhs, a, lda, ipiv, b, ldb);
+  }
+  return info;
+}
+
+// xGETRI: computes the inverse of the N-by-N matrix A from its LU
+// factorization by xGETRF (A and IPIV), which it overwrites. The method
+// inverts U and then solves inv(A)*L = inv(U) for inv(A), in blocks of NB
+// columns (from ILAENV) if LWORK >= N*NB, else unblocked (LWORK >= N).
+// LWORK = -1 is a workspace query: the optimal LWORK is returned in
+// WORK(1).
+//
+// Returns INFO: 0 on success, -i if argument i had an illegal value, or
+// i > 0 if U(i, i) is exactly zero; the matrix is singular and its inverse
+// could not be computed.
+template <typename T>
+blasint Getri(blasint n, T* a, blasint lda, const blasint* ipiv, T* work,
+              blasint lwork) {
+  const T zero = T(0), one = T(1);
+  const Matrix<T> A(a, lda);
+  const Vector<const blasint> IPIV(ipiv);
+  const Vector<T> WORK(work);
+
+  // Test the input parameters.
+  blasint info = 0;
+  blasint nb = Ilaenv<T>(1, "GETRI", " ", n, -1, -1, -1);
+  const blasint lwkopt = Max<blasint>(1, n * nb);
+  WORK(1) = WorkSize<T>(lwkopt);
+  const bool lquery = (lwork == -1);
+  if (n < 0) {
+    info = -1;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -3;
+  } else if (lwork < Max<blasint>(1, n) && !lquery) {
+    info = -6;
+  }
+  if (info != 0) {
+    Xerbla<T>("GETRI", -info);
+    return info;
+  } else if (lquery) {
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0) return info;
+
+  // Form inv(U). If INFO > 0 from xTRTRI, then U is singular, and the
+  // inverse is not computed.
+  info = Trtri('U', 'N', n, a, lda);
+  if (info > 0) return info;
+
+  blasint nbmin = 2;
+  const blasint ldwork = n;
+  blasint iws;
+  if (nb > 1 && nb < n) {
+    iws = Max<blasint>(ldwork * nb, 1);
+    if (lwork < iws) {
+      nb = lwork / ldwork;
+      nbmin = Max<blasint>(2, Ilaenv<T>(2, "GETRI", " ", n, -1, -1, -1));
+    }
+  } else {
+    iws = n;
+  }
+
+  // Solve the equation inv(A)*L = inv(U) for inv(A).
+  if (nb < nbmin || nb >= n) {
+    // Use unblocked code.
+    for (blasint j = n; j >= 1; --j) {
+      // Copy current column of L to WORK and replace with zeros.
+      for (blasint i = j + 1; i <= n; ++i) {
+        WORK(i) = A(i, j);
+        A(i, j) = zero;
+      }
+
+      // Compute current column of inv(A).
+      if (j < n) {
+        Gemv('N', n, n - j, -one, A.ptr(1, j + 1), lda, WORK.ptr(j + 1), 1, one,
+             A.ptr(1, j), 1);
+      }
+    }
+  } else {
+    // Use blocked code.
+    const blasint nn = ((n - 1) / nb) * nb + 1;
+    for (blasint j = nn; j >= 1; j -= nb) {
+      const blasint jb = Min(nb, n - j + 1);
+
+      // Copy current block column of L to WORK and replace with zeros.
+      for (blasint jj = j; jj <= j + jb - 1; ++jj) {
+        for (blasint i = jj + 1; i <= n; ++i) {
+          WORK(i + (jj - j) * ldwork) = A(i, jj);
+          A(i, jj) = zero;
+        }
+      }
+
+      // Compute current block column of inv(A).
+      if (j + jb <= n) {
+        Gemm('N', 'N', n, jb, n - j - jb + 1, -one, A.ptr(1, j + jb), lda,
+             WORK.ptr(j + jb), ldwork, one, A.ptr(1, j), lda);
+      }
+      Trsm('R', 'L', 'N', 'U', n, jb, one, WORK.ptr(j), ldwork, A.ptr(1, j),
+           lda);
+    }
+  }
+
+  // Apply column interchanges.
+  for (blasint j = n - 1; j >= 1; --j) {
+    const blasint jp = IPIV(j);
+    if (jp != j) Swap(n, A.ptr(1, j), 1, A.ptr(1, jp), 1);
+  }
+
+  WORK(1) = WorkSize<T>(iws);
+  return info;
+}
+
+#define HWYBLAS_LAPACK_INSTANTIATE(T)                                   \
+  template void Laswp<T>(blasint, T*, blasint, blasint, blasint,        \
+                         const blasint*, blasint);                      \
+  template blasint Getrf2<T>(blasint, blasint, T*, blasint, blasint*);  \
+  template blasint Getrf<T>(blasint, blasint, T*, blasint, blasint*);   \
+  template blasint Getrs<T>(char, blasint, blasint, const T*, blasint,  \
+                            const blasint*, T*, blasint);               \
+  template blasint Gesv<T>(blasint, blasint, T*, blasint, blasint*, T*, \
+                           blasint);                                    \
+  template blasint Getri<T>(blasint, T*, blasint, const blasint*, T*, blasint);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
@@ -311,6 +520,27 @@ extern "C" {
       const hwyblas_int* k1, const hwyblas_int* k2, const hwyblas_int* ipiv,   \
       const hwyblas_int* incx) {                                               \
     hwyblas::lapack::Laswp(*n, As<T>(a), *lda, *k1, *k2, ipiv, *incx);         \
+  }                                                                            \
+  HWYBLAS_API void prefix##getrs_(                                             \
+      const char* trans, const hwyblas_int* n, const hwyblas_int* nrhs,        \
+      const R* a, const hwyblas_int* lda, const hwyblas_int* ipiv, R* b,       \
+      const hwyblas_int* ldb, hwyblas_int* info) {                             \
+    *info = hwyblas::lapack::Getrs(*trans, *n, *nrhs, As<const T>(a), *lda,    \
+                                   ipiv, As<T>(b), *ldb);                      \
+  }                                                                            \
+  HWYBLAS_API void prefix##gesv_(                                              \
+      const hwyblas_int* n, const hwyblas_int* nrhs, R* a,                     \
+      const hwyblas_int* lda, hwyblas_int* ipiv, R* b, const hwyblas_int* ldb, \
+      hwyblas_int* info) {                                                     \
+    *info = hwyblas::lapack::Gesv(*n, *nrhs, As<T>(a), *lda, ipiv, As<T>(b),   \
+                                  *ldb);                                       \
+  }                                                                            \
+  HWYBLAS_API void prefix##getri_(                                             \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda,                      \
+      const hwyblas_int* ipiv, R* work, const hwyblas_int* lwork,              \
+      hwyblas_int* info) {                                                     \
+    *info =                                                                    \
+        hwyblas::lapack::Getri(*n, As<T>(a), *lda, ipiv, As<T>(work), *lwork); \
   }
 
 HWYBLAS_LAPACK_GETRF(s, float, float)

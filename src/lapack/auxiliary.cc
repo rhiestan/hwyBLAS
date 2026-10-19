@@ -1,6 +1,7 @@
 // LAPACK's auxiliary routines for vectors and matrices: xLACGV, xLACPY,
 // xLACP2, xLACRM, xLARCM, CROT / ZROT, ICMAX1 / IZMAX1, SCSUM1 / DZSUM1,
-// xLASET, xLASCL, xLAPY2, xLAPY3, xLADIV, ILAxLC and ILAxLR.
+// xLASET, xLASCL, xRSCL, xLAPY2, xLAPY3, xLADIV, ILAxLC, ILAxLR, xISNAN and
+// xLAISNAN.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -381,6 +382,51 @@ T Ladiv(T x, T y) {
   return T(zr, zi);
 }
 
+// xRSCL (real T), CSRSCL / ZDRSCL (complex T): multiplies the vector X of
+// length N (increment INCX) by the real scalar 1/SA, without overflow or
+// underflow as long as the final result X/SA does not: in steps of factors
+// that are safe (powers of the safe minimum, then the rest).
+template <typename T>
+void Rscl(blasint n, RealT<T> sa, T* sx, blasint incx) {
+  using R = RealT<T>;
+  const R zero = R(0), one = R(1);
+
+  // Quick return if possible.
+  if (n <= 0) return;
+
+  // Get machine parameters.
+  const R smlnum = Lamch<R>('S');
+  const R bignum = one / smlnum;
+
+  // Initialize the denominator to SA and the numerator to 1.
+  R cden = sa;
+  R cnum = one;
+
+  bool done;
+  do {
+    const R cden1 = cden * smlnum;
+    const R cnum1 = cnum / bignum;
+    R mul;
+    if (std::abs(cden1) > std::abs(cnum) && cnum != zero) {
+      // Pre-multiply X by SMLNUM if CDEN is large compared to CNUM.
+      mul = smlnum;
+      done = false;
+      cden = cden1;
+    } else if (std::abs(cnum1) > std::abs(cden)) {
+      // Pre-multiply X by BIGNUM if CDEN is small compared to CNUM.
+      mul = bignum;
+      done = false;
+      cnum = cnum1;
+    } else {
+      // Multiply X by CNUM / CDEN and return.
+      mul = cnum / cden;
+      done = true;
+    }
+    // Scale the vector X by MUL.
+    Rscal(n, mul, sx, incx);
+  } while (!done);
+}
+
 // ILAxLC: scans the M-by-N matrix A for its last non-zero column; returns
 // 0 if A is zero (or N = 0).
 template <typename T>
@@ -621,7 +667,8 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
   template blasint Ilalr<T>(blasint, blasint, const T*, blasint);       \
   template void Laset<T>(char, blasint, blasint, T, T, T*, blasint);    \
   template blasint Lascl<T>(char, blasint, blasint, RealT<T>, RealT<T>, \
-                            blasint, blasint, T*, blasint);
+                            blasint, blasint, T*, blasint);             \
+  template void Rscl<T>(blasint, RealT<T>, T*, blasint);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
@@ -740,6 +787,19 @@ HWYBLAS_LAPACK_AUXILIARY_COMPLEX(z, c64, double)
 
 #undef HWYBLAS_LAPACK_AUXILIARY_COMPLEX
 
+#define HWYBLAS_LAPACK_RSCL(name, T, R)                           \
+  HWYBLAS_API void name(const hwyblas_int* n, const R* sa, R* sx, \
+                        const hwyblas_int* incx) {                \
+    hwyblas::lapack::Rscl(*n, *sa, As<T>(sx), *incx);             \
+  }
+
+HWYBLAS_LAPACK_RSCL(srscl_, float, float)
+HWYBLAS_LAPACK_RSCL(drscl_, double, double)
+HWYBLAS_LAPACK_RSCL(csrscl_, c32, float)
+HWYBLAS_LAPACK_RSCL(zdrscl_, c64, double)
+
+#undef HWYBLAS_LAPACK_RSCL
+
 HWYBLAS_API float scsum1_(const hwyblas_int* n, const float* cx,
                           const hwyblas_int* incx) {
   return hwyblas::lapack::Sum1(*n, As<const c32>(cx), *incx);
@@ -749,16 +809,23 @@ HWYBLAS_API double dzsum1_(const hwyblas_int* n, const double* cx,
   return hwyblas::lapack::Sum1(*n, As<const c64>(cx), *incx);
 }
 
-#define HWYBLAS_LAPACK_AUXILIARY_REAL(prefix, R)                      \
-  HWYBLAS_API R prefix##lapy2_(const R* x, const R* y) {              \
-    return hwyblas::lapack::Lapy2(*x, *y);                            \
-  }                                                                   \
-  HWYBLAS_API R prefix##lapy3_(const R* x, const R* y, const R* z) {  \
-    return hwyblas::lapack::Lapy3(*x, *y, *z);                        \
-  }                                                                   \
-  HWYBLAS_API void prefix##ladiv_(const R* a, const R* b, const R* c, \
-                                  const R* d, R* p, R* q) {           \
-    hwyblas::lapack::Ladiv(*a, *b, *c, *d, p, q);                     \
+#define HWYBLAS_LAPACK_AUXILIARY_REAL(prefix, R)                           \
+  HWYBLAS_API R prefix##lapy2_(const R* x, const R* y) {                   \
+    return hwyblas::lapack::Lapy2(*x, *y);                                 \
+  }                                                                        \
+  HWYBLAS_API R prefix##lapy3_(const R* x, const R* y, const R* z) {       \
+    return hwyblas::lapack::Lapy3(*x, *y, *z);                             \
+  }                                                                        \
+  HWYBLAS_API void prefix##ladiv_(const R* a, const R* b, const R* c,      \
+                                  const R* d, R* p, R* q) {                \
+    hwyblas::lapack::Ladiv(*a, *b, *c, *d, p, q);                          \
+  }                                                                        \
+  /* LOGICAL xISNAN(DIN), and xLAISNAN(DIN1, DIN2) = DIN1 .NE. DIN2. */    \
+  HWYBLAS_API hwyblas_int prefix##isnan_(const R* din) {                   \
+    return std::isnan(*din) ? 1 : 0;                                       \
+  }                                                                        \
+  HWYBLAS_API hwyblas_int prefix##laisnan_(const R* din1, const R* din2) { \
+    return *din1 != *din2 ? 1 : 0;                                         \
   }
 
 HWYBLAS_LAPACK_AUXILIARY_REAL(s, float)

@@ -1,5 +1,5 @@
 // Matrix norms: xLASSQ (scaled sum of squares), xLANGE (general), xLANSY
-// (symmetric) and xLANHE (Hermitian).
+// (symmetric), xLANHE (Hermitian) and xLANTR (trapezoidal).
 //
 // NORM is 'M' (max |a(i,j)|, not a consistent matrix norm), '1' or 'O'
 // (one norm, maximum column sum), 'I' (infinity norm, maximum row sum), or
@@ -370,7 +370,171 @@ RealT<T> Lanhe(char norm, char uplo, blasint n, const T* a, blasint lda,
   return value;
 }
 
+// xLANTR: the norm NORM of the M-by-N trapezoidal (triangular if M = N)
+// matrix A: its upper trapezoid (UPLO = 'U', A(i, j) = 0 for i > j) or lower
+// trapezoid (UPLO = 'L', A(i, j) = 0 for i < j), with a unit diagonal for
+// DIAG = 'U' (which is not referenced). WORK (M elements) is referenced only
+// for NORM = 'I'.
+template <typename T>
+RealT<T> Lantr(char norm, char uplo, char diag, blasint m, blasint n,
+               const T* a, blasint lda, RealT<T>* work) {
+  using R = RealT<T>;
+  const R one = R(1), zero = R(0);
+  const Matrix<const T> A(a, lda);
+  const Vector<R> WORK(work);
+
+  R value = zero;
+  if (Min(m, n) == 0) {
+    value = zero;
+  } else if (Lsame(norm, 'M')) {
+    // Find max(abs(A(i,j))).
+    if (Lsame(diag, 'U')) {
+      value = one;
+      if (Lsame(uplo, 'U')) {
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = 1; i <= Min(m, j - 1); ++i) {
+            const R sum = std::abs(A(i, j));
+            if (value < sum || std::isnan(sum)) value = sum;
+          }
+        }
+      } else {
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = j + 1; i <= m; ++i) {
+            const R sum = std::abs(A(i, j));
+            if (value < sum || std::isnan(sum)) value = sum;
+          }
+        }
+      }
+    } else {
+      value = zero;
+      if (Lsame(uplo, 'U')) {
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = 1; i <= Min(m, j); ++i) {
+            const R sum = std::abs(A(i, j));
+            if (value < sum || std::isnan(sum)) value = sum;
+          }
+        }
+      } else {
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = j; i <= m; ++i) {
+            const R sum = std::abs(A(i, j));
+            if (value < sum || std::isnan(sum)) value = sum;
+          }
+        }
+      }
+    }
+  } else if (Lsame(norm, 'O') || norm == '1') {
+    // Find norm1(A).
+    value = zero;
+    const bool udiag = Lsame(diag, 'U');
+    if (Lsame(uplo, 'U')) {
+      for (blasint j = 1; j <= n; ++j) {
+        R sum;
+        if (udiag && j <= m) {
+          sum = one;
+          for (blasint i = 1; i <= j - 1; ++i) sum = sum + std::abs(A(i, j));
+        } else {
+          sum = zero;
+          for (blasint i = 1; i <= Min(m, j); ++i) {
+            sum = sum + std::abs(A(i, j));
+          }
+        }
+        if (value < sum || std::isnan(sum)) value = sum;
+      }
+    } else {
+      for (blasint j = 1; j <= n; ++j) {
+        R sum;
+        if (udiag) {
+          sum = one;
+          for (blasint i = j + 1; i <= m; ++i) sum = sum + std::abs(A(i, j));
+        } else {
+          sum = zero;
+          for (blasint i = j; i <= m; ++i) sum = sum + std::abs(A(i, j));
+        }
+        if (value < sum || std::isnan(sum)) value = sum;
+      }
+    }
+  } else if (Lsame(norm, 'I')) {
+    // Find normI(A).
+    if (Lsame(uplo, 'U')) {
+      if (Lsame(diag, 'U')) {
+        for (blasint i = 1; i <= m; ++i) WORK(i) = one;
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = 1; i <= Min(m, j - 1); ++i) {
+            WORK(i) = WORK(i) + std::abs(A(i, j));
+          }
+        }
+      } else {
+        for (blasint i = 1; i <= m; ++i) WORK(i) = zero;
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = 1; i <= Min(m, j); ++i) {
+            WORK(i) = WORK(i) + std::abs(A(i, j));
+          }
+        }
+      }
+    } else {
+      if (Lsame(diag, 'U')) {
+        for (blasint i = 1; i <= Min(m, n); ++i) WORK(i) = one;
+        for (blasint i = n + 1; i <= m; ++i) WORK(i) = zero;
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = j + 1; i <= m; ++i) {
+            WORK(i) = WORK(i) + std::abs(A(i, j));
+          }
+        }
+      } else {
+        for (blasint i = 1; i <= m; ++i) WORK(i) = zero;
+        for (blasint j = 1; j <= n; ++j) {
+          for (blasint i = j; i <= m; ++i) {
+            WORK(i) = WORK(i) + std::abs(A(i, j));
+          }
+        }
+      }
+    }
+    value = zero;
+    for (blasint i = 1; i <= m; ++i) {
+      const R sum = WORK(i);
+      if (value < sum || std::isnan(sum)) value = sum;
+    }
+  } else if (Lsame(norm, 'F') || Lsame(norm, 'E')) {
+    // Find normF(A).
+    R scale, sum;
+    if (Lsame(uplo, 'U')) {
+      if (Lsame(diag, 'U')) {
+        scale = one;
+        sum = R(Min(m, n));
+        for (blasint j = 2; j <= n; ++j) {
+          Lassq(Min(m, j - 1), A.ptr(1, j), 1, &scale, &sum);
+        }
+      } else {
+        scale = zero;
+        sum = one;
+        for (blasint j = 1; j <= n; ++j) {
+          Lassq(Min(m, j), A.ptr(1, j), 1, &scale, &sum);
+        }
+      }
+    } else {
+      if (Lsame(diag, 'U')) {
+        scale = one;
+        sum = R(Min(m, n));
+        for (blasint j = 1; j <= n; ++j) {
+          Lassq(m - j, A.ptr(Min(m, j + 1), j), 1, &scale, &sum);
+        }
+      } else {
+        scale = zero;
+        sum = one;
+        for (blasint j = 1; j <= n; ++j) {
+          Lassq(m - j + 1, A.ptr(j, j), 1, &scale, &sum);
+        }
+      }
+    }
+    value = scale * std::sqrt(sum);
+  }
+  return value;
+}
+
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                       \
+  template RealT<T> Lantr<T>(char, char, char, blasint, blasint, const T*,  \
+                             blasint, RealT<T>*);                           \
   template void Lassq<T>(blasint, const T*, blasint, RealT<T>*, RealT<T>*); \
   template RealT<T> Lange<T>(char, blasint, blasint, const T*, blasint,     \
                              RealT<T>*);                                    \
@@ -390,22 +554,29 @@ using hwyblas::lapack::As;
 
 extern "C" {
 
-#define HWYBLAS_LAPACK_NORMS(prefix, T, R)                                    \
-  HWYBLAS_API void prefix##lassq_(const hwyblas_int* n, const R* x,           \
-                                  const hwyblas_int* incx, R* scale,          \
-                                  R* sumsq) {                                 \
-    hwyblas::lapack::Lassq(*n, As<const T>(x), *incx, scale, sumsq);          \
-  }                                                                           \
-  HWYBLAS_API R prefix##lange_(const char* norm, const hwyblas_int* m,        \
-                               const hwyblas_int* n, const R* a,              \
-                               const hwyblas_int* lda, R* work) {             \
-    return hwyblas::lapack::Lange(*norm, *m, *n, As<const T>(a), *lda, work); \
-  }                                                                           \
-  HWYBLAS_API R prefix##lansy_(const char* norm, const char* uplo,            \
-                               const hwyblas_int* n, const R* a,              \
-                               const hwyblas_int* lda, R* work) {             \
-    return hwyblas::lapack::Lansy(*norm, *uplo, *n, As<const T>(a), *lda,     \
-                                  work);                                      \
+#define HWYBLAS_LAPACK_NORMS(prefix, T, R)                                     \
+  HWYBLAS_API void prefix##lassq_(const hwyblas_int* n, const R* x,            \
+                                  const hwyblas_int* incx, R* scale,           \
+                                  R* sumsq) {                                  \
+    hwyblas::lapack::Lassq(*n, As<const T>(x), *incx, scale, sumsq);           \
+  }                                                                            \
+  HWYBLAS_API R prefix##lange_(const char* norm, const hwyblas_int* m,         \
+                               const hwyblas_int* n, const R* a,               \
+                               const hwyblas_int* lda, R* work) {              \
+    return hwyblas::lapack::Lange(*norm, *m, *n, As<const T>(a), *lda, work);  \
+  }                                                                            \
+  HWYBLAS_API R prefix##lansy_(const char* norm, const char* uplo,             \
+                               const hwyblas_int* n, const R* a,               \
+                               const hwyblas_int* lda, R* work) {              \
+    return hwyblas::lapack::Lansy(*norm, *uplo, *n, As<const T>(a), *lda,      \
+                                  work);                                       \
+  }                                                                            \
+  HWYBLAS_API R prefix##lantr_(const char* norm, const char* uplo,             \
+                               const char* diag, const hwyblas_int* m,         \
+                               const hwyblas_int* n, const R* a,               \
+                               const hwyblas_int* lda, R* work) {              \
+    return hwyblas::lapack::Lantr(*norm, *uplo, *diag, *m, *n, As<const T>(a), \
+                                  *lda, work);                                 \
   }
 
 HWYBLAS_LAPACK_NORMS(s, float, float)

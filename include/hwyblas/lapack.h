@@ -129,6 +129,60 @@ HWYBLAS_API void zlaswp_(const hwyblas_int* n, double* a,
                          const hwyblas_int* k2, const hwyblas_int* ipiv,
                          const hwyblas_int* incx);
 
+/* Solves op(A) * X = B (trans = 'N', 'T' or 'C') with the LU
+ * factorization of the n x n matrix A by ?getrf (a and ipiv); X overwrites
+ * the n x nrhs matrix B. */
+HWYBLAS_API void sgetrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgetrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgetrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgetrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+
+/* Solves A * X = B with the LU factorization of the n x n matrix A
+ * (?getrf), which overwrites A and ipiv; X overwrites B. info > 0:
+ * U(info, info) is exactly zero, and X has not been computed. */
+HWYBLAS_API void sgesv_(const hwyblas_int* n, const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgesv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* a, const hwyblas_int* lda, hwyblas_int* ipiv,
+                        double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgesv_(const hwyblas_int* n, const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgesv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* a, const hwyblas_int* lda, hwyblas_int* ipiv,
+                        double* b, const hwyblas_int* ldb, hwyblas_int* info);
+
+/* The inverse of A from its LU factorization by ?getrf (a and
+ * ipiv), which it overwrites. lwork >= max(1, n) (optimal: n * the block
+ * size; -1: workspace query). info > 0: U(info, info) is exactly zero. */
+HWYBLAS_API void sgetri_(const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         const hwyblas_int* ipiv, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dgetri_(const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgetri_(const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         const hwyblas_int* ipiv, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zgetri_(const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+
 /* ------------------------------------------------------------------------ */
 /* Auxiliary routines                                                       */
 
@@ -190,6 +244,288 @@ HWYBLAS_API hwyblas_int ilaclr_(const hwyblas_int* m, const hwyblas_int* n,
                                 const float* a, const hwyblas_int* lda);
 HWYBLAS_API hwyblas_int ilazlr_(const hwyblas_int* m, const hwyblas_int* n,
                                 const double* a, const hwyblas_int* lda);
+
+/* x := x / sa (real sa) without overflow or underflow if x / sa
+ * does not: ?rscl (real x), csrscl / zdrscl (complex x). */
+HWYBLAS_API void srscl_(const hwyblas_int* n, const float* sa, float* sx,
+                        const hwyblas_int* incx);
+HWYBLAS_API void drscl_(const hwyblas_int* n, const double* sa, double* sx,
+                        const hwyblas_int* incx);
+HWYBLAS_API void csrscl_(const hwyblas_int* n, const float* sa, float* sx,
+                         const hwyblas_int* incx);
+HWYBLAS_API void zdrscl_(const hwyblas_int* n, const double* sa, double* sx,
+                         const hwyblas_int* incx);
+
+/* Fortran LOGICAL (1 or 0): whether din is NaN (?isnan), whether
+ * din1 != din2 (?laisnan). */
+HWYBLAS_API hwyblas_int sisnan_(const float* din);
+HWYBLAS_API hwyblas_int disnan_(const double* din);
+HWYBLAS_API hwyblas_int slaisnan_(const float* din1, const float* din2);
+HWYBLAS_API hwyblas_int dlaisnan_(const double* din1, const double* din2);
+
+/* ------------------------------------------------------------------------ */
+/* Triangular matrices                                                      */
+
+/* The inverse of the upper ('U') or lower ('L') triangular n x n
+ * matrix A, unit diagonal for diag = 'U', in place: ?trti2 unblocked, ?trtri
+ * blocked. ?trtri: info > 0: A(info, info) is exactly zero (A is singular;
+ * not inverted). */
+HWYBLAS_API void strti2_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void dtrti2_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void ctrti2_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void ztrti2_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void strtri_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void dtrtri_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void ctrtri_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* info);
+HWYBLAS_API void ztrtri_(const char* uplo, const char* diag,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+
+/* Solves op(A) * X = B (trans = 'N', 'T' or 'C') with the
+ * triangular matrix A (uplo, diag); X overwrites the n x nrhs matrix B.
+ * info > 0: A(info, info) is exactly zero, and X has not been computed. */
+HWYBLAS_API void strtrs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dtrtrs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void ctrtrs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void ztrtrs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+
+/* Solves op(A) * x = scale * b with the triangular matrix A
+ * (uplo, diag), choosing scale <= 1 so that x does not overflow; x
+ * overwrites b. cnorm: the 1-norms of the off-diagonal columns of A
+ * (computed for normin = 'N', given for 'Y'). */
+HWYBLAS_API void slatrs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, float* x,
+                         float* scale, float* cnorm, hwyblas_int* info);
+HWYBLAS_API void dlatrs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda, double* x,
+                         double* scale, double* cnorm, hwyblas_int* info);
+HWYBLAS_API void clatrs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, float* x,
+                         float* scale, float* cnorm, hwyblas_int* info);
+HWYBLAS_API void zlatrs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda, double* x,
+                         double* scale, double* cnorm, hwyblas_int* info);
+
+/* Estimates the reciprocal condition number of the triangular
+ * matrix A (uplo, diag) in the 1-norm (norm = '1' or 'O') or the infinity
+ * norm ('I'). work: 3n elements and iwork: n (real), work: 2n and rwork: n
+ * (complex). */
+HWYBLAS_API void strcon_(const char* norm, const char* uplo, const char* diag,
+                         const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, float* rcond, float* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dtrcon_(const char* norm, const char* uplo, const char* diag,
+                         const hwyblas_int* n, const double* a,
+                         const hwyblas_int* lda, double* rcond, double* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void ctrcon_(const char* norm, const char* uplo, const char* diag,
+                         const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, float* rcond, float* work,
+                         float* rwork, hwyblas_int* info);
+HWYBLAS_API void ztrcon_(const char* norm, const char* uplo, const char* diag,
+                         const hwyblas_int* n, const double* a,
+                         const hwyblas_int* lda, double* rcond, double* work,
+                         double* rwork, hwyblas_int* info);
+
+/* Error bounds (ferr) and backward errors (berr) of the solution
+ * X of op(A) * X = B with the triangular matrix A (uplo, diag). work: 3n
+ * elements and iwork: n (real), work: 2n and rwork: n (complex). */
+HWYBLAS_API void strrfs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, const float* b,
+                         const hwyblas_int* ldb, const float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dtrrfs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda,
+                         const double* b, const hwyblas_int* ldb,
+                         const double* x, const hwyblas_int* ldx, double* ferr,
+                         double* berr, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void ctrrfs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, const float* b,
+                         const hwyblas_int* ldb, const float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, float* rwork, hwyblas_int* info);
+HWYBLAS_API void ztrrfs_(const char* uplo, const char* trans, const char* diag,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda,
+                         const double* b, const hwyblas_int* ldb,
+                         const double* x, const hwyblas_int* ldx, double* ferr,
+                         double* berr, double* work, double* rwork,
+                         hwyblas_int* info);
+
+/* ------------------------------------------------------------------------ */
+/* General linear systems: condition, equilibration, refinement             */
+
+/* Estimates the reciprocal condition number of A in the 1-norm
+ * (norm = '1' or 'O') or the infinity norm ('I') from its LU factorization
+ * by ?getrf (a) and the norm anorm of A. work: 4n elements and iwork: n
+ * (real), work: 2n and rwork: 2n (complex). */
+HWYBLAS_API void sgecon_(const char* norm, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const float* anorm,
+                         float* rcond, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dgecon_(const char* norm, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* anorm, double* rcond, double* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void cgecon_(const char* norm, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const float* anorm,
+                         float* rcond, float* work, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zgecon_(const char* norm, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* anorm, double* rcond, double* work,
+                         double* rwork, hwyblas_int* info);
+
+/* Row and column scalings r (m elements) and c (n) that
+ * equilibrate the m x n matrix A, with rowcnd, colcnd (ratios of the
+ * smallest to the largest scaling) and amax (the largest |a(i, j)|). info
+ * > 0: row info (info <= m) or column info - m of A is exactly zero. */
+HWYBLAS_API void sgeequ_(const hwyblas_int* m, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, float* r,
+                         float* c, float* rowcnd, float* colcnd, float* amax,
+                         hwyblas_int* info);
+HWYBLAS_API void dgeequ_(const hwyblas_int* m, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda, double* r,
+                         double* c, double* rowcnd, double* colcnd,
+                         double* amax, hwyblas_int* info);
+HWYBLAS_API void cgeequ_(const hwyblas_int* m, const hwyblas_int* n,
+                         const float* a, const hwyblas_int* lda, float* r,
+                         float* c, float* rowcnd, float* colcnd, float* amax,
+                         hwyblas_int* info);
+HWYBLAS_API void zgeequ_(const hwyblas_int* m, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda, double* r,
+                         double* c, double* rowcnd, double* colcnd,
+                         double* amax, hwyblas_int* info);
+
+/* Equilibrates A with the scalings of ?geequ where worthwhile;
+ * equed returns 'N' (none), 'R' (rows), 'C' (columns) or 'B' (both). */
+HWYBLAS_API void slaqge_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const float* r, const float* c,
+                         const float* rowcnd, const float* colcnd,
+                         const float* amax, char* equed);
+HWYBLAS_API void dlaqge_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* r,
+                         const double* c, const double* rowcnd,
+                         const double* colcnd, const double* amax, char* equed);
+HWYBLAS_API void claqge_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const float* r, const float* c,
+                         const float* rowcnd, const float* colcnd,
+                         const float* amax, char* equed);
+HWYBLAS_API void zlaqge_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* r,
+                         const double* c, const double* rowcnd,
+                         const double* colcnd, const double* amax, char* equed);
+
+/* Improves the solution X of op(A) * X = B by iterative refinement
+ * with the LU factorization of A by ?getrf (af, ipiv), and computes error
+ * bounds (ferr) and backward errors (berr). work: 3n elements and iwork: n
+ * (real), work: 2n and rwork: n (complex). */
+HWYBLAS_API void sgerfs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dgerfs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void cgerfs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, float* rwork, hwyblas_int* info);
+HWYBLAS_API void zgerfs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, double* rwork, hwyblas_int* info);
+
+/* Solves op(A) * X = B with the LU factorization of A (given for
+ * fact = 'F', computed for 'N', computed after equilibration for 'E'),
+ * with iterative refinement, error bounds and the reciprocal condition
+ * number. work: 4n elements and iwork: n (real), work: 2n and rwork: 2n
+ * (complex); work(1) (real) or rwork(1) (complex) returns the reciprocal
+ * pivot growth factor. info = n + 1: A is singular to working precision. */
+HWYBLAS_API void sgesvx_(const char* fact, const char* trans,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         char* equed, float* r, float* c, float* b,
+                         const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dgesvx_(const char* fact, const char* trans,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         char* equed, double* r, double* c, double* b,
+                         const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgesvx_(const char* fact, const char* trans,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         char* equed, float* r, float* c, float* b,
+                         const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zgesvx_(const char* fact, const char* trans,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         char* equed, double* r, double* c, double* b,
+                         const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, double* rwork,
+                         hwyblas_int* info);
 
 /* ------------------------------------------------------------------------ */
 /* Householder reflectors                                                   */
@@ -609,6 +945,24 @@ HWYBLAS_API float clanhe_(const char* norm, const char* uplo,
 HWYBLAS_API double zlanhe_(const char* norm, const char* uplo,
                            const hwyblas_int* n, const double* a,
                            const hwyblas_int* lda, double* work);
+
+/* The norm (see above) of the m x n upper ('U') or lower ('L')
+ * trapezoidal matrix A (triangular if m = n), with unit diagonal for
+ * diag = 'U' (not referenced); work: m elements, for 'I'. */
+HWYBLAS_API float slantr_(const char* norm, const char* uplo, const char* diag,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const float* a, const hwyblas_int* lda, float* work);
+HWYBLAS_API double dlantr_(const char* norm, const char* uplo, const char* diag,
+                           const hwyblas_int* m, const hwyblas_int* n,
+                           const double* a, const hwyblas_int* lda,
+                           double* work);
+HWYBLAS_API float clantr_(const char* norm, const char* uplo, const char* diag,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const float* a, const hwyblas_int* lda, float* work);
+HWYBLAS_API double zlantr_(const char* norm, const char* uplo, const char* diag,
+                           const hwyblas_int* m, const hwyblas_int* n,
+                           const double* a, const hwyblas_int* lda,
+                           double* work);
 
 /* Updates scale and sumsq so that scale^2 * sumsq = sum |x(i)|^2 + (the
  * previous scale^2 * sumsq), without unnecessary overflow and underflow. */

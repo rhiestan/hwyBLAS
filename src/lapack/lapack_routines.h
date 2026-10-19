@@ -64,6 +64,10 @@ template <typename T>
 blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
               blasint m, blasint n, T* a, blasint lda);
 
+// xRSCL (real T), CSRSCL / ZDRSCL (complex T): x := x / sa, safely.
+template <typename T>
+void Rscl(blasint n, RealT<T> sa, T* sx, blasint incx);
+
 // ILAxLC: the last non-zero column of A, or 0 if A is zero.
 template <typename T>
 blasint Ilalc(blasint m, blasint n, const T* a, blasint lda);
@@ -91,6 +95,10 @@ RealT<T> Lansy(char norm, char uplo, blasint n, const T* a, blasint lda,
 template <typename T>
 RealT<T> Lanhe(char norm, char uplo, blasint n, const T* a, blasint lda,
                RealT<T>* work);
+
+template <typename T>
+RealT<T> Lantr(char norm, char uplo, char diag, blasint m, blasint n,
+               const T* a, blasint lda, RealT<T>* work);
 
 // ---------------------------------------------------------------------------
 // Householder reflectors (householder.cc)
@@ -131,6 +139,88 @@ blasint Getrf2(blasint m, blasint n, T* a, blasint lda, blasint* ipiv);
 
 template <typename T>
 blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv);
+
+template <typename T>
+blasint Getrs(char trans, blasint n, blasint nrhs, const T* a, blasint lda,
+              const blasint* ipiv, T* b, blasint ldb);
+
+template <typename T>
+blasint Gesv(blasint n, blasint nrhs, T* a, blasint lda, blasint* ipiv, T* b,
+             blasint ldb);
+
+template <typename T>
+blasint Getri(blasint n, T* a, blasint lda, const blasint* ipiv, T* work,
+              blasint lwork);
+
+// ---------------------------------------------------------------------------
+// Triangular matrices (triangular.cc)
+
+template <typename T>
+blasint Trti2(char uplo, char diag, blasint n, T* a, blasint lda);
+
+template <typename T>
+blasint Trtri(char uplo, char diag, blasint n, T* a, blasint lda);
+
+template <typename T>
+blasint Trtrs(char uplo, char trans, char diag, blasint n, blasint nrhs,
+              const T* a, blasint lda, T* b, blasint ldb);
+
+template <typename T>
+blasint Latrs(char uplo, char trans, char diag, char normin, blasint n,
+              const T* a, blasint lda, T* x, RealT<T>* scale, RealT<T>* cnorm);
+
+// The workspaces of the real and the complex routine: WORK (3 * n
+// elements) and IWORK (n) for real T, WORK (2 * n) and RWORK (n) for
+// complex T; rwork is used for complex T only, iwork for real T only.
+template <typename T>
+blasint Trcon(char norm, char uplo, char diag, blasint n, const T* a,
+              blasint lda, RealT<T>* rcond, T* work, RealT<T>* rwork,
+              blasint* iwork);
+
+// Workspaces as for Trcon.
+template <typename T>
+blasint Trrfs(char uplo, char trans, char diag, blasint n, blasint nrhs,
+              const T* a, blasint lda, const T* b, blasint ldb, const T* x,
+              blasint ldx, RealT<T>* ferr, RealT<T>* berr, T* work,
+              RealT<T>* rwork, blasint* iwork);
+
+// ---------------------------------------------------------------------------
+// Expert driver of general linear systems: condition number, equilibration,
+// iterative refinement (gesvx.cc)
+
+// WORK (4 * n elements) and IWORK (n) for real T, WORK (2 * n) and RWORK
+// (2 * n) for complex T; rwork is used for complex T only, iwork for real T
+// only.
+template <typename T>
+blasint Gecon(char norm, blasint n, const T* a, blasint lda, RealT<T> anorm,
+              RealT<T>* rcond, T* work, RealT<T>* rwork, blasint* iwork);
+
+template <typename T>
+blasint Geequ(blasint m, blasint n, const T* a, blasint lda, RealT<T>* r,
+              RealT<T>* c, RealT<T>* rowcnd, RealT<T>* colcnd, RealT<T>* amax);
+
+template <typename T>
+void Laqge(blasint m, blasint n, T* a, blasint lda, const RealT<T>* r,
+           const RealT<T>* c, RealT<T> rowcnd, RealT<T> colcnd, RealT<T> amax,
+           char* equed);
+
+// WORK (3 * n elements) and IWORK (n) for real T, WORK (2 * n) and RWORK
+// (n) for complex T; rwork is used for complex T only, iwork for real T
+// only.
+template <typename T>
+blasint Gerfs(char trans, blasint n, blasint nrhs, const T* a, blasint lda,
+              const T* af, blasint ldaf, const blasint* ipiv, const T* b,
+              blasint ldb, T* x, blasint ldx, RealT<T>* ferr, RealT<T>* berr,
+              T* work, RealT<T>* rwork, blasint* iwork);
+
+// Workspaces as for Gecon. The reciprocal pivot growth factor is returned
+// in WORK(1) for real T and RWORK(1) for complex T.
+template <typename T>
+blasint Gesvx(char fact, char trans, blasint n, blasint nrhs, T* a, blasint lda,
+              T* af, blasint ldaf, blasint* ipiv, char* equed, RealT<T>* r,
+              RealT<T>* c, T* b, blasint ldb, T* x, blasint ldx,
+              RealT<T>* rcond, RealT<T>* ferr, RealT<T>* berr, T* work,
+              RealT<T>* rwork, blasint* iwork);
 
 // ---------------------------------------------------------------------------
 // Cholesky factorization (potrf.cc)

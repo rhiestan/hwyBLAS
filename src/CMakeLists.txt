@@ -18,6 +18,7 @@ if(HWYBLAS_LAPACK)
     lapack/auxiliary.cc
     lapack/environment.cc
     lapack/factor_kernels.cc
+    lapack/gesvx.cc
     lapack/rotation_kernels.cc
     lapack/bdsdc.cc
     lapack/bdsqr.cc
@@ -32,10 +33,12 @@ if(HWYBLAS_LAPACK)
     lapack/hseqr.cc
     lapack/householder.cc
     lapack/lapacke.cc
+    lapack/lapacke_linear.cc
     lapack/lasq.cc
     lapack/norms.cc
     lapack/potrf.cc
     lapack/steqr.cc
+    lapack/triangular.cc
     lapack/syev.cc
     lapack/tridiagonal.cc
     lapack/trsen.cc

@@ -1,6 +1,6 @@
 // Tests of the auxiliary routines: xLACPY, xLACGV, xLAPY2, xLAPY3, xLADIV,
-// ILAxLC, ILAxLR, and the LAPACKE functions of the auxiliary routines and
-// of xLASWP.
+// xRSCL, xISNAN, xLAISNAN, ILAxLC, ILAxLR, and the LAPACKE functions of the
+// auxiliary routines and of xLASWP.
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -143,6 +143,71 @@ TYPED_TEST(RealAuxiliaryTest, Ladiv) {
     ASSERT_TRUE(std::isfinite(z.real()) && std::isfinite(z.imag()));
     EXPECT_LE(std::abs(std::complex<double>(z.real(), z.imag()) - expected),
               8 * Eps<R>() * scale);
+  }
+}
+
+// xRSCL, CSRSCL, ZDRSCL: x / sa, also where 1 / sa overflows (subnormal sa)
+// or loses precision (sa close to overflow). Elements between those of the
+// vector (incx = 2) are not changed.
+TYPED_TEST(AuxiliaryTest, Rscl) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  const auto rscl = [](hwyblas_int n, R sa, std::vector<T>& x,
+                       hwyblas_int incx) {
+    if constexpr (std::is_same_v<T, float>) {
+      srscl_(&n, &sa, x.data(), &incx);
+    } else if constexpr (std::is_same_v<T, double>) {
+      drscl_(&n, &sa, x.data(), &incx);
+    } else if constexpr (std::is_same_v<T, std::complex<float>>) {
+      csrscl_(&n, &sa, P(x.data()), &incx);
+    } else {
+      zdrscl_(&n, &sa, P(x.data()), &incx);
+    }
+  };
+  const R tiny = std::numeric_limits<R>::min() / 1024;
+  const R huge = std::numeric_limits<R>::max() / 2;
+  const hwyblas_int n = 5, incx = 2;
+  for (const R sa : {R(3), R(-0.25), tiny, huge}) {
+    SCOPED_TRACE(::testing::Message() << "sa " << sa);
+    std::vector<T> x(n * incx), expected(n * incx);
+    for (hwyblas_int i = 0; i < n * incx; ++i) {
+      // x(i) / sa = expected(i), with x(i) representable.
+      const T k = MakeScalar<T>((i - 4.5) / 8, i / 16.0);
+      expected[i] = k;
+      x[i] = i % incx == 0 ? k * sa : T(7);
+    }
+    rscl(n, sa, x, incx);
+    for (hwyblas_int i = 0; i < n * incx; ++i) {
+      if (i % incx != 0) {
+        EXPECT_EQ(x[i], T(7));
+      } else {
+        EXPECT_NEAR(Abs(x[i] - expected[i]), 0, 4 * Eps<T>() * Abs(expected[i]))
+            << i;
+      }
+    }
+  }
+  std::vector<T> x(2, T(1));
+  rscl(0, R(0), x, 1);  // n = 0: nothing
+  EXPECT_EQ(x[0], T(1));
+}
+
+// xISNAN and xLAISNAN (Fortran LOGICAL functions).
+TYPED_TEST(RealAuxiliaryTest, Isnan) {
+  using R = TypeParam;
+  const R nan = std::numeric_limits<R>::quiet_NaN(), one = 1;
+  const R inf = std::numeric_limits<R>::infinity();
+  if constexpr (std::is_same_v<R, float>) {
+    EXPECT_EQ(sisnan_(&nan), 1);
+    EXPECT_EQ(sisnan_(&inf), 0);
+    EXPECT_EQ(slaisnan_(&nan, &nan), 1);
+    EXPECT_EQ(slaisnan_(&one, &one), 0);
+    EXPECT_EQ(slaisnan_(&one, &inf), 1);
+  } else {
+    EXPECT_EQ(disnan_(&nan), 1);
+    EXPECT_EQ(disnan_(&inf), 0);
+    EXPECT_EQ(dlaisnan_(&nan, &nan), 1);
+    EXPECT_EQ(dlaisnan_(&one, &one), 0);
+    EXPECT_EQ(dlaisnan_(&one, &inf), 1);
   }
 }
 

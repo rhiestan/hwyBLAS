@@ -12,9 +12,11 @@
 // With the same BLAS, the same parameters and IEEE arithmetic, a faithful
 // port computes exactly the same results as the reference. The real
 // routines are therefore compared bitwise. The complex ones cannot be:
-// flang evaluates some complex divisions differently (COMPLEX / REAL as a
-// complex division, where the port divides the two parts), so results
-// differ in the last bits. Their eigenvalues and singular values are compared
+// flang evaluates mixed real and complex operations as complex ones
+// (COMPLEX / REAL as a complex division, REAL * COMPLEX as a complex
+// multiplication), where the port operates on the two parts, so results
+// differ in the last bits (and with infinities, flang's 0 * Inf gives
+// NaN). Their eigenvalues and singular values are compared
 // with a tolerance instead (as sets for the nonsymmetric eigenvalues, whose
 // order can change), and only the number of bitwise identical results is shown
 // for the other outputs.
@@ -24,9 +26,14 @@
 // different last bits also in real precision: their factors are compared
 // with the tolerance, and their pivots and INFO exactly.
 //
+// The drivers that factor with xGETRF (xGESV, xGESVX with FACT = 'N' or
+// 'E') get only matrices with clear pivots: on graded matrices and ties,
+// the different rounding of the leaf kernels can change the pivots. The
+// routines that take a factorization get the same one in both libraries.
+//
 // The comparison catches changes that keep the results valid, which the
-// residual tests cannot: a different shift strategy, deflation criterion or
-// pivot choice. It is not part of the build or of ctest.
+// residual tests cannot: a different shift strategy, deflation criterion,
+// pivot choice or scaling. It is not part of the build or of ctest.
 //
 // Copyright (c) 2026, Roman Hiestand. BSD 3-Clause License.
 
@@ -435,6 +442,385 @@ Result Gees(const BlasLibrary& lib, std::vector<T> a, I n, char sort,
   return r;
 }
 
+// ---------------------------------------------------------------------------
+// Linear systems. Routines that take a factorization get the same one in
+// both libraries (hwyBLAS's xGETRF), so that they are compared bitwise; the
+// drivers that factor (xGESV, xGESVX with FACT = 'N' or 'E') compute their
+// factors with the leaf kernels of xGETRF2, so their factors and solutions
+// are compared with the tolerance.
+
+// The LU factorization of a (by hwyBLAS's xGETRF) and its pivots.
+template <typename T>
+struct Lu {
+  std::vector<T> lu;
+  std::vector<I> ipiv;
+};
+
+template <typename T>
+Lu<T> Factor(const BlasLibrary& hwy, const std::vector<T>& a, I n) {
+  using F = void (*)(const I*, const I*, T*, const I*, I*, I*);
+  Lu<T> f{a, std::vector<I>(std::max<I>(n, 1))};
+  const I lda = std::max<I>(n, 1);
+  I info = 0;
+  hwy.Get<F>((std::string(Prefix<T>()) + "getrf_").c_str())(
+      &n, &n, f.lu.data(), &lda, f.ipiv.data(), &info);
+  return f;
+}
+
+template <typename T>
+Result Gesv(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
+            I nrhs) {
+  using F = void (*)(const I*, const I*, T*, const I*, I*, T*, const I*, I*);
+  const I ld = std::max<I>(n, 1);
+  std::vector<I> ipiv(ld);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gesv_").c_str())(
+      &n, &nrhs, a.data(), &ld, ipiv.data(), b.data(), &ld, &info);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "ipiv", Kind::kInteger, ipiv);
+  Add(r, "lu", Kind::kRounded, a);
+  Add(r, "x", Kind::kRounded, b);
+  return r;
+}
+
+template <typename T>
+Result Getrs(const BlasLibrary& lib, const Lu<T>& f, std::vector<T> b, I n,
+             I nrhs, char trans) {
+  using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                     const I*, T*, const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "getrs_").c_str())(
+      &trans, &n, &nrhs, f.lu.data(), &ld, f.ipiv.data(), b.data(), &ld, &info,
+      1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Getri(const BlasLibrary& lib, const Lu<T>& f, I n, I lwork) {
+  using F = void (*)(const I*, T*, const I*, const I*, T*, const I*, I*);
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> a = f.lu, work(std::max<I>(lwork, 1));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "getri_").c_str())(
+      &n, a.data(), &ld, f.ipiv.data(), work.data(), &lwork, &info);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "inv", Kind::kOther, a);
+  return r;
+}
+
+template <typename T>
+Result Gecon(const BlasLibrary& lib, const Lu<T>& f, I n, char norm,
+             Real<T> anorm) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  R rcond = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "gecon_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const T*, const I*, const R*, R*,
+                       T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(2 * ld);
+    lib.Get<F>(name.c_str())(&norm, &n, f.lu.data(), &ld, &anorm, &rcond,
+                             work.data(), rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const T*, const I*, const R*, R*,
+                       T*, I*, I*, size_t);
+    std::vector<T> work(4 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&norm, &n, f.lu.data(), &ld, &anorm, &rcond,
+                             work.data(), iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  return r;
+}
+
+template <typename T>
+Result Geequ(const BlasLibrary& lib, const std::vector<T>& a, I m, I n) {
+  using R = Real<T>;
+  using F =
+      void (*)(const I*, const I*, const T*, const I*, R*, R*, R*, R*, R*, I*);
+  const I lda = std::max<I>(m, 1);
+  std::vector<R> rs(std::max<I>(m, 1)), cs(std::max<I>(n, 1));
+  R v[3] = {-1, -1, -1};
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "geequ_").c_str())(
+      &m, &n, a.data(), &lda, rs.data(), cs.data(), &v[0], &v[1], &v[2], &info);
+  Result r;
+  AddInt(r, "info", info);
+  // R and C are complete only if INFO = 0.
+  if (info == 0) {
+    Add(r, "r", Kind::kOther, rs);
+    Add(r, "c", Kind::kOther, cs);
+  }
+  Add(r, "rowcnd colcnd amax", Kind::kOther, v, info == 0 ? 3 : 0);
+  return r;
+}
+
+// xGERFS (with the given factorization) refining the solution x.
+template <typename T>
+Result Gerfs(const BlasLibrary& lib, const std::vector<T>& a, const Lu<T>& f,
+             const std::vector<T>& b, std::vector<T> x, I n, I nrhs,
+             char trans) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> ferr(std::max<I>(nrhs, 1)), berr(std::max<I>(nrhs, 1));
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "gerfs_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const I*, const T*, const I*, T*,
+                       const I*, R*, R*, T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&trans, &n, &nrhs, a.data(), &ld, f.lu.data(), &ld,
+                             f.ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             ferr.data(), berr.data(), work.data(),
+                             rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const I*, const T*, const I*, T*,
+                       const I*, R*, R*, T*, I*, I*, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&trans, &n, &nrhs, a.data(), &ld, f.lu.data(), &ld,
+                             f.ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             ferr.data(), berr.data(), work.data(),
+                             iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "ferr", Kind::kValues, ferr);
+  Add(r, "berr", Kind::kValues, berr);
+  return r;
+}
+
+// xGESVX. For FACT = 'F', af and ipiv are the given factorization (of the
+// matrix as given, EQUED = 'N'); the results are then compared bitwise.
+template <typename T>
+Result Gesvx(const BlasLibrary& lib, char fact, char trans, std::vector<T> a,
+             const Lu<T>& f, std::vector<T> b, I n, I nrhs) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> af = f.lu, x(Size(n, nrhs));
+  std::vector<I> ipiv = f.ipiv;
+  std::vector<R> rs(ld, 1), cs(ld, 1), ferr(std::max<I>(nrhs, 1)),
+      berr(std::max<I>(nrhs, 1));
+  char equed = 'N';
+  R rcond = -1, rpvgrw = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "gesvx_";
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, T*, const I*, T*,
+                 const I*, I*, char*, R*, R*, T*, const I*, T*, const I*, R*,
+                 R*, R*, T*, R*, I*, size_t, size_t, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(2 * ld);
+    lib.Get<F>(name.c_str())(
+        &fact, &trans, &n, &nrhs, a.data(), &ld, af.data(), &ld, ipiv.data(),
+        &equed, rs.data(), cs.data(), b.data(), &ld, x.data(), &ld, &rcond,
+        ferr.data(), berr.data(), work.data(), rwork.data(), &info, 1, 1, 1);
+    rpvgrw = rwork[0];
+  } else {
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, T*, const I*, T*,
+                 const I*, I*, char*, R*, R*, T*, const I*, T*, const I*, R*,
+                 R*, R*, T*, I*, I*, size_t, size_t, size_t);
+    std::vector<T> work(4 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(
+        &fact, &trans, &n, &nrhs, a.data(), &ld, af.data(), &ld, ipiv.data(),
+        &equed, rs.data(), cs.data(), b.data(), &ld, x.data(), &ld, &rcond,
+        ferr.data(), berr.data(), work.data(), iwork.data(), &info, 1, 1, 1);
+    rpvgrw = work[0];
+  }
+  const Kind factored = fact == 'F' ? Kind::kOther : Kind::kRounded;
+  const Kind value = fact == 'F' ? Kind::kValues : Kind::kRounded;
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "equed", equed);
+  Add(r, "ipiv", Kind::kInteger, ipiv);
+  Add(r, "r", Kind::kOther, rs);
+  Add(r, "c", Kind::kOther, cs);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  Add(r, "af", factored, af);
+  Add(r, "x", factored, x);
+  Add(r, "rcond", value, &rcond, 1);
+  Add(r, "rpvgrw", value, &rpvgrw, 1);
+  Add(r, "ferr", value, ferr);
+  Add(r, "berr", value, berr);
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// Triangular matrices
+
+// The triangle uplo of a (n x n, leading dimension n) with the other
+// elements zero; the diagonal elements are moved away from zero.
+template <typename T>
+std::vector<T> Triangle(std::vector<T> a, I n, char uplo) {
+  for (I j = 0; j < n; ++j) {
+    for (I i = 0; i < n; ++i) {
+      T& x = a[i + static_cast<size_t>(j) * n];
+      if (uplo == 'U' ? i > j : i < j) x = T(0);
+      if (i == j) x += T(std::real(x) >= 0 ? 1 : -1);
+    }
+  }
+  return a;
+}
+
+template <typename T>
+Result Trtri(const BlasLibrary& lib, std::vector<T> a, I n, char uplo,
+             char diag) {
+  using F = void (*)(const char*, const char*, const I*, T*, const I*, I*,
+                     size_t, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "trtri_").c_str())(
+      &uplo, &diag, &n, a.data(), &ld, &info, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "inv", Kind::kOther, a);
+  return r;
+}
+
+template <typename T>
+Result Trtrs(const BlasLibrary& lib, const std::vector<T>& a, std::vector<T> b,
+             I n, I nrhs, char uplo, char trans, char diag) {
+  using F =
+      void (*)(const char*, const char*, const char*, const I*, const I*,
+               const T*, const I*, T*, const I*, I*, size_t, size_t, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "trtrs_").c_str())(
+      &uplo, &trans, &diag, &n, &nrhs, a.data(), &ld, b.data(), &ld, &info, 1,
+      1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Latrs(const BlasLibrary& lib, const std::vector<T>& a, std::vector<T> x,
+             I n, char uplo, char trans, char diag) {
+  using R = Real<T>;
+  using F = void (*)(const char*, const char*, const char*, const char*,
+                     const I*, const T*, const I*, T*, R*, R*, I*, size_t,
+                     size_t, size_t, size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> cnorm(ld);
+  R scale = -1;
+  I info = 0;
+  const char normin = 'N';
+  lib.Get<F>((std::string(Prefix<T>()) + "latrs_").c_str())(
+      &uplo, &trans, &diag, &normin, &n, a.data(), &ld, x.data(), &scale,
+      cnorm.data(), &info, 1, 1, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "scale", Kind::kValues, &scale, 1);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "cnorm", Kind::kValues, cnorm);
+  return r;
+}
+
+template <typename T>
+Result Trcon(const BlasLibrary& lib, const std::vector<T>& a, I n, char norm,
+             char uplo, char diag) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  R rcond = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "trcon_";
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const T*,
+                 const I*, R*, T*, R*, I*, size_t, size_t, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&norm, &uplo, &diag, &n, a.data(), &ld, &rcond,
+                             work.data(), rwork.data(), &info, 1, 1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const T*,
+                 const I*, R*, T*, I*, I*, size_t, size_t, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&norm, &uplo, &diag, &n, a.data(), &ld, &rcond,
+                             work.data(), iwork.data(), &info, 1, 1, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  return r;
+}
+
+template <typename T>
+Result Trrfs(const BlasLibrary& lib, const std::vector<T>& a,
+             const std::vector<T>& b, const std::vector<T>& x, I n, I nrhs,
+             char uplo, char trans, char diag) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> ferr(std::max<I>(nrhs, 1)), berr(std::max<I>(nrhs, 1));
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "trrfs_";
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const T*, const I*, const T*, const I*, const T*, const I*, R*,
+                 R*, T*, R*, I*, size_t, size_t, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &trans, &diag, &n, &nrhs, a.data(), &ld,
+                             b.data(), &ld, x.data(), &ld, ferr.data(),
+                             berr.data(), work.data(), rwork.data(), &info, 1,
+                             1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const T*, const I*, const T*, const I*, const T*, const I*, R*,
+                 R*, T*, I*, I*, size_t, size_t, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &trans, &diag, &n, &nrhs, a.data(), &ld,
+                             b.data(), &ld, x.data(), &ld, ferr.data(),
+                             berr.data(), work.data(), iwork.data(), &info, 1,
+                             1, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "ferr", Kind::kValues, ferr);
+  Add(r, "berr", Kind::kValues, berr);
+  return r;
+}
+
+template <typename T>
+Result Lantr(const BlasLibrary& lib, const std::vector<T>& a, I m, I n,
+             char norm, char uplo, char diag) {
+  using R = Real<T>;
+  using F = R (*)(const char*, const char*, const char*, const I*, const I*,
+                  const T*, const I*, R*, size_t, size_t, size_t);
+  const I lda = std::max<I>(m, 1);
+  std::vector<R> work(std::max<I>(m, 1));
+  const R value = lib.Get<F>((std::string(Prefix<T>()) + "lantr_").c_str())(
+      &norm, &uplo, &diag, &m, &n, a.data(), &lda, work.data(), 1, 1, 1);
+  Result r;
+  Add(r, "norm", Kind::kOther, &value, 1);
+  return r;
+}
+
 // The tally of one driver and precision.
 struct Tally {
   int cases = 0;
@@ -557,6 +943,143 @@ void Case(const BlasLibrary& hwy, const BlasLibrary& ref,
              (*g_tallies)[std::string(Prefix<T>()) + routine]);
 }
 
+// The linear systems and triangular routines for matrices of order n:
+// random, graded (also for equilibration) and with small integers.
+template <typename T>
+void RunLinear(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  using R = Real<T>;
+  char what[64];
+  const I nrhs = 3;
+  const std::vector<T> b = TestMatrix<T>(0, n, nrhs);
+  // Kinds 0, 2 and 4 of TestMatrix, and 5: random with rows and columns
+  // scaled by powers of 2 (for equilibration). The drivers that factor
+  // (with the leaf kernels of xGETRF2, which round differently) only get the
+  // matrices with clear pivots (0 and 5): in the graded ones and those with
+  // ties, the rounding can change the pivots.
+  for (const int kind : {0, 2, 4, 5}) {
+    std::vector<T> a = TestMatrix<T>(kind == 5 ? 0 : kind, n, n);
+    if (kind == 5) {
+      for (I j = 0; j < n; ++j) {
+        for (I i = 0; i < n; ++i) {
+          a[i + static_cast<size_t>(j) * n] *=
+              static_cast<R>(std::ldexp(1.0, 3 * (i % 7) - 2 * (j % 5)));
+        }
+      }
+    }
+    const bool clear_pivots = kind == 0 || kind == 5;
+    snprintf(what, sizeof(what), "n=%d kind=%d", int(n), kind);
+    if (clear_pivots) {
+      Case<T>(hwy, ref, "gesv", what, n, [&](const BlasLibrary& lib, I) {
+        return Gesv(lib, a, b, n, nrhs);
+      });
+    }
+    Case<T>(hwy, ref, "geequ", what, n,
+            [&](const BlasLibrary& lib, I) { return Geequ(lib, a, n, n); });
+    const std::vector<T> tall = TestMatrix<T>(kind, 2 * n + 1, n);
+    Case<T>(hwy, ref, "geequ", what, n, [&](const BlasLibrary& lib, I) {
+      return Geequ(lib, tall, 2 * n + 1, n);
+    });
+    const Lu<T> f = Factor(hwy, a, n);
+    Case<T>(hwy, ref, "getri", what, n,
+            [&](const BlasLibrary& lib, I lw) { return Getri(lib, f, n, lw); });
+    for (const char norm : {'1', 'I'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d norm=%c", int(n), kind, norm);
+      Case<T>(hwy, ref, "gecon", what, n, [&](const BlasLibrary& lib, I) {
+        return Gecon(lib, f, n, norm, R(3));
+      });
+    }
+    for (const char trans : {'N', 'T', 'C'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d trans=%c", int(n), kind,
+               trans);
+      Case<T>(hwy, ref, "getrs", what, n, [&](const BlasLibrary& lib, I) {
+        return Getrs(lib, f, b, n, nrhs, trans);
+      });
+      // Refinement starting from B (several steps).
+      Case<T>(hwy, ref, "gerfs", what, n, [&](const BlasLibrary& lib, I) {
+        return Gerfs(lib, a, f, b, b, n, nrhs, trans);
+      });
+      for (const char fact : {'N', 'E', 'F'}) {
+        if (fact != 'F' && !clear_pivots) continue;
+        snprintf(what, sizeof(what), "n=%d kind=%d trans=%c fact=%c", int(n),
+                 kind, trans, fact);
+        Case<T>(hwy, ref, "gesvx", what, n, [&](const BlasLibrary& lib, I) {
+          return Gesvx(lib, fact, trans, a, f, b, n, nrhs);
+        });
+      }
+    }
+  }
+
+  // Triangular matrices.
+  const R smlnum =
+      std::numeric_limits<R>::min() / std::numeric_limits<R>::epsilon();
+  for (const char uplo : {'U', 'L'}) {
+    for (const char diag : {'N', 'U'}) {
+      for (const int kind : {0, 2, 4, 5, 6}) {
+        // 5: growth (the solution would overflow), 6: one column near
+        // overflow (its norm overflows): the scaling paths of xLATRS.
+        std::vector<T> t =
+            Triangle(TestMatrix<T>(kind < 5 ? kind : 0, n, n), n, uplo);
+        const I jc = uplo == 'U' ? n - 1 : 0;
+        for (I j = 0; j < n; ++j) {
+          for (I i = 0; i < n; ++i) {
+            const bool off = uplo == 'U' ? i < j : i > j;
+            T& x = t[i + static_cast<size_t>(j) * n];
+            if (kind == 5 && off) {
+              x = T(-std::pow(1 / smlnum, R(2) / static_cast<R>(n)));
+            }
+            if (kind == 5 && i == j) x = T(1);
+            if (kind == 6 && j == jc && (off || i == j)) {
+              x = T(std::numeric_limits<R>::max() / 4);
+              if constexpr (kComplex<T>) x *= T(R(0.6), R(0.8));
+            }
+          }
+        }
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c diag=%c", int(n),
+                 kind, uplo, diag);
+        if (kind < 5) {
+          Case<T>(hwy, ref, "trtri", what, n, [&](const BlasLibrary& lib, I) {
+            return Trtri(lib, t, n, uplo, diag);
+          });
+          for (const char norm : {'1', 'I'}) {
+            snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c diag=%c norm=%c",
+                     int(n), kind, uplo, diag, norm);
+            Case<T>(hwy, ref, "trcon", what, n, [&](const BlasLibrary& lib, I) {
+              return Trcon(lib, t, n, norm, uplo, diag);
+            });
+          }
+          const std::vector<T> trap = TestMatrix<T>(kind, n + 2, n);
+          for (const char norm : {'M', '1', 'I', 'F'}) {
+            snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c diag=%c norm=%c",
+                     int(n), kind, uplo, diag, norm);
+            Case<T>(hwy, ref, "lantr", what, n, [&](const BlasLibrary& lib, I) {
+              return Lantr(lib, trap, n + 2, n, norm, uplo, diag);
+            });
+          }
+        }
+        for (const char trans : {'N', 'T', 'C'}) {
+          snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c diag=%c trans=%c",
+                   int(n), kind, uplo, diag, trans);
+          Case<T>(hwy, ref, "latrs", what, n, [&](const BlasLibrary& lib, I) {
+            return Latrs(lib, t, b, n, uplo, trans, diag);
+          });
+          if (kind >= 5) continue;
+          Case<T>(hwy, ref, "trtrs", what, n, [&](const BlasLibrary& lib, I) {
+            return Trtrs(lib, t, b, n, nrhs, uplo, trans, diag);
+          });
+          // Not for complex graded triangles: their solutions overflow in
+          // single precision, and on infinities flang's REAL*COMPLEX (a
+          // complex multiplication, 0*Inf = NaN) gives NaN where the port's
+          // multiplication of the parts does not.
+          if (kComplex<T> && kind == 2) continue;
+          Case<T>(hwy, ref, "trrfs", what, n, [&](const BlasLibrary& lib, I) {
+            return Trrfs(lib, t, b, b, n, nrhs, uplo, trans, diag);
+          });
+        }
+      }
+    }
+  }
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -628,6 +1151,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
         });
       }
     }
+    RunLinear<T>(hwy, ref, n);
   }
 }
 

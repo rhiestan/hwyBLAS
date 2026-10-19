@@ -97,6 +97,15 @@ void Trmv(char uplo, char trans, char diag, blasint n, const T* a, blasint lda,
                            &diag, &n, Raw(a), &lda, Raw(x), &incx);
 }
 
+// Solves op(A) * x = b with triangular A; x overwrites b.
+template <typename T>
+void Trsv(char uplo, char trans, char diag, blasint n, const T* a, blasint lda,
+          T* x, blasint incx) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, strsv_, dtrsv_, ctrsv_, ztrsv_, &uplo, &trans,
+                           &diag, &n, Raw(a), &lda, Raw(x), &incx);
+}
+
 // y := alpha * op(A) * x + beta * y.
 template <typename T>
 void Gemv(char trans, blasint m, blasint n, T alpha, const T* a, blasint lda,

@@ -8,8 +8,9 @@ are documented in the routine's comment (own block sizes, fused kernels,
 fixed reference bugs).
 
 The routines of milestones M0–M2 (getrf … syev) were ported by hand. From M3
-on (gesvd, gesdd, gees and their helpers, about 80 routines so far), a small
-translator produces a first draft that is then finished by hand. The scripts are in
+on (gesvd, gesdd, gees, the linear systems of phase 2 and their helpers), a
+small translator produces a first draft that is then finished by hand. The
+scripts are in
 `doc/fortran_port/`:
 
 | Script | Purpose |
@@ -57,9 +58,15 @@ The translator produces the conventions described in
   is instantiated for all four types. Where the real and complex routines
   differ by more than conjugation, the difference is kept with
   `if constexpr`, or the two are ported as separate functions behind one
-  template (`GesvdReal` / `GesvdComplex`), or as two overloads of the same
-  name where their arguments differ (`WR` and `WI` against `W` in xHSEQR,
-  xLAQR*, xTRSEN, xGEES).
+  template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`),
+  or as two overloads of the same name where their arguments differ (`WR`
+  and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES). Where they differ
+  only in their workspaces (the real routine keeps a real vector in a part
+  of WORK and has IWORK, the complex one keeps it in RWORK: xGECON, xGERFS,
+  xGESVX, xTRCON, xTRRFS), one template takes `work`, `rwork` (complex T)
+  and `iwork` (real T); its views have the complex routine's names and
+  point into the real routine's WORK for real T, so that the statements
+  are the same.
 
 ## Step 1: translate (`f2cc.py`)
 
@@ -207,17 +214,25 @@ comparison sees them. It builds the reference LAPACK as a shared library
 (without floating-point contraction) against hwyBLAS's BLAS, loads it next
 to hwyBLAS in one process, redirects hwyBLAS's ILAENV to the reference one
 and calls every driver (xGETRF, xPOTRF, xGEQRF, xGELQF, xGEQP3,
-xSYEV/xHEEV, xGESVD, xGESDD, xGEES, with all job options) in both on the
-same matrices of orders 0 to 401. With the same BLAS and parameters, the
-real results are bitwise identical, and mutations of the heuristics change
-them. The exceptions are deviations that change rounding by design: the
-leaf kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
+xSYEV/xHEEV, xGESVD, xGESDD, xGEES, with all job options; xGESV, xGESVX,
+xGETRS, xGETRI, xGECON, xGEEQU, xGERFS, xTRTRI, xTRTRS, xLATRS, xTRCON,
+xTRRFS, xLANTR) in both on the same matrices of orders 0 to 401. With the
+same BLAS and parameters, the real results are bitwise identical, and
+mutations of the heuristics change them (also of the scaling in xLATRS
+and of the error estimates of xGERFS, which the unit tests cannot see).
+The exceptions are deviations that change rounding by design: the leaf
+kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
 factors the tool compares with a tolerance (their pivots and INFO
-exactly). The complex results differ in the last bits, because flang evaluates
-some complex divisions differently (for COMPLEX / REAL it performs a full
-complex division, the standard's conversion to COMPLEX first, while C++
-and gfortran divide the two parts); the multishift QR algorithm amplifies
-such differences into a different order of the eigenvalues. The tool
+exactly). The routines that take a factorization get the same one in both
+libraries; the drivers that factor (xGESV, xGESVX) only get matrices with
+clear pivots, since on graded matrices or ties the different rounding can
+change a pivot. The complex results differ in the last bits, because
+flang evaluates mixed real and complex operations as complex ones (for
+COMPLEX / REAL a full complex division, for REAL * COMPLEX a complex
+multiplication, the standard's conversion to COMPLEX first, while C++ and
+gfortran operate on the two parts; with infinities, flang's 0 * Inf gives
+NaN); the multishift QR algorithm amplifies such differences into a
+different order of the eigenvalues. The tool
 therefore compares the complex singular values and eigenvalues with a
 tolerance (the nonsymmetric eigenvalues as sets), and only counts the
 bitwise identical results otherwise.

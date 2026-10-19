@@ -55,8 +55,9 @@ diagonal, any vector increments including negative ones).
 
 ### LAPACK (in progress)
 
-LAPACK is being ported from the reference implementation (LAPACK 3.12.1),
-starting with the routines that Eigen calls with `EIGEN_USE_LAPACKE`. The
+LAPACK is being ported from the reference implementation (LAPACK 3.12.1):
+first the routines that Eigen calls with `EIGEN_USE_LAPACKE`, now the
+common drivers (linear systems, eigenproblems, least squares). The
 ports follow the Fortran original line by line (same algorithms, INFO
 values, error exits and workspace rules, 1-based indexing), and are
 documented where they deviate, e.g. in block sizes or optimized kernels. The
@@ -67,6 +68,9 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | Routines | Precisions |
 |----------|------------|
 | `?getrf`, `?getrf2`, `?laswp` (LU factorization) | s d c z |
+| `?gesv`, `?getrs`, `?getri` (linear systems and inverse with the LU factorization) | s d c z |
+| `?gesvx` (expert driver), `?gecon` (condition number), `?gerfs` (iterative refinement), `?geequ`, `?laqge` (equilibration) | s d c z |
+| `?trtrs`, `?latrs` (triangular systems), `?trtri`, `?trti2` (inverse), `?trcon`, `?trrfs`, `?lantr` | s d c z |
 | `?potrf`, `?potrf2` (Cholesky factorization) | s d c z |
 | `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |
 | `?geqp3`, `?laqps`, `?laqp2` (QR factorization with column pivoting) | s d c z |
@@ -93,11 +97,13 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
 | `?lacpy`, `?laset`, `?lascl`, `ila?lc`, `ila?lr` | s d c z |
+| `?rscl`, `csrscl`, `zdrscl` | s d c z |
 | `?lacgv` | c z |
-| `?lapy2`, `?lapy3`, `?ladiv` | s d |
+| `?lapy2`, `?lapy3`, `?ladiv`, `?isnan`, `?laisnan` | s d |
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
-LAPACKE has the reference LAPACKE's functions for these routines.
+LAPACKE has the reference LAPACKE's functions for these routines (with a
+documented fix in `LAPACKE_?gesvx`, see `hwyblas/lapacke.h`).
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
