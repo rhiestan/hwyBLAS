@@ -742,6 +742,30 @@ TYPED_TEST(GesvdTest, GesvdScalingAndSpecialMatrices) {
   EXPECT_EQ(Gesvd<T>('A', 'A', 3, 0, a, 3, 3, 1, -1).info, 0);
 }
 
+// NaN and Inf inputs end in finite time, with the results of the reference
+// (which depend on Fortran's MAX(NaN, x) = x: with std::max, xBDSQR's
+// THRESH was NaN and it looped forever).
+TYPED_TEST(GesvdTest, NonFiniteInput) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  const hwyblas_int n = 10;
+  // As xBDSDC passes a bidiagonal with an Inf, scaled by its norm.
+  std::vector<R> d(n, R(0)), e(n - 1, R(0));
+  d[0] = std::numeric_limits<R>::quiet_NaN();
+  std::vector<T> u(n * n, T(0)), vt(n * n, T(0)), c(1);
+  for (hwyblas_int i = 0; i < n; ++i) u[i * (n + 1)] = vt[i * (n + 1)] = T(1);
+  EXPECT_EQ(Bdsqr<T>('U', n, n, n, 0, d, e, vt, n, u, n, c, 1), 0);
+  EXPECT_EQ(d[0], R(0));
+  // One Inf in the first column.
+  const R inf = std::numeric_limits<R>::infinity();
+  std::vector<T> a(n * n, T(0));
+  a[3] = T(inf);
+  EXPECT_EQ(Gesvd<T>('A', 'A', n, n, a, n, n, n, -1).info, 0);
+  // An Inf matrix.
+  a.assign(n * n, T(inf));
+  EXPECT_GE(Gesvd<T>('A', 'A', n, n, a, n, n, n, -1).info, 0);
+}
+
 TYPED_TEST(GesvdTest, WorkspaceQueriesAndErrors) {
   using T = TypeParam;
   using R = RealT<T>;

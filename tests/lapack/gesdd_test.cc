@@ -634,6 +634,23 @@ TYPED_TEST(GesddTest, GesddScalingAndSpecialMatrices) {
   EXPECT_TRUE(errors.Take().empty());
 }
 
+// Inf inputs end in finite time, with the INFO of the reference: xBDSDC
+// scales the bidiagonal by its norm (Inf), which gives NaNs in xBDSQR (see
+// GesvdTest.NonFiniteInput).
+TYPED_TEST(GesddTest, NonFiniteInput) {
+  using T = TypeParam;
+  const hwyblas_int n = 10;
+  const auto inf = std::numeric_limits<RealT<T>>::infinity();
+  for (const char jobz : {'A', 'N'}) {
+    SCOPED_TRACE(::testing::Message() << "jobz=" << jobz);
+    std::vector<T> a(n * n, T(0));
+    a[3] = T(inf);
+    EXPECT_EQ(Gesdd<T>(jobz, n, n, a, n, n, n, -1).info, 0);
+    a.assign(n * n, T(inf));
+    EXPECT_GE(Gesdd<T>(jobz, n, n, a, n, n, n, -1).info, 0);
+  }
+}
+
 TYPED_TEST(GesddTest, WorkspaceQueriesAndErrors) {
   using T = TypeParam;
   const hwyblas_int m = 10, n = 6;

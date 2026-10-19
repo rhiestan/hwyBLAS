@@ -105,7 +105,7 @@ void Lasdt(blasint n, blasint* lvl, blasint* nd, blasint* inode, blasint* ndiml,
   const Vector<blasint> NDIMR(ndimr);
   blasint i, il, ir, llst, maxn, ncrnt, nlvl;
   R temp;
-  maxn = std::max<blasint>(1, n);
+  maxn = Max<blasint>(1, n);
   temp = std::log(R(maxn) / R(msub + 1)) / std::log(two);
   *lvl = static_cast<blasint>(temp) + 1;
   i = n / 2;
@@ -188,7 +188,7 @@ blasint Laed6(blasint kniter, bool orgati, R rho, const R* d, const R* z,
       a = c * (D(1) + D(2)) + Z(1) + Z(2);
       b = c * D(1) * D(2) + Z(1) * D(2) + Z(2) * D(1);
     }
-    temp = std::max({std::abs(a), std::abs(b), std::abs(c)});
+    temp = Max(std::abs(a), std::abs(b), std::abs(c));
     a = a / temp;
     b = b / temp;
     c = c / temp;
@@ -231,9 +231,9 @@ blasint Laed6(blasint kniter, bool orgati, R rho, const R* d, const R* z,
   // Determine if scaling of inputs necessary to avoid overflow
   // when computing 1/TEMP**3
   if (orgati) {
-    temp = std::min(std::abs(D(2) - *tau), std::abs(D(3) - *tau));
+    temp = Min(std::abs(D(2) - *tau), std::abs(D(3) - *tau));
   } else {
-    temp = std::min(std::abs(D(1) - *tau), std::abs(D(2) - *tau));
+    temp = Min(std::abs(D(1) - *tau), std::abs(D(2) - *tau));
   }
   scale = false;
   if (temp <= small1) {
@@ -300,7 +300,7 @@ blasint Laed6(blasint kniter, bool orgati, R rho, const R* d, const R* z,
     a = (temp1 + temp2) * f - temp1 * temp2 * df;
     b = temp1 * temp2 * f;
     c = f - (temp1 + temp2) * df + temp1 * temp2 * ddf;
-    temp = std::max({std::abs(a), std::abs(b), std::abs(c)});
+    temp = Max(std::abs(a), std::abs(b), std::abs(c));
     a = a / temp;
     b = b / temp;
     c = c / temp;
@@ -724,7 +724,7 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
       temp = std::sqrt(eps);
       if ((D(i) <= temp * D(ip1)) && (std::abs(Z(i)) <= temp) &&
           (D(i) > zero)) {
-        tau = std::min(ten * D(i), sgub);
+        tau = Min(ten * D(i), sgub);
         geomavg = true;
       }
     } else {
@@ -795,9 +795,9 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
       goto L240;
     }
     if (w <= zero) {
-      sglb = std::max(sglb, tau);
+      sglb = Max(sglb, tau);
     } else {
-      sgub = std::min(sgub, tau);
+      sgub = Min(sgub, tau);
     }
     // Calculate the new step
     niter = niter + 1;
@@ -964,9 +964,9 @@ blasint Lasd4(blasint n, blasint i, const R* d, const R* z, R* delta, R rho,
         goto L240;
       }
       if (w <= zero) {
-        sglb = std::max(sglb, tau);
+        sglb = Max(sglb, tau);
       } else {
-        sgub = std::min(sgub, tau);
+        sgub = Min(sgub, tau);
       }
       // Calculate the new step
       if (!swtch3) {
@@ -1370,8 +1370,8 @@ blasint Lasd7(blasint icompq, blasint nl, blasint nr, blasint sqre, blasint* k,
   }
   // Calculate the allowable deflation tolerance
   eps = Lamch<R>('E');
-  tol = std::max(std::abs(alpha), std::abs(beta));
-  tol = eight * eight * eps * std::max(std::abs(D(n)), tol);
+  tol = Max(std::abs(alpha), std::abs(beta));
+  tol = eight * eight * eps * Max(std::abs(D(n)), tol);
   // There are 2 kinds of deflation -- first a value in the z-vector
   // is small, second two (or more) singular values are very close
   // together (their difference is small).
@@ -1573,7 +1573,7 @@ blasint Lasd6(blasint icompq, blasint nl, blasint nr, blasint sqre, R* d, R* vf,
   idxc = idx + n;
   idxp = idxc + n;
   // Scale.
-  orgnrm = std::max(std::abs(*alpha), std::abs(*beta));
+  orgnrm = Max(std::abs(*alpha), std::abs(*beta));
   D(nl + 1) = zero;
   for (i = 1; i <= n; ++i) {
     if (std::abs(D(i)) > orgnrm) {
@@ -1885,8 +1885,8 @@ blasint Lasd2(blasint nl, blasint nr, blasint sqre, blasint* k, R* d, R* z,
   }
   // Calculate the allowable deflation tolerance
   eps = Lamch<R>('E');
-  tol = std::max(std::abs(alpha), std::abs(beta));
-  tol = eight * eps * std::max(std::abs(D(n)), tol);
+  tol = Max(std::abs(alpha), std::abs(beta));
+  tol = eight * eps * Max(std::abs(D(n)), tol);
   // There are 2 kinds of deflation -- first a value in the z-vector
   // is small, second two (or more) singular values are very close
   // together (their difference is small).
@@ -2122,7 +2122,7 @@ blasint Lasd1(blasint nl, blasint nr, blasint sqre, R* d, R* alpha, R* beta,
   coltyp = idxc + n;
   idxp = coltyp + n;
   // Scale.
-  orgnrm = std::max(std::abs(*alpha), std::abs(*beta));
+  orgnrm = Max(std::abs(*alpha), std::abs(*beta));
   D(nl + 1) = zero;
   for (i = 1; i <= n; ++i) {
     if (std::abs(D(i)) > orgnrm) {
@@ -2192,12 +2192,11 @@ blasint Lasdq(char uplo, blasint sqre, blasint n, blasint ncvt, blasint nru,
   } else if (ncc < 0) {
     info = -6;
   } else if ((ncvt == 0 && ldvt < 1) ||
-             (ncvt > 0 && ldvt < std::max<blasint>(1, n))) {
+             (ncvt > 0 && ldvt < Max<blasint>(1, n))) {
     info = -10;
-  } else if (ldu < std::max<blasint>(1, nru)) {
+  } else if (ldu < Max<blasint>(1, nru)) {
     info = -12;
-  } else if ((ncc == 0 && ldc < 1) ||
-             (ncc > 0 && ldc < std::max<blasint>(1, n))) {
+  } else if ((ncc == 0 && ldc < 1) || (ncc > 0 && ldc < Max<blasint>(1, n))) {
     info = -14;
   }
   if (info != 0) {

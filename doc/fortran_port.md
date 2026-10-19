@@ -42,8 +42,9 @@ The translator produces the conventions described in
 - **Statement functions** such as `CABS1(CDUM) = ABS(DBLE(CDUM)) +
   ABS(DIMAG(CDUM))` are dropped, and their uses call a helper of the same
   name (`Cabs1` in `lapack_common.h`).
-- **Intrinsics**: `MAX/MIN` (`std::max<blasint>` for integer arguments,
-  initializer lists for more than two), `ABS`, `SQRT`, `SIGN`
+- **Intrinsics**: `MAX/MIN` (`Max`/`Min` of `lapack_common.h`, with any
+  number of arguments and `Max<blasint>` for integer ones), `ABS`, `SQRT`,
+  `SIGN`
   (`std::copysign`), `DBLE`/`REAL`, `CONJG`, `MOD`, `NINT`, `LSAME`, `**`
   (`(x * x)` for `**2`, otherwise `std::pow`).
 - **Calls**: one template per real/complex pair, named after the complex
@@ -164,6 +165,12 @@ attention:
   parentheses, `a * b * b` rounds differently (and `A/B**2` would even be
   wrong). The translator once emitted them so; it changed xLASD4's
   iterations (found by the comparison below) and three other routines;
+- `MAX` and `MIN` are `Max` and `Min`, never `std::max` and `std::min`:
+  with a NaN argument they give what flang gives (`MAX(NaN, x)` is `x`,
+  `MAX(x, NaN)` is `NaN`), the opposite of `std::max`, and LAPACK relies
+  on it. With `std::max`, xBDSQR looped forever on a NaN (Inf in xGESDD's
+  input), found by Eigen's test suite. Neither `std::max({...})`: MSVC's
+  never returns if an element is NaN;
 - `DATA` tables become `static const` arrays with views, `EQUIVALENCE`d
   arrays one array with two views (xLALN2);
 - `INT(WORK(1))` of a complex workspace query needs `std::real`;

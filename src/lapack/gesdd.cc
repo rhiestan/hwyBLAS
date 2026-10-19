@@ -51,7 +51,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
   bool lquery, wntqa, wntqas, wntqn, wntqo, wntqs;
   R anrm, bignum, eps, smlnum;
   blasint info = 0;
-  minmn = std::min<blasint>(m, n);
+  minmn = Min<blasint>(m, n);
   wntqa = Lsame(jobz, 'A');
   wntqs = Lsame(jobz, 'S');
   wntqas = wntqa || wntqs;
@@ -64,7 +64,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -5;
   } else if (ldu < 1 || (wntqas && ldu < m) || (wntqo && m < n && ldu < m)) {
     info = -8;
@@ -123,66 +123,66 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
         if (wntqn) {
           // Path 1 (M >> N, JOBZ='N')
           wrkbl = n + lwork_dgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
-          maxwrk = std::max<blasint>(wrkbl, bdspac + n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
+          maxwrk = Max<blasint>(wrkbl, bdspac + n);
           minwrk = bdspac + n;
         } else if (wntqo) {
           // Path 2 (M >> N, JOBZ='O')
           wrkbl = n + lwork_dgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + bdspac);
           maxwrk = wrkbl + 2 * n * n;
           minwrk = bdspac + 2 * n * n + 3 * n;
         } else if (wntqs) {
           // Path 3 (M >> N, JOBZ='S')
           wrkbl = n + lwork_dgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + bdspac);
           maxwrk = wrkbl + n * n;
           minwrk = bdspac + n * n + 3 * n;
         } else if (wntqa) {
           // Path 4 (M >> N, JOBZ='A')
           wrkbl = n + lwork_dgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + bdspac);
           maxwrk = wrkbl + n * n;
-          minwrk = n * n + std::max<blasint>(3 * n + bdspac, n + m);
+          minwrk = n * n + Max<blasint>(3 * n + bdspac, n + m);
         }
       } else {
         // Path 5 (M >= N, but not much larger)
         wrkbl = 3 * n + lwork_dgebrd_mn;
         if (wntqn) {
           // Path 5n (M >= N, jobz='N')
-          maxwrk = std::max<blasint>(wrkbl, 3 * n + bdspac);
-          minwrk = 3 * n + std::max<blasint>(m, bdspac);
+          maxwrk = Max<blasint>(wrkbl, 3 * n + bdspac);
+          minwrk = 3 * n + Max<blasint>(m, bdspac);
         } else if (wntqo) {
           // Path 5o (M >= N, jobz='O')
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + bdspac);
           maxwrk = wrkbl + m * n;
-          minwrk = 3 * n + std::max<blasint>(m, n * n + bdspac);
+          minwrk = 3 * n + Max<blasint>(m, n * n + bdspac);
         } else if (wntqs) {
           // Path 5s (M >= N, jobz='S')
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          maxwrk = std::max<blasint>(wrkbl, 3 * n + bdspac);
-          minwrk = 3 * n + std::max<blasint>(m, bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          maxwrk = Max<blasint>(wrkbl, 3 * n + bdspac);
+          minwrk = 3 * n + Max<blasint>(m, bdspac);
         } else if (wntqa) {
           // Path 5a (M >= N, jobz='A')
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
-          maxwrk = std::max<blasint>(wrkbl, 3 * n + bdspac);
-          minwrk = 3 * n + std::max<blasint>(m, bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dormbr_prt_nn);
+          maxwrk = Max<blasint>(wrkbl, 3 * n + bdspac);
+          minwrk = 3 * n + Max<blasint>(m, bdspac);
         }
       }
     } else if (minmn > 0) {
@@ -224,70 +224,70 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
         if (wntqn) {
           // Path 1t (N >> M, JOBZ='N')
           wrkbl = m + lwork_dgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
-          maxwrk = std::max<blasint>(wrkbl, bdspac + m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
+          maxwrk = Max<blasint>(wrkbl, bdspac + m);
           minwrk = bdspac + m;
         } else if (wntqo) {
           // Path 2t (N >> M, JOBZ='O')
           wrkbl = m + lwork_dgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + bdspac);
           maxwrk = wrkbl + 2 * m * m;
           minwrk = bdspac + 2 * m * m + 3 * m;
         } else if (wntqs) {
           // Path 3t (N >> M, JOBZ='S')
           wrkbl = m + lwork_dgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + bdspac);
           maxwrk = wrkbl + m * m;
           minwrk = bdspac + m * m + 3 * m;
         } else if (wntqa) {
           // Path 4t (N >> M, JOBZ='A')
           wrkbl = m + lwork_dgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_nn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_nn);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + bdspac);
           maxwrk = wrkbl + m * m;
-          minwrk = m * m + std::max<blasint>(3 * m + bdspac, m + n);
+          minwrk = m * m + Max<blasint>(3 * m + bdspac, m + n);
         }
       } else {
         // Path 5t (N > M, but not much larger)
         wrkbl = 3 * m + lwork_dgebrd_mn;
         if (wntqn) {
           // Path 5tn (N > M, jobz='N')
-          maxwrk = std::max<blasint>(wrkbl, 3 * m + bdspac);
-          minwrk = 3 * m + std::max<blasint>(n, bdspac);
+          maxwrk = Max<blasint>(wrkbl, 3 * m + bdspac);
+          minwrk = 3 * m + Max<blasint>(n, bdspac);
         } else if (wntqo) {
           // Path 5to (N > M, jobz='O')
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mn);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mn);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + bdspac);
           maxwrk = wrkbl + m * n;
-          minwrk = 3 * m + std::max<blasint>(n, m * m + bdspac);
+          minwrk = 3 * m + Max<blasint>(n, m * m + bdspac);
         } else if (wntqs) {
           // Path 5ts (N > M, jobz='S')
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mn);
-          maxwrk = std::max<blasint>(wrkbl, 3 * m + bdspac);
-          minwrk = 3 * m + std::max<blasint>(n, bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_mn);
+          maxwrk = Max<blasint>(wrkbl, 3 * m + bdspac);
+          minwrk = 3 * m + Max<blasint>(n, bdspac);
         } else if (wntqa) {
           // Path 5ta (N > M, jobz='A')
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_nn);
-          maxwrk = std::max<blasint>(wrkbl, 3 * m + bdspac);
-          minwrk = 3 * m + std::max<blasint>(n, bdspac);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dormbr_prt_nn);
+          maxwrk = Max<blasint>(wrkbl, 3 * m + bdspac);
+          minwrk = 3 * m + Max<blasint>(n, bdspac);
         }
       }
     }
-    maxwrk = std::max<blasint>(maxwrk, minwrk);
+    maxwrk = Max<blasint>(maxwrk, minwrk);
     WORK(1) = WorkSize<T>(maxwrk);
     if (lwork < minwrk && !lquery) {
       info = -12;
@@ -408,7 +408,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
         // Workspace: need   N*N [R] + 3*N [e, tauq, taup] + N*N [U]
         // Workspace: prefer M*N [R] + 3*N [e, tauq, taup] + N*N [U]
         for (i = 1; i <= m; i += ldwrkr) {
-          chunk = std::min<blasint>(m - i + 1, ldwrkr);
+          chunk = Min<blasint>(m - i + 1, ldwrkr);
           Gemm('N', 'N', chunk, n, n, one, A.ptr(i, 1), lda, WORK.ptr(iu), n,
                zero, WORK.ptr(ir), ldwrkr);
           Lacpy('F', chunk, n, WORK.ptr(ir), ldwrkr, A.ptr(i, 1), lda);
@@ -586,7 +586,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
           // Workspace: need   3*N [e, tauq, taup] + N*N [U] + NB*N [R]
           // Workspace: prefer 3*N [e, tauq, taup] + N*N [U] + M*N  [R]
           for (i = 1; i <= m; i += ldwrkr) {
-            chunk = std::min<blasint>(m - i + 1, ldwrkr);
+            chunk = Min<blasint>(m - i + 1, ldwrkr);
             Gemm('N', 'N', chunk, n, n, one, A.ptr(i, 1), lda, WORK.ptr(iu),
                  ldwrku, zero, WORK.ptr(ir), ldwrkr);
             Lacpy('F', chunk, n, WORK.ptr(ir), ldwrkr, A.ptr(i, 1), lda);
@@ -722,7 +722,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
         // Workspace: prefer M*M [VT] + M*N [L]
         // At this point, L is resized as M by chunk.
         for (i = 1; i <= n; i += chunk) {
-          blk = std::min<blasint>(n - i + 1, chunk);
+          blk = Min<blasint>(n - i + 1, chunk);
           Gemm('N', 'N', m, blk, m, one, WORK.ptr(ivt), m, A.ptr(1, i), lda,
                zero, WORK.ptr(il), ldwrkl);
           Lacpy('F', m, blk, WORK.ptr(il), ldwrkl, A.ptr(1, i), lda);
@@ -898,7 +898,7 @@ blasint GesddReal(char jobz, blasint m, blasint n, T* a, blasint lda, T* s,
           // Workspace: need   3*M [e, tauq, taup] + M*M [VT] + M*NB [L]
           // Workspace: prefer 3*M [e, tauq, taup] + M*M [VT] + M*N  [L]
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Gemm('N', 'N', m, blk, m, one, WORK.ptr(ivt), ldwkvt, A.ptr(1, i),
                  lda, zero, WORK.ptr(il), m);
             Lacpy('F', m, blk, WORK.ptr(il), m, A.ptr(1, i), lda);
@@ -990,7 +990,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
   bool lquery, wntqa, wntqas, wntqn, wntqo, wntqs;
   R anrm, bignum, eps, smlnum;
   blasint info = 0;
-  minmn = std::min<blasint>(m, n);
+  minmn = Min<blasint>(m, n);
   mnthr1 = static_cast<blasint>(minmn * R(17) / R(9));
   mnthr2 = static_cast<blasint>(minmn * R(5) / R(3));
   wntqa = Lsame(jobz, 'A');
@@ -1007,7 +1007,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -5;
   } else if (ldu < 1 || (wntqas && ldu < m) || (wntqo && m < n && ldu < m)) {
     info = -8;
@@ -1066,35 +1066,35 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         if (wntqn) {
           // Path 1 (M >> N, JOBZ='N')
           maxwrk = n + lwork_zgeqrf_mn;
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zgebrd_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zgebrd_nn);
           minwrk = 3 * n;
         } else if (wntqo) {
           // Path 2 (M >> N, JOBZ='O')
           wrkbl = n + lwork_zgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_mn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_mn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
           maxwrk = m * n + n * n + wrkbl;
           minwrk = 2 * n * n + 3 * n;
         } else if (wntqs) {
           // Path 3 (M >> N, JOBZ='S')
           wrkbl = n + lwork_zgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_mn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_mn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
           maxwrk = n * n + wrkbl;
           minwrk = n * n + 3 * n;
         } else if (wntqa) {
           // Path 4 (M >> N, JOBZ='A')
           wrkbl = n + lwork_zgeqrf_mn;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_qln_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zunmbr_prc_nn);
           maxwrk = n * n + wrkbl;
-          minwrk = n * n + std::max<blasint>(3 * n, n + m);
+          minwrk = n * n + Max<blasint>(3 * n, n + m);
         }
       } else if (m >= mnthr2) {
         // Path 5 (M >> N, but not as much as MNTHR1)
@@ -1102,18 +1102,18 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         minwrk = 2 * n + m;
         if (wntqo) {
           // Path 5o (M >> N, JOBZ='O')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mn);
           maxwrk = maxwrk + m * n;
           minwrk = minwrk + n * n;
         } else if (wntqs) {
           // Path 5s (M >> N, JOBZ='S')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mn);
         } else if (wntqa) {
           // Path 5a (M >> N, JOBZ='A')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_p_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_q_mm);
         }
       } else {
         // Path 6 (M >= N, but not much larger)
@@ -1121,18 +1121,18 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         minwrk = 2 * n + m;
         if (wntqo) {
           // Path 6o (M >= N, JOBZ='O')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mn);
           maxwrk = maxwrk + m * n;
           minwrk = minwrk + n * n;
         } else if (wntqs) {
           // Path 6s (M >= N, JOBZ='S')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mn);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
         } else if (wntqa) {
           // Path 6a (M >= N, JOBZ='A')
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_qln_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zunmbr_prc_nn);
         }
       }
     } else if (minmn > 0) {
@@ -1176,35 +1176,35 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         if (wntqn) {
           // Path 1t (N >> M, JOBZ='N')
           maxwrk = m + lwork_zgelqf_mn;
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zgebrd_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zgebrd_mm);
           minwrk = 3 * m;
         } else if (wntqo) {
           // Path 2t (N >> M, JOBZ='O')
           wrkbl = m + lwork_zgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_mn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_mn);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
           maxwrk = m * n + m * m + wrkbl;
           minwrk = 2 * m * m + 3 * m;
         } else if (wntqs) {
           // Path 3t (N >> M, JOBZ='S')
           wrkbl = m + lwork_zgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_mn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_mn);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
           maxwrk = m * m + wrkbl;
           minwrk = m * m + 3 * m;
         } else if (wntqa) {
           // Path 4t (N >> M, JOBZ='A')
           wrkbl = m + lwork_zgelqf_mn;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_nn);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_nn);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_qln_mm);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zunmbr_prc_mm);
           maxwrk = m * m + wrkbl;
-          minwrk = m * m + std::max<blasint>(3 * m, m + n);
+          minwrk = m * m + Max<blasint>(3 * m, m + n);
         }
       } else if (n >= mnthr2) {
         // Path 5t (N >> M, but not as much as MNTHR1)
@@ -1212,18 +1212,18 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         minwrk = 2 * m + n;
         if (wntqo) {
           // Path 5to (N >> M, JOBZ='O')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_mn);
           maxwrk = maxwrk + m * n;
           minwrk = minwrk + m * m;
         } else if (wntqs) {
           // Path 5ts (N >> M, JOBZ='S')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_mn);
         } else if (wntqa) {
           // Path 5ta (N >> M, JOBZ='A')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_q_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_p_nn);
         }
       } else {
         // Path 6t (N > M, but not much larger)
@@ -1231,22 +1231,22 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         minwrk = 2 * m + n;
         if (wntqo) {
           // Path 6to (N > M, JOBZ='O')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_mn);
           maxwrk = maxwrk + m * n;
           minwrk = minwrk + m * m;
         } else if (wntqs) {
           // Path 6ts (N > M, JOBZ='S')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_mn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_mn);
         } else if (wntqa) {
           // Path 6ta (N > M, JOBZ='A')
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_nn);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_qln_mm);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zunmbr_prc_nn);
         }
       }
     }
-    maxwrk = std::max<blasint>(maxwrk, minwrk);
+    maxwrk = Max<blasint>(maxwrk, minwrk);
   }
   if (info == 0) {
     WORK(1) = WorkSize<T>(maxwrk);
@@ -1388,7 +1388,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         // CWorkspace: prefer N*N [U] + M*N [R]
         // RWorkspace: need   0
         for (i = 1; i <= m; i += ldwrkr) {
-          chunk = std::min<blasint>(m - i + 1, ldwrkr);
+          chunk = Min<blasint>(m - i + 1, ldwrkr);
           Gemm('N', 'N', chunk, n, n, cone, A.ptr(i, 1), lda, WORK.ptr(iu),
                ldwrku, czero, WORK.ptr(ir), ldwrkr);
           Lacpy('F', chunk, n, WORK.ptr(ir), ldwrkr, A.ptr(i, 1), lda);
@@ -1603,7 +1603,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         // M < 2*N here
         nrwork = irvt;
         for (i = 1; i <= m; i += ldwrku) {
-          chunk = std::min<blasint>(m - i + 1, ldwrku);
+          chunk = Min<blasint>(m - i + 1, ldwrku);
           Lacrm(chunk, n, A.ptr(i, 1), lda, RWORK.ptr(iru), n, WORK.ptr(iu),
                 ldwrku, RWORK.ptr(nrwork));
           Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -1774,7 +1774,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
           // since M < 2*N here
           nrwork = irvt;
           for (i = 1; i <= m; i += ldwrku) {
-            chunk = std::min<blasint>(m - i + 1, ldwrku);
+            chunk = Min<blasint>(m - i + 1, ldwrku);
             Lacrm(chunk, n, A.ptr(i, 1), lda, RWORK.ptr(iru), n, WORK.ptr(iu),
                   ldwrku, RWORK.ptr(nrwork));
             Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -1955,7 +1955,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         // CWorkspace: prefer M*M [VT] + M*N [L]
         // RWorkspace: need   0
         for (i = 1; i <= n; i += chunk) {
-          blk = std::min<blasint>(n - i + 1, chunk);
+          blk = Min<blasint>(n - i + 1, chunk);
           Gemm('N', 'N', m, blk, m, cone, WORK.ptr(ivt), m, A.ptr(1, i), lda,
                czero, WORK.ptr(il), ldwrkl);
           Lacpy('F', m, blk, WORK.ptr(il), ldwrkl, A.ptr(1, i), lda);
@@ -2172,7 +2172,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
         // since N < 2*M here
         nrwork = iru;
         for (i = 1; i <= n; i += chunk) {
-          blk = std::min<blasint>(n - i + 1, chunk);
+          blk = Min<blasint>(n - i + 1, chunk);
           Larcm(m, blk, RWORK.ptr(irvt), m, A.ptr(1, i), lda, WORK.ptr(ivt),
                 ldwkvt, RWORK.ptr(nrwork));
           Lacpy('F', m, blk, WORK.ptr(ivt), ldwkvt, A.ptr(1, i), lda);
@@ -2344,7 +2344,7 @@ blasint GesddComplex(char jobz, blasint m, blasint n, T* a, blasint lda,
           // since N < 2*M here
           nrwork = iru;
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Larcm(m, blk, RWORK.ptr(irvt), m, A.ptr(1, i), lda, WORK.ptr(ivt),
                   ldwkvt, RWORK.ptr(nrwork));
             Lacpy('F', m, blk, WORK.ptr(ivt), ldwkvt, A.ptr(1, i), lda);

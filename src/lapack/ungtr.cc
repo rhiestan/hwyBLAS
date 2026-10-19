@@ -40,7 +40,7 @@ blasint Ung2l(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
     info = -2;
   } else if (k < 0 || k > n) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -5;
   }
   if (info != 0) {
@@ -96,7 +96,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
     info = -2;
   } else if (k < 0 || k > n) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -5;
   }
 
@@ -111,7 +111,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
     }
     WORK(1) = WorkSize<T>(lwkopt);
 
-    if (lwork < std::max<blasint>(1, n) && !lquery) info = -8;
+    if (lwork < Max<blasint>(1, n) && !lquery) info = -8;
   }
 
   if (info != 0) {
@@ -129,7 +129,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
   blasint ldwork = 0;
   if (nb > 1 && nb < k) {
     // Determine when to cross over from blocked to unblocked code.
-    nx = std::max<blasint>(0, Ilaenv<T>(3, name, " ", m, n, k, -1));
+    nx = Max<blasint>(0, Ilaenv<T>(3, name, " ", m, n, k, -1));
     if (nx < k) {
       // Determine if workspace is large enough for blocked code.
       ldwork = n;
@@ -138,7 +138,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
         // Not enough workspace to use optimal NB: reduce NB and determine
         // the minimum value of NB.
         nb = lwork / ldwork;
-        nbmin = std::max<blasint>(2, Ilaenv<T>(2, name, " ", m, n, k, -1));
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, name, " ", m, n, k, -1));
       }
     }
   }
@@ -147,7 +147,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
   if (nb >= nbmin && nb < k && nx < k) {
     // Use blocked code after the first block. The last kk columns are
     // handled by the block method.
-    kk = std::min(k, ((k - nx + nb - 1) / nb) * nb);
+    kk = Min(k, ((k - nx + nb - 1) / nb) * nb);
 
     // Set A(m-kk+1:m,1:n-kk) to zero.
     for (blasint j = 1; j <= n - kk; ++j) {
@@ -163,7 +163,7 @@ blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
   if (kk > 0) {
     // Use blocked code.
     for (blasint i = k - kk + 1; i <= k; i += nb) {
-      const blasint ib = std::min(nb, k - i + 1);
+      const blasint ib = Min(nb, k - i + 1);
       if (n - k + i > 1) {
         // Form the triangular factor of the block reflector
         // H = H(i+ib-1) . . . H(i+1) H(i).
@@ -211,9 +211,9 @@ blasint Ungtr(char uplo, blasint n, T* a, blasint lda, const T* tau, T* work,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
-  } else if (lwork < std::max<blasint>(1, n - 1) && !lquery) {
+  } else if (lwork < Max<blasint>(1, n - 1) && !lquery) {
     info = -7;
   }
 
@@ -223,7 +223,7 @@ blasint Ungtr(char uplo, blasint n, T* a, blasint lda, const T* tau, T* work,
                                          " ", n - 1, n - 1, n - 1, -1)
                              : Ilaenv<T>(1, RealOrComplex<T>("ORGQR", "UNGQR"),
                                          " ", n - 1, n - 1, n - 1, -1);
-    lwkopt = std::max<blasint>(1, n - 1) * nb;
+    lwkopt = Max<blasint>(1, n - 1) * nb;
     WORK(1) = WorkSize<T>(lwkopt);
   }
 

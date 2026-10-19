@@ -605,11 +605,11 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
     info = -4;
   } else if (n < 0) {
     info = -5;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -7;
-  } else if (ldb < std::max<blasint>(1, n)) {
+  } else if (ldb < Max<blasint>(1, n)) {
     info = -9;
-  } else if (ldc < std::max<blasint>(1, m)) {
+  } else if (ldc < Max<blasint>(1, m)) {
     info = -11;
   }
   if (info != 0) {
@@ -625,8 +625,8 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
   bignum = one / smlnum;
   smlnum = smlnum * R(m * n) / eps;
   bignum = one / smlnum;
-  smin = std::max({smlnum, eps * Lange('M', m, m, a, lda, dum),
-                   eps * Lange('M', n, n, b, ldb, dum)});
+  smin = Max(smlnum, eps * Lange('M', m, m, a, lda, dum),
+             eps * Lange('M', n, n, b, ldb, dum));
   sgn = R(isgn);
   if (notrna && notrnb) {
     // Solve    A*X + ISGN*X*B = *scale*C.
@@ -676,8 +676,8 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           }
         }
         if (l1 == l2 && k1 == k2) {
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l1), 1);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l1), 1);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
           scaloc = one;
@@ -701,12 +701,12 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           }
           C(k1, l1) = X(1, 1);
         } else if (l1 == l2 && k1 != k2) {
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l1), 1);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k2, 1), ldc, B.ptr(1, l1), 1);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
           ierr = Laln2(false, 2, 1, smin, one, A.ptr(k1, k1), lda, one, one,
@@ -721,12 +721,12 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l1) = X(1, 1);
           C(k2, l1) = X(2, 1);
         } else if (l1 != l2 && k1 == k2) {
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l1), 1);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l1), 1);
           VEC(1, 1) = sgn * (C(k1, l1) - (suml + sgn * sumr));
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l2), 1);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l2), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l2), 1);
           VEC(2, 1) = sgn * (C(k1, l2) - (suml + sgn * sumr));
           ierr = Laln2(true, 2, 1, smin, one, B.ptr(l1, l1), ldb, one, one, vec,
@@ -741,20 +741,20 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l1) = X(1, 1);
           C(k1, l2) = X(2, 1);
         } else if (l1 != l2 && k1 != k2) {
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l1), 1);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l2), 1);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l2), 1);
           sumr = Dotc(l1 - 1, C.ptr(k1, 1), ldc, B.ptr(1, l2), 1);
           VEC(1, 2) = C(k1, l2) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
           sumr = Dotc(l1 - 1, C.ptr(k2, 1), ldc, B.ptr(1, l1), 1);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l2), 1);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l2), 1);
           sumr = Dotc(l1 - 1, C.ptr(k2, 1), ldc, B.ptr(1, l2), 1);
           VEC(2, 2) = C(k2, l2) - (suml + sgn * sumr);
           ierr = Lasy2(false, false, isgn, 2, 2, A.ptr(k1, k1), lda,
@@ -962,8 +962,8 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
         }
         if (l1 == l2 && k1 == k2) {
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l1, C.ptr(k1, std::min<blasint>(l1 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l1 + 1, n)), ldb);
+          sumr = Dotc(n - l1, C.ptr(k1, Min<blasint>(l1 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l1 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
           scaloc = one;
           a11 = A(k1, k1) + sgn * B(l1, l1);
@@ -987,12 +987,12 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l1) = X(1, 1);
         } else if (l1 == l2 && k1 != k2) {
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
           suml = Dotc(k1 - 1, A.ptr(1, k2), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
           ierr = Laln2(true, 2, 1, smin, one, A.ptr(k1, k1), lda, one, one, vec,
                        2, -sgn * B(l1, l1), zero, x, 2, &scaloc, &xnorm);
@@ -1007,12 +1007,12 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k2, l1) = X(2, 1);
         } else if (l1 != l2 && k1 == k2) {
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = sgn * (C(k1, l1) - (suml + sgn * sumr));
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = sgn * (C(k1, l2) - (suml + sgn * sumr));
           ierr = Laln2(false, 2, 1, smin, one, B.ptr(l1, l1), ldb, one, one,
                        vec, 2, -sgn * A(k1, k1), zero, x, 2, &scaloc, &xnorm);
@@ -1027,20 +1027,20 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l2) = X(2, 1);
         } else if (l1 != l2 && k1 != k2) {
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
           suml = Dotc(k1 - 1, A.ptr(1, k1), 1, C.ptr(1, l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 2) = C(k1, l2) - (suml + sgn * sumr);
           suml = Dotc(k1 - 1, A.ptr(1, k2), 1, C.ptr(1, l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
           suml = Dotc(k1 - 1, A.ptr(1, k2), 1, C.ptr(1, l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 2) = C(k2, l2) - (suml + sgn * sumr);
           ierr = Lasy2(true, true, isgn, 2, 2, A.ptr(k1, k1), lda,
                        B.ptr(l1, l1), ldb, vec, 2, &scaloc, x, 2, &xnorm);
@@ -1108,10 +1108,10 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           }
         }
         if (l1 == l2 && k1 == k2) {
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l1), 1);
-          sumr = Dotc(n - l1, C.ptr(k1, std::min<blasint>(l1 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l1 + 1, n)), ldb);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l1), 1);
+          sumr = Dotc(n - l1, C.ptr(k1, Min<blasint>(l1 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l1 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
           scaloc = one;
           a11 = A(k1, k1) + sgn * B(l1, l1);
@@ -1134,15 +1134,15 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           }
           C(k1, l1) = X(1, 1);
         } else if (l1 == l2 && k1 != k2) {
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
           ierr = Laln2(false, 2, 1, smin, one, A.ptr(k1, k1), lda, one, one,
                        vec, 2, -sgn * B(l1, l1), zero, x, 2, &scaloc, &xnorm);
@@ -1156,15 +1156,15 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l1) = X(1, 1);
           C(k2, l1) = X(2, 1);
         } else if (l1 != l2 && k1 == k2) {
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l1), 1);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = sgn * (C(k1, l1) - (suml + sgn * sumr));
-          suml = Dotc(m - k1, A.ptr(k1, std::min<blasint>(k1 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k1 + 1, m), l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k1, A.ptr(k1, Min<blasint>(k1 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k1 + 1, m), l2), 1);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = sgn * (C(k1, l2) - (suml + sgn * sumr));
           ierr = Laln2(false, 2, 1, smin, one, B.ptr(l1, l1), ldb, one, one,
                        vec, 2, -sgn * A(k1, k1), zero, x, 2, &scaloc, &xnorm);
@@ -1178,25 +1178,25 @@ blasint TrsylReal(char trana, char tranb, blasint isgn, blasint m, blasint n,
           C(k1, l1) = X(1, 1);
           C(k1, l2) = X(2, 1);
         } else if (l1 != l2 && k1 != k2) {
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 1) = C(k1, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k1, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k1, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k1, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l2), 1);
+          sumr = Dotc(n - l2, C.ptr(k1, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(1, 2) = C(k1, l2) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l1), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l1, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l1), 1);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l1, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 1) = C(k2, l1) - (suml + sgn * sumr);
-          suml = Dotc(m - k2, A.ptr(k2, std::min<blasint>(k2 + 1, m)), lda,
-                      C.ptr(std::min<blasint>(k2 + 1, m), l2), 1);
-          sumr = Dotc(n - l2, C.ptr(k2, std::min<blasint>(l2 + 1, n)), ldc,
-                      B.ptr(l2, std::min<blasint>(l2 + 1, n)), ldb);
+          suml = Dotc(m - k2, A.ptr(k2, Min<blasint>(k2 + 1, m)), lda,
+                      C.ptr(Min<blasint>(k2 + 1, m), l2), 1);
+          sumr = Dotc(n - l2, C.ptr(k2, Min<blasint>(l2 + 1, n)), ldc,
+                      B.ptr(l2, Min<blasint>(l2 + 1, n)), ldb);
           VEC(2, 2) = C(k2, l2) - (suml + sgn * sumr);
           ierr = Lasy2(false, true, isgn, 2, 2, A.ptr(k1, k1), lda,
                        B.ptr(l1, l1), ldb, vec, 2, &scaloc, x, 2, &xnorm);
@@ -1249,11 +1249,11 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
     info = -4;
   } else if (n < 0) {
     info = -5;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -7;
-  } else if (ldb < std::max<blasint>(1, n)) {
+  } else if (ldb < Max<blasint>(1, n)) {
     info = -9;
-  } else if (ldc < std::max<blasint>(1, m)) {
+  } else if (ldc < Max<blasint>(1, m)) {
     info = -11;
   }
   if (info != 0) {
@@ -1269,8 +1269,8 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
   bignum = one / smlnum;
   smlnum = smlnum * R(m * n) / eps;
   bignum = one / smlnum;
-  smin = std::max({smlnum, eps * Lange('M', m, m, a, lda, dum),
-                   eps * Lange('M', n, n, b, ldb, dum)});
+  smin = Max(smlnum, eps * Lange('M', m, m, a, lda, dum),
+             eps * Lange('M', n, n, b, ldb, dum));
   sgn = R(isgn);
   if (notrna && notrnb) {
     // Solve    A*X + ISGN*X*B = *scale*C.
@@ -1283,8 +1283,8 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
     // I=K+1                      J=1
     for (l = 1; l <= n; ++l) {
       for (k = m; k >= 1; --k) {
-        suml = Dotu(m - k, A.ptr(k, std::min<blasint>(k + 1, m)), lda,
-                    C.ptr(std::min<blasint>(k + 1, m), l), 1);
+        suml = Dotu(m - k, A.ptr(k, Min<blasint>(k + 1, m)), lda,
+                    C.ptr(Min<blasint>(k + 1, m), l), 1);
         sumr = Dotu(l - 1, C.ptr(k, 1), ldc, B.ptr(1, l), 1);
         vec = C(k, l) - (suml + sgn * sumr);
         scaloc = one;
@@ -1360,8 +1360,8 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
     for (l = n; l >= 1; --l) {
       for (k = 1; k <= m; ++k) {
         suml = Dotc(k - 1, A.ptr(1, k), 1, C.ptr(1, l), 1);
-        sumr = Dotc(n - l, C.ptr(k, std::min<blasint>(l + 1, n)), ldc,
-                    B.ptr(l, std::min<blasint>(l + 1, n)), ldb);
+        sumr = Dotc(n - l, C.ptr(k, Min<blasint>(l + 1, n)), ldc,
+                    B.ptr(l, Min<blasint>(l + 1, n)), ldb);
         vec = C(k, l) - (suml + sgn * Conj(sumr));
         scaloc = one;
         a11 = Conj(A(k, k) + sgn * B(l, l));
@@ -1396,10 +1396,10 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
     // I=K+1                      J=L+1
     for (l = n; l >= 1; --l) {
       for (k = m; k >= 1; --k) {
-        suml = Dotu(m - k, A.ptr(k, std::min<blasint>(k + 1, m)), lda,
-                    C.ptr(std::min<blasint>(k + 1, m), l), 1);
-        sumr = Dotc(n - l, C.ptr(k, std::min<blasint>(l + 1, n)), ldc,
-                    B.ptr(l, std::min<blasint>(l + 1, n)), ldb);
+        suml = Dotu(m - k, A.ptr(k, Min<blasint>(k + 1, m)), lda,
+                    C.ptr(Min<blasint>(k + 1, m), l), 1);
+        sumr = Dotc(n - l, C.ptr(k, Min<blasint>(l + 1, n)), ldc,
+                    B.ptr(l, Min<blasint>(l + 1, n)), ldb);
         vec = C(k, l) - (suml + sgn * Conj(sumr));
         scaloc = one;
         a11 = A(k, k) + sgn * Conj(B(l, l));
@@ -1512,10 +1512,10 @@ L10:
   // TL11*[X11 X12] + ISGN*[X11 X12]*op[TR11 TR12]  = [B11 B12]
   // [TR21 TR22]
 L20:
-  smin = std::max(eps * std::max({std::abs(TL(1, 1)), std::abs(TR(1, 1)),
-                                  std::abs(TR(1, 2)), std::abs(TR(2, 1)),
-                                  std::abs(TR(2, 2))}),
-                  smlnum);
+  smin =
+      Max(eps * Max(std::abs(TL(1, 1)), std::abs(TR(1, 1)), std::abs(TR(1, 2)),
+                    std::abs(TR(2, 1)), std::abs(TR(2, 2))),
+          smlnum);
   TMP(1) = TL(1, 1) + sgn * TR(1, 1);
   TMP(4) = TL(1, 1) + sgn * TR(2, 2);
   if (ltranr) {
@@ -1532,10 +1532,10 @@ L20:
   // op[TL11 TL12]*[X11] + ISGN* [X11]*TR11  = [B11]
   // [TL21 TL22] [X21]         [X21]         [B21]
 L30:
-  smin = std::max(eps * std::max({std::abs(TR(1, 1)), std::abs(TL(1, 1)),
-                                  std::abs(TL(1, 2)), std::abs(TL(2, 1)),
-                                  std::abs(TL(2, 2))}),
-                  smlnum);
+  smin =
+      Max(eps * Max(std::abs(TR(1, 1)), std::abs(TL(1, 1)), std::abs(TL(1, 2)),
+                    std::abs(TL(2, 1)), std::abs(TL(2, 2))),
+          smlnum);
   TMP(1) = TL(1, 1) + sgn * TR(1, 1);
   TMP(4) = TL(2, 2) + sgn * TR(1, 1);
   if (ltranl) {
@@ -1575,7 +1575,7 @@ L40:
   *scale = one;
   if ((two * smlnum) * std::abs(BTMP(2)) > std::abs(u22) ||
       (two * smlnum) * std::abs(BTMP(1)) > std::abs(u11)) {
-    *scale = half / std::max(std::abs(BTMP(1)), std::abs(BTMP(2)));
+    *scale = half / Max(std::abs(BTMP(1)), std::abs(BTMP(2)));
     BTMP(1) = BTMP(1) * *scale;
     BTMP(2) = BTMP(2) * *scale;
   }
@@ -1592,7 +1592,7 @@ L40:
     *xnorm = std::abs(X(1, 1)) + std::abs(X(1, 2));
   } else {
     X(2, 1) = X2(2);
-    *xnorm = std::max(std::abs(X(1, 1)), std::abs(X(2, 1)));
+    *xnorm = Max(std::abs(X(1, 1)), std::abs(X(2, 1)));
   }
   return info;
   // 2 by 2:
@@ -1601,11 +1601,11 @@ L40:
   // Solve equivalent 4 by 4 system using complete pivoting.
   // Set pivots less than SMIN to SMIN.
 L50:
-  smin = std::max({std::abs(TR(1, 1)), std::abs(TR(1, 2)), std::abs(TR(2, 1)),
-                   std::abs(TR(2, 2))});
-  smin = std::max({smin, std::abs(TL(1, 1)), std::abs(TL(1, 2)),
-                   std::abs(TL(2, 1)), std::abs(TL(2, 2))});
-  smin = std::max(eps * smin, smlnum);
+  smin = Max(std::abs(TR(1, 1)), std::abs(TR(1, 2)), std::abs(TR(2, 1)),
+             std::abs(TR(2, 2)));
+  smin = Max(smin, std::abs(TL(1, 1)), std::abs(TL(1, 2)), std::abs(TL(2, 1)),
+             std::abs(TL(2, 2)));
+  smin = Max(eps * smin, smlnum);
   BTMP(1) = zero;
   Copy(16, btmp, 0, t16, 1);
   T16(1, 1) = TL(1, 1) + sgn * TR(1, 1);
@@ -1679,8 +1679,8 @@ L50:
       (eight * smlnum) * std::abs(BTMP(2)) > std::abs(T16(2, 2)) ||
       (eight * smlnum) * std::abs(BTMP(3)) > std::abs(T16(3, 3)) ||
       (eight * smlnum) * std::abs(BTMP(4)) > std::abs(T16(4, 4))) {
-    *scale = (one / eight) / std::max({std::abs(BTMP(1)), std::abs(BTMP(2)),
-                                       std::abs(BTMP(3)), std::abs(BTMP(4))});
+    *scale = (one / eight) / Max(std::abs(BTMP(1)), std::abs(BTMP(2)),
+                                 std::abs(BTMP(3)), std::abs(BTMP(4)));
     BTMP(1) = BTMP(1) * *scale;
     BTMP(2) = BTMP(2) * *scale;
     BTMP(3) = BTMP(3) * *scale;
@@ -1705,8 +1705,8 @@ L50:
   X(2, 1) = TMP(2);
   X(1, 2) = TMP(3);
   X(2, 2) = TMP(4);
-  *xnorm = std::max(std::abs(TMP(1)) + std::abs(TMP(3)),
-                    std::abs(TMP(2)) + std::abs(TMP(4)));
+  *xnorm = Max(std::abs(TMP(1)) + std::abs(TMP(3)),
+               std::abs(TMP(2)) + std::abs(TMP(4)));
   return info;
 }
 
@@ -1750,7 +1750,7 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
   // Compute BIGNUM
   smlnum = two * Lamch<R>('S');
   bignum = one / smlnum;
-  smini = std::max(smin, smlnum);
+  smini = Max(smin, smlnum);
   // Don't check for input errors
   blasint info = 0;
   // Standard Initializations
@@ -1824,7 +1824,7 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
       }
       // If norm(C) < SMINI, use SMINI*identity.
       if (cmax < smini) {
-        bnorm = std::max(std::abs(B(1, 1)), std::abs(B(2, 1)));
+        bnorm = Max(std::abs(B(1, 1)), std::abs(B(2, 1)));
         if (smini < one && bnorm > one) {
           if (bnorm > bignum * smini) *scale = one / bnorm;
         }
@@ -1856,7 +1856,7 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
         br2 = B(2, 1);
       }
       br2 = br2 - lr21 * br1;
-      bbnd = std::max(std::abs(br1 * (ur22 * ur11r)), std::abs(br2));
+      bbnd = Max(std::abs(br1 * (ur22 * ur11r)), std::abs(br2));
       if (bbnd > one && std::abs(ur22) < one) {
         if (bbnd >= bignum * std::abs(ur22)) *scale = one / bbnd;
       }
@@ -1869,7 +1869,7 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
         X(1, 1) = xr1;
         X(2, 1) = xr2;
       }
-      *xnorm = std::max(std::abs(xr1), std::abs(xr2));
+      *xnorm = Max(std::abs(xr1), std::abs(xr2));
       // Further scaling if  norm(A) norm(X) > overflow
       if (*xnorm > one && cmax > one) {
         if (*xnorm > bignum / cmax) {
@@ -1897,8 +1897,8 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
       }
       // If norm(C) < SMINI, use SMINI*identity.
       if (cmax < smini) {
-        bnorm = std::max(std::abs(B(1, 1)) + std::abs(B(1, 2)),
-                         std::abs(B(2, 1)) + std::abs(B(2, 2)));
+        bnorm = Max(std::abs(B(1, 1)) + std::abs(B(1, 2)),
+                    std::abs(B(2, 1)) + std::abs(B(2, 2)));
         if (smini < one && bnorm > one) {
           if (bnorm > bignum * smini) *scale = one / bnorm;
         }
@@ -1968,9 +1968,9 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
       }
       br2 = br2 - lr21 * br1 + li21 * bi1;
       bi2 = bi2 - li21 * br1 - lr21 * bi1;
-      bbnd = std::max((std::abs(br1) + std::abs(bi1)) *
-                          (u22abs * (std::abs(ur11r) + std::abs(ui11r))),
-                      std::abs(br2) + std::abs(bi2));
+      bbnd = Max((std::abs(br1) + std::abs(bi1)) *
+                     (u22abs * (std::abs(ur11r) + std::abs(ui11r))),
+                 std::abs(br2) + std::abs(bi2));
       if (bbnd > one && u22abs < one) {
         if (bbnd >= bignum * u22abs) {
           *scale = one / bbnd;
@@ -1994,8 +1994,8 @@ blasint Laln2(bool ltrans, blasint na, blasint nw, R smin, R ca, const R* a,
         X(1, 2) = xi1;
         X(2, 2) = xi2;
       }
-      *xnorm = std::max(std::abs(xr1) + std::abs(xi1),
-                        std::abs(xr2) + std::abs(xi2));
+      *xnorm =
+          Max(std::abs(xr1) + std::abs(xi1), std::abs(xr2) + std::abs(xi2));
       // Further scaling if  norm(A) norm(X) > overflow
       if (*xnorm > one && cmax > one) {
         if (*xnorm > bignum / cmax) {
@@ -2040,11 +2040,12 @@ blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
   R u2[3];
   const Vector<R> U2(u2);
   const Vector<R> WORK(work);
-  R x[ldx * 2];
+  // Initialized (outputs of Lasy2, which the static analyzer cannot see).
+  R x[ldx * 2] = {};
   const Matrix<R> X(x, ldx);
   blasint j2, j3, j4, k, nd;
-  R cs, dnorm, eps, scale, smlnum, sn, t11, t22, t33, tau, tau1, tau2, temp,
-      thresh, wi1, wi2, wr1, wr2, xnorm;
+  R cs, dnorm, eps, scale = R(0), smlnum, sn, t11, t22, t33, tau, tau1, tau2,
+                    temp, thresh, wi1, wi2, wr1, wr2, xnorm;
   blasint info = 0;
   // Quick return if possible
   if (n == 0 || n1 == 0 || n2 == 0) return info;
@@ -2079,7 +2080,7 @@ blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
     // swap.
     eps = Lamch<R>('P');
     smlnum = Lamch<R>('S') / eps;
-    thresh = std::max(ten * eps * dnorm, smlnum);
+    thresh = Max(ten * eps * dnorm, smlnum);
     // Solve T11*X - X*T22 = scale*T12 for X.
     Lasy2(false, false, -1, n1, n2, d, ldd, D.ptr(n1 + 1, n1 + 1), ldd,
           D.ptr(1, n1 + 1), ldd, &scale, x, ldx, &xnorm);
@@ -2108,8 +2109,8 @@ blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
     Larfx('L', 3, 3, u, tau, d, ldd, work);
     Larfx('R', 3, 3, u, tau, d, ldd, work);
     // Test whether to reject swap.
-    if (std::max({std::abs(D(3, 1)), std::abs(D(3, 2)),
-                  std::abs(D(3, 3) - t11)}) > thresh)
+    if (Max(std::abs(D(3, 1)), std::abs(D(3, 2)), std::abs(D(3, 3) - t11)) >
+        thresh)
       goto L50;
     // Accept swap: apply transformation to the entire matrix T.
     Larfx('L', 3, n - j1 + 1, u, tau, Tm.ptr(j1, j1), ldt, work);
@@ -2137,8 +2138,8 @@ blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
     Larfx('L', 3, 3, u, tau, d, ldd, work);
     Larfx('R', 3, 3, u, tau, d, ldd, work);
     // Test whether to reject swap.
-    if (std::max({std::abs(D(2, 1)), std::abs(D(3, 1)),
-                  std::abs(D(1, 1) - t33)}) > thresh)
+    if (Max(std::abs(D(2, 1)), std::abs(D(3, 1)), std::abs(D(1, 1) - t33)) >
+        thresh)
       goto L50;
     // Accept swap: apply transformation to the entire matrix T.
     Larfx('R', j3, 3, u, tau, Tm.ptr(1, j1), ldt, work);
@@ -2175,8 +2176,8 @@ blasint Laexc(bool wantq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
     Larfx('L', 3, 4, u2, tau2, D.ptr(2, 1), ldd, work);
     Larfx('R', 4, 3, u2, tau2, D.ptr(1, 2), ldd, work);
     // Test whether to reject swap.
-    if (std::max({std::abs(D(3, 1)), std::abs(D(3, 2)), std::abs(D(4, 1)),
-                  std::abs(D(4, 2))}) > thresh)
+    if (Max(std::abs(D(3, 1)), std::abs(D(3, 2)), std::abs(D(4, 1)),
+            std::abs(D(4, 2))) > thresh)
       goto L50;
     // Accept swap: apply transformation to the entire matrix T.
     Larfx('L', 3, n - j1 + 1, u1, tau1, Tm.ptr(j1, j1), ldt, work);
@@ -2515,9 +2516,9 @@ blasint Trexc(char compq, blasint n, R* t, blasint ldt, R* q, blasint ldq,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (ldt < std::max<blasint>(1, n)) {
+  } else if (ldt < Max<blasint>(1, n)) {
     info = -4;
-  } else if (ldq < 1 || (wantq && ldq < std::max<blasint>(1, n))) {
+  } else if (ldq < 1 || (wantq && ldq < Max<blasint>(1, n))) {
     info = -6;
   } else if ((*ifst < 1 || *ifst > n) && (n > 0)) {
     info = -7;
@@ -2687,9 +2688,9 @@ blasint Trexc(char compq, blasint n, T* t, blasint ldt, T* q, blasint ldq,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (ldt < std::max<blasint>(1, n)) {
+  } else if (ldt < Max<blasint>(1, n)) {
     info = -4;
-  } else if (ldq < 1 || (wantq && ldq < std::max<blasint>(1, n))) {
+  } else if (ldq < 1 || (wantq && ldq < Max<blasint>(1, n))) {
     info = -6;
   } else if ((ifst < 1 || ifst > n) && (n > 0)) {
     info = -7;
@@ -2767,7 +2768,9 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, R* t,
   // Set below for every valid JOB.
   blasint liwmin = 0, lwmin = 0;
   bool lquery, pair, swap, wantbh, wantq, wants, wantsp;
-  R est, rnorm, scale;
+  // SCALE is initialized: Trsyl sets it after the first Lacn2 call, which
+  // the static analyzer cannot see.
+  R est, rnorm, scale = R(0);
   wantbh = Lsame(job, 'B');
   wants = Lsame(job, 'E') || wantbh;
   wantsp = Lsame(job, 'V') || wantbh;
@@ -2780,7 +2783,7 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, R* t,
     info = -2;
   } else if (n < 0) {
     info = -4;
-  } else if (ldt < std::max<blasint>(1, n)) {
+  } else if (ldt < Max<blasint>(1, n)) {
     info = -6;
   } else if (ldq < 1 || (wantq && ldq < n)) {
     info = -8;
@@ -2809,13 +2812,13 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, R* t,
     n2 = n - *m;
     nn = n1 * n2;
     if (wantsp) {
-      lwmin = std::max<blasint>(1, 2 * nn);
-      liwmin = std::max<blasint>(1, nn);
+      lwmin = Max<blasint>(1, 2 * nn);
+      liwmin = Max<blasint>(1, nn);
     } else if (Lsame(job, 'N')) {
-      lwmin = std::max<blasint>(1, n);
+      lwmin = Max<blasint>(1, n);
       liwmin = 1;
     } else if (Lsame(job, 'E')) {
-      lwmin = std::max<blasint>(1, nn);
+      lwmin = Max<blasint>(1, nn);
       liwmin = 1;
     }
     if (lwork < lwmin && !lquery) {
@@ -2944,7 +2947,9 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, T* t,
   const Vector<T> WORK(work);
   blasint k, kase, ks, lwmin, n1, n2, nn;
   bool lquery, wantbh, wantq, wants, wantsp;
-  R est, rnorm, scale;
+  // SCALE is initialized: Trsyl sets it after the first Lacn2 call, which
+  // the static analyzer cannot see.
+  R est, rnorm, scale = R(0);
   wantbh = Lsame(job, 'B');
   wants = Lsame(job, 'E') || wantbh;
   wantsp = Lsame(job, 'V') || wantbh;
@@ -2960,11 +2965,11 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, T* t,
   blasint info = 0;
   lquery = (lwork == -1);
   if (wantsp) {
-    lwmin = std::max<blasint>(1, 2 * nn);
+    lwmin = Max<blasint>(1, 2 * nn);
   } else if (Lsame(job, 'N')) {
     lwmin = 1;
   } else if (Lsame(job, 'E')) {
-    lwmin = std::max<blasint>(1, nn);
+    lwmin = Max<blasint>(1, nn);
   }
   if (!Lsame(job, 'N') && !wants && !wantsp) {
     info = -1;
@@ -2972,7 +2977,7 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, T* t,
     info = -2;
   } else if (n < 0) {
     info = -4;
-  } else if (ldt < std::max<blasint>(1, n)) {
+  } else if (ldt < Max<blasint>(1, n)) {
     info = -6;
   } else if (ldq < 1 || (wantq && ldq < n)) {
     info = -8;

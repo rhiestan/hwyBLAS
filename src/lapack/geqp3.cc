@@ -39,7 +39,7 @@ void Laqp2(blasint m, blasint n, blasint offset, T* a, blasint lda,
   const Vector<R> VN1(vn1);
   const Vector<R> VN2(vn2);
 
-  const blasint mn = std::min(m - offset, n);
+  const blasint mn = Min(m - offset, n);
   const R tol3z = std::sqrt(Lamch<R>('E'));
 
   // Compute factorization.
@@ -78,7 +78,7 @@ void Laqp2(blasint m, blasint n, blasint offset, T* a, blasint lda,
         // Lapack Working Note 176.
         const R ratio = std::abs(A(offpi, j)) / VN1(j);
         R temp = one - ratio * ratio;
-        temp = std::max(temp, zero);
+        temp = Max(temp, zero);
         const R vratio = VN1(j) / VN2(j);
         const R temp2 = temp * (vratio * vratio);
         if (temp2 <= tol3z) {
@@ -124,7 +124,7 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
   const Vector<R> VN2(vn2);
   const Matrix<T> F(f, ldf);
 
-  const blasint lastrk = std::min(m, n + offset);
+  const blasint lastrk = Min(m, n + offset);
   blasint lsticc = 0;
   blasint k = 0;
   const R tol3z = std::sqrt(Lamch<R>('E'));
@@ -205,7 +205,7 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
           // NOTE: The following 4 lines follow from the analysis in
           // Lapack Working Note 176.
           R temp = std::abs(A(rk, j)) / VN1(j);
-          temp = std::max(zero, (one + temp) * (one - temp));
+          temp = Max(zero, (one + temp) * (one - temp));
           const R vratio = VN1(j) / VN2(j);
           const R temp2 = temp * (vratio * vratio);
           if (temp2 <= tol3z) {
@@ -227,7 +227,7 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
   // Apply the block reflector to the rest of the matrix:
   // A(OFFSET+KB+1:M,KB+1:N) := A(OFFSET+KB+1:M,KB+1:N) -
   //                     A(OFFSET+KB+1:M,1:KB)*F(KB+1:N,1:KB)**H.
-  if (kb < std::min(n, m - offset)) {
+  if (kb < Min(n, m - offset)) {
     Gemm('N', 'C', m - rk, n - kb, kb, -cone, A.ptr(rk + 1, 1), lda,
          F.ptr(kb + 1, 1), ldf, cone, A.ptr(rk + 1, kb + 1), lda);
   }
@@ -277,11 +277,11 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
 
-  const blasint minmn = std::min(m, n);
+  const blasint minmn = Min(m, n);
   blasint iws = 1;
   blasint lwkopt = 1;
   blasint nb = 0;
@@ -329,13 +329,13 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
   // Compute the QR factorization of fixed columns and update remaining
   // columns.
   if (nfxd > 0) {
-    const blasint na = std::min(m, nfxd);
+    const blasint na = Min(m, nfxd);
     Geqrf(m, na, a, lda, tau, work, lwork);
-    iws = std::max(iws, static_cast<blasint>(std::real(WORK(1))));
+    iws = Max(iws, static_cast<blasint>(std::real(WORK(1))));
     if (na < n) {
       Unmqr('L', ConjTrans<T>(), m, n - na, na, a, lda, tau, A.ptr(1, na + 1),
             lda, work, lwork);
-      iws = std::max(iws, static_cast<blasint>(std::real(WORK(1))));
+      iws = Max(iws, static_cast<blasint>(std::real(WORK(1))));
     }
   }
 
@@ -353,8 +353,7 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
 
     if (nb > 1 && nb < sminmn) {
       // Determine when to cross over from blocked to unblocked code.
-      nx =
-          std::max<blasint>(0, Ilaenv<T>(ixover, "GEQRF", " ", sm, sn, -1, -1));
+      nx = Max<blasint>(0, Ilaenv<T>(ixover, "GEQRF", " ", sm, sn, -1, -1));
 
       if (nx < sminmn) {
         // Determine if workspace is large enough for blocked code.
@@ -365,13 +364,13 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
         // less than the optimal LWORK, xLAQPS then writes up to 2*NFXD
         // elements past the end of WORK. The template uses 2*N.
         const blasint minws = kComplex ? (sn + 1) * nb : 2 * n + (sn + 1) * nb;
-        iws = std::max(iws, minws);
+        iws = Max(iws, minws);
         if (lwork < minws) {
           // Not enough workspace to use optimal NB: Reduce NB and
           // determine the minimum value of NB.
           nb = kComplex ? lwork / (sn + 1) : (lwork - 2 * n) / (sn + 1);
-          nbmin = std::max<blasint>(
-              2, Ilaenv<T>(inbmin, "GEQRF", " ", sm, sn, -1, -1));
+          nbmin =
+              Max<blasint>(2, Ilaenv<T>(inbmin, "GEQRF", " ", sm, sn, -1, -1));
         }
       }
     }
@@ -401,7 +400,7 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
       // Use blocked code initially.
       const blasint topbmn = minmn - nx;
       while (j <= topbmn) {
-        const blasint jb = std::min(nb, topbmn - j + 1);
+        const blasint jb = Min(nb, topbmn - j + 1);
 
         // Factorize JB columns among columns J:N.
         const blasint fjb = Laqps(m, n - j + 1, j - 1, jb, A.ptr(1, j), lda,

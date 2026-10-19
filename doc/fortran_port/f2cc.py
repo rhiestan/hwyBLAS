@@ -129,7 +129,7 @@ REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'DZNRM2': 'NRM2', 'DZASUM': 'ASUM', 'IZAMAX': 'IAMAX',
              'IDAMAX': 'IAMAX', 'IZMAX1': 'IMAX1', 'DZSUM1': 'SUM1'}
 FUNCS = {
-    'MAX': 'std::max', 'MIN': 'std::min', 'ABS': 'std::abs',
+    'MAX': 'Max', 'MIN': 'Min', 'ABS': 'std::abs',
     'SQRT': 'std::sqrt', 'SIGN': 'Sign', 'DBLE': 'std::real',
     'REAL': 'std::real', 'INT': 'static_cast<blasint>', 'LSAME': 'Lsame',
     'MOD': 'Mod', 'DCONJG': 'Conj', 'CONJG': 'Conj', 'DIMAG': 'std::imag',
@@ -282,12 +282,12 @@ def expr(toks, r):
                 elif val in FUNCS:
                     f = FUNCS[val]
                     if val in ('MAX', 'MIN'):
-                        if is_int_expr(toks[i + 2:j], r):
+                        integer = is_int_expr(toks[i + 2:j], r)
+                        if integer:
                             f += '<blasint>'
-                        if len(inner) > 2:
-                            out.append(f + '({' + sub + '})')
-                        else:
-                            out.append(f + '(' + sub + ')')
+                        # Max/Min: Fortran's MAX/MIN for NaNs, any number
+                        # of arguments (see lapack_common.h).
+                        out.append(f + '(' + sub + ')')
                     else:
                         out.append(f + '(' + sub + ')')
                 else:

@@ -192,7 +192,7 @@ void Lartg(R f, R g, R* c, R* s, R* r) {
     *r = std::copysign(d, f);
     *s = g / *r;
   } else {
-    const R u = std::min(safmax, std::max(std::max(safmin, f1), g1));
+    const R u = Min(safmax, Max(Max(safmin, f1), g1));
     const R fs = f / u;
     const R gs = g / u;
     const R d = std::sqrt(fs * fs + gs * gs);
@@ -236,7 +236,7 @@ std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
       *r = std::abs(std::real(g));
       *s = std::conj(g) / *r;
     } else {
-      const R g1 = std::max(std::abs(std::real(g)), std::abs(std::imag(g)));
+      const R g1 = Max(std::abs(std::real(g)), std::abs(std::imag(g)));
       const R rtmax = std::sqrt(safmax / 2);
       if (g1 > rtmin && g1 < rtmax) {
         // Use unscaled algorithm.
@@ -248,7 +248,7 @@ std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
         *r = d;
       } else {
         // Use scaled algorithm.
-        const R u = std::min(safmax, std::max(safmin, g1));
+        const R u = Min(safmax, Max(safmin, g1));
         const T gs = g / u;
         // The following two lines can be replaced by `d = abs( gs )`.
         // This algorithm do not use the intrinsic complex abs.
@@ -259,8 +259,8 @@ std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
       }
     }
   } else {
-    const R f1 = std::max(std::abs(std::real(f)), std::abs(std::imag(f)));
-    const R g1 = std::max(std::abs(std::real(g)), std::abs(std::imag(g)));
+    const R f1 = Max(std::abs(std::real(f)), std::abs(std::imag(f)));
+    const R g1 = Max(std::abs(std::real(g)), std::abs(std::imag(g)));
     R rtmax = std::sqrt(safmax / 4);
     if (f1 > rtmin && f1 < rtmax && g1 > rtmin && g1 < rtmax) {
       // Use unscaled algorithm.
@@ -300,7 +300,7 @@ std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
       }
     } else {
       // Use scaled algorithm.
-      const R u = std::min({safmax, std::max({safmin, f1, g1})});
+      const R u = Min(safmax, Max(safmin, f1, g1));
       const T gs = g / u;
       const R g2 = abssq(gs);
       R w, f2, h2;
@@ -308,7 +308,7 @@ std::enable_if_t<IsComplex<T>::value> Lartg(T f, T g, RealT<T>* c, T* s, T* r) {
       if (f1 / u < rtmin) {
         // f is not well-scaled when scaled by g1.
         // Use a different scaling for f.
-        const R v = std::min(safmax, std::max(safmin, f1));
+        const R v = Min(safmax, Max(safmin, f1));
         w = v / u;
         fs = f / v;
         f2 = abssq(fs);
@@ -575,7 +575,7 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
     info = 4;
   } else if (n < 0) {
     info = 5;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = 9;
   }
   if (info != 0) {
@@ -636,7 +636,7 @@ void Lasr(char side, char pivot, char direct, blasint m, blasint n,
     // dependency chains).
     constexpr blasint kBlock = 8;
     for (blasint i0 = 1; i0 <= n; i0 += kBlock) {
-      const blasint i1 = std::min(n, i0 + kBlock - 1);
+      const blasint i1 = Min(n, i0 + kBlock - 1);
       if (Lsame(pivot, 'V')) {
         for (blasint k = 1; k <= m - 1; ++k) {
           const blasint j = forward ? k : m - k;
@@ -989,7 +989,7 @@ blasint Steqr(char compz, blasint n, RealT<T>* d, RealT<T>* e, T* z,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (ldz < 1 || (icompz > 0 && ldz < std::max<blasint>(1, n))) {
+  } else if (ldz < 1 || (icompz > 0 && ldz < Max<blasint>(1, n))) {
     info = -6;
   }
   if (info != 0) {

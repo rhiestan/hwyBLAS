@@ -151,7 +151,7 @@ RealT<T> Lange(char norm, blasint m, blasint n, const T* a, blasint lda,
   const Vector<R> WORK(work);
 
   R value = zero;
-  if (std::min(m, n) == 0) {
+  if (Min(m, n) == 0) {
     value = zero;
   } else if (Lsame(norm, 'M')) {
     // Find max(abs(A(i,j))).

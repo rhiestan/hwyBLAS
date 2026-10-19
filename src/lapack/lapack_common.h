@@ -113,6 +113,34 @@ RealT<T> Cabs1(T z) {
   return std::abs(std::real(z)) + std::abs(std::imag(z));
 }
 
+// MAX(a, b, ...) and MIN(a, b, ...) as Fortran (flang) evaluates them:
+// a > b ? a : b (a < b ? a : b for MIN), from the left. They differ from
+// std::max and std::min only if an argument is NaN (and for zeros of
+// different signs): MAX(NaN, x) is x, MAX(x, NaN) is NaN. LAPACK relies on
+// this, e.g. xBDSQR's THRESH = MAX(TOL*SMINOA, ...) stays finite for a NaN
+// SMINOA (with std::max, it would be NaN and xBDSQR would loop forever).
+// The port uses them for every MAX and MIN, also of integers. (Not
+// std::max({...}) in any case: MSVC's version never returns if an element is
+// NaN.)
+template <typename T, typename... Rest>
+constexpr T Max(T a, T b, Rest... rest) {
+  const T m = a > b ? a : b;
+  if constexpr (sizeof...(rest) == 0) {
+    return m;
+  } else {
+    return Max(m, rest...);
+  }
+}
+template <typename T, typename... Rest>
+constexpr T Min(T a, T b, Rest... rest) {
+  const T m = a < b ? a : b;
+  if constexpr (sizeof...(rest) == 0) {
+    return m;
+  } else {
+    return Min(m, rest...);
+  }
+}
+
 // NINT(x): x rounded to the nearest integer, halfway cases away from zero.
 template <typename R>
 blasint Nint(R x) {

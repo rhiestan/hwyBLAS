@@ -53,7 +53,7 @@ blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
   if (info < 0) {
@@ -66,7 +66,7 @@ blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     for (blasint i = 1; i <= n; ++i) {
       // Generate elementary reflector H(i) to annihilate A(i+1:m,i).
       T alpha = A(i, i);
-      Larfg(m - i + 1, &alpha, A.ptr(std::min(i + 1, m), i), 1, TAUQ.ptr(i));
+      Larfg(m - i + 1, &alpha, A.ptr(Min(i + 1, m), i), 1, TAUQ.ptr(i));
       D(i) = std::real(alpha);
 
       // Apply H(i)**H to A(i:m,i+1:n) from the left.
@@ -80,7 +80,7 @@ blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
         // Generate elementary reflector G(i) to annihilate A(i,i+2:n).
         Lacgv(n - i, A.ptr(i, i + 1), lda);
         alpha = A(i, i + 1);
-        Larfg(n - i, &alpha, A.ptr(i, std::min(i + 2, n)), lda, TAUP.ptr(i));
+        Larfg(n - i, &alpha, A.ptr(i, Min(i + 2, n)), lda, TAUP.ptr(i));
         E(i) = std::real(alpha);
 
         // Apply G(i) to A(i+1:m,i+1:n) from the right.
@@ -98,7 +98,7 @@ blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
       // Generate G(i) to annihilate A(i,i+1:n).
       Lacgv(n - i + 1, A.ptr(i, i), lda);
       T alpha = A(i, i);
-      Larfg(n - i + 1, &alpha, A.ptr(i, std::min(i + 1, n)), lda, TAUP.ptr(i));
+      Larfg(n - i + 1, &alpha, A.ptr(i, Min(i + 1, n)), lda, TAUP.ptr(i));
       D(i) = std::real(alpha);
 
       // Apply G(i) to A(i+1:m,i:n) from the right.
@@ -112,7 +112,7 @@ blasint Gebd2(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
       if (i < m) {
         // Generate H(i) to annihilate A(i+2:m,i).
         alpha = A(i + 1, i);
-        Larfg(m - i, &alpha, A.ptr(std::min(i + 2, m), i), 1, TAUQ.ptr(i));
+        Larfg(m - i, &alpha, A.ptr(Min(i + 2, m), i), 1, TAUQ.ptr(i));
         E(i) = std::real(alpha);
 
         // Apply H(i)**H to A(i+1:m,i+1:n) from the left.
@@ -168,7 +168,7 @@ void Labrd(blasint m, blasint n, blasint nb, T* a, blasint lda, RealT<T>* d,
 
       // Generate reflection Q(i) to annihilate A(i+1:m,i).
       T alpha = A(i, i);
-      Larfg(m - i + 1, &alpha, A.ptr(std::min(i + 1, m), i), 1, TAUQ.ptr(i));
+      Larfg(m - i + 1, &alpha, A.ptr(Min(i + 1, m), i), 1, TAUQ.ptr(i));
       D(i) = std::real(alpha);
       if constexpr (!kComplex) A(i, i) = alpha;
       if (i < n) {
@@ -200,7 +200,7 @@ void Labrd(blasint m, blasint n, blasint nb, T* a, blasint lda, RealT<T>* d,
 
         // Generate reflection P(i) to annihilate A(i,i+2:n).
         alpha = A(i, i + 1);
-        Larfg(n - i, &alpha, A.ptr(i, std::min(i + 2, n)), lda, TAUP.ptr(i));
+        Larfg(n - i, &alpha, A.ptr(i, Min(i + 2, n)), lda, TAUP.ptr(i));
         E(i) = std::real(alpha);
         A(i, i + 1) = one;
 
@@ -235,7 +235,7 @@ void Labrd(blasint m, blasint n, blasint nb, T* a, blasint lda, RealT<T>* d,
 
       // Generate reflection P(i) to annihilate A(i,i+1:n).
       T alpha = A(i, i);
-      Larfg(n - i + 1, &alpha, A.ptr(i, std::min(i + 1, n)), lda, TAUP.ptr(i));
+      Larfg(n - i + 1, &alpha, A.ptr(i, Min(i + 1, n)), lda, TAUP.ptr(i));
       D(i) = std::real(alpha);
       if constexpr (!kComplex) A(i, i) = alpha;
       if (i < m) {
@@ -265,7 +265,7 @@ void Labrd(blasint m, blasint n, blasint nb, T* a, blasint lda, RealT<T>* d,
 
         // Generate reflection Q(i) to annihilate A(i+2:m,i).
         alpha = A(i + 1, i);
-        Larfg(m - i, &alpha, A.ptr(std::min(i + 2, m), i), 1, TAUQ.ptr(i));
+        Larfg(m - i, &alpha, A.ptr(Min(i + 2, m), i), 1, TAUQ.ptr(i));
         E(i) = std::real(alpha);
         A(i + 1, i) = one;
 
@@ -307,14 +307,14 @@ blasint Gebrd(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
   const Vector<T> WORK(work);
 
   blasint info = 0;
-  const blasint minmn = std::min(m, n);
+  const blasint minmn = Min(m, n);
   blasint lwkmin, lwkopt, nb = 0;
   if (minmn == 0) {
     lwkmin = 1;
     lwkopt = 1;
   } else {
-    lwkmin = std::max(m, n);
-    nb = std::max<blasint>(1, Ilaenv<T>(1, "GEBRD", " ", m, n, -1, -1));
+    lwkmin = Max(m, n);
+    nb = Max<blasint>(1, Ilaenv<T>(1, "GEBRD", " ", m, n, -1, -1));
     lwkopt = (m + n) * nb;
   }
   WORK(1) = WorkSize<T>(lwkopt);
@@ -325,7 +325,7 @@ blasint Gebrd(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   } else if (lwork < lwkmin && !lquery) {
     info = -10;
@@ -342,14 +342,14 @@ blasint Gebrd(blasint m, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     return info;
   }
 
-  blasint ws = std::max(m, n);
+  blasint ws = Max(m, n);
   const blasint ldwrkx = m;
   const blasint ldwrky = n;
 
   blasint nx;
   if (nb > 1 && nb < minmn) {
     // Set the crossover point NX.
-    nx = std::max(nb, Ilaenv<T>(3, "GEBRD", " ", m, n, -1, -1));
+    nx = Max(nb, Ilaenv<T>(3, "GEBRD", " ", m, n, -1, -1));
 
     // Determine when to switch from blocked to unblocked code.
     if (nx < minmn) {
@@ -434,20 +434,20 @@ blasint Ungbr(char vect, blasint m, blasint n, blasint k, T* a, blasint lda,
   // Test the input arguments.
   blasint info = 0;
   const bool wantq = Lsame(vect, 'Q');
-  const blasint mn = std::min(m, n);
+  const blasint mn = Min(m, n);
   const bool lquery = (lwork == -1);
   if (!wantq && !Lsame(vect, 'P')) {
     info = -1;
   } else if (m < 0) {
     info = -2;
-  } else if (n < 0 || (wantq && (n > m || n < std::min(m, k))) ||
-             (!wantq && (m > n || m < std::min(n, k)))) {
+  } else if (n < 0 || (wantq && (n > m || n < Min(m, k))) ||
+             (!wantq && (m > n || m < Min(n, k)))) {
     info = -3;
   } else if (k < 0) {
     info = -4;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -6;
-  } else if (lwork < std::max<blasint>(1, mn) && !lquery) {
+  } else if (lwork < Max<blasint>(1, mn) && !lquery) {
     info = -9;
   }
 
@@ -468,7 +468,7 @@ blasint Ungbr(char vect, blasint m, blasint n, blasint k, T* a, blasint lda,
       }
     }
     lwkopt = static_cast<blasint>(std::real(WORK(1)));
-    lwkopt = std::max(lwkopt, mn);
+    lwkopt = Max(lwkopt, mn);
   }
 
   if (info != 0) {
@@ -571,10 +571,10 @@ blasint Unmbr(char vect, char side, char trans, blasint m, blasint n, blasint k,
   blasint nq, nw;
   if (left) {
     nq = m;
-    nw = std::max<blasint>(1, n);
+    nw = Max<blasint>(1, n);
   } else {
     nq = n;
-    nw = std::max<blasint>(1, m);
+    nw = Max<blasint>(1, m);
   }
   if (!applyq && !Lsame(vect, 'P')) {
     info = -1;
@@ -588,10 +588,10 @@ blasint Unmbr(char vect, char side, char trans, blasint m, blasint n, blasint k,
     info = -5;
   } else if (k < 0) {
     info = -6;
-  } else if ((applyq && lda < std::max<blasint>(1, nq)) ||
-             (!applyq && lda < std::max<blasint>(1, std::min(nq, k)))) {
+  } else if ((applyq && lda < Max<blasint>(1, nq)) ||
+             (!applyq && lda < Max<blasint>(1, Min(nq, k)))) {
     info = -8;
-  } else if (ldc < std::max<blasint>(1, m)) {
+  } else if (ldc < Max<blasint>(1, m)) {
     info = -11;
   } else if (lwork < nw && !lquery) {
     info = -13;

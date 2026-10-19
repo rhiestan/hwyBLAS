@@ -52,7 +52,7 @@ blasint Gebal(char job, blasint n, T* a, blasint lda, blasint* ilo,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
   }
   if (info != 0) {
@@ -175,8 +175,7 @@ blasint Gebal(char job, blasint n, T* a, blasint lda, blasint* ilo,
       R f = one;
       const R s = c + r;
 
-      while (c < g && std::max({f, c, ca}) < sfmax2 &&
-             std::min({r, g, ra}) > sfmin2) {
+      while (c < g && Max(f, c, ca) < sfmax2 && Min(r, g, ra) > sfmin2) {
         f = f * sclfac;
         c = c * sclfac;
         ca = ca * sclfac;
@@ -187,8 +186,7 @@ blasint Gebal(char job, blasint n, T* a, blasint lda, blasint* ilo,
 
       g = c / sclfac;
 
-      while (g >= r && std::max(r, ra) < sfmax2 &&
-             std::min({f, c, g, ca}) > sfmin2) {
+      while (g >= r && Max(r, ra) < sfmax2 && Min(f, c, g, ca) > sfmin2) {
         f = f / sclfac;
         c = c / sclfac;
         g = g / sclfac;
@@ -245,13 +243,13 @@ blasint Gebak(char job, char side, blasint n, blasint ilo, blasint ihi,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -4;
-  } else if (ihi < std::min(ilo, n) || ihi > n) {
+  } else if (ihi < Min(ilo, n) || ihi > n) {
     info = -5;
   } else if (m < 0) {
     info = -7;
-  } else if (ldv < std::max<blasint>(1, n)) {
+  } else if (ldv < Max<blasint>(1, n)) {
     info = -9;
   }
   if (info != 0) {
@@ -325,11 +323,11 @@ blasint Gehd2(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
   blasint info = 0;
   if (n < 0) {
     info = -1;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -2;
-  } else if (ihi < std::min(ilo, n) || ihi > n) {
+  } else if (ihi < Min(ilo, n) || ihi > n) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -5;
   }
   if (info != 0) {
@@ -339,7 +337,7 @@ blasint Gehd2(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
 
   for (blasint i = ilo; i <= ihi - 1; ++i) {
     // Compute elementary reflector H(i) to annihilate A(i+2:ihi,i).
-    Larfg(ihi - i, A.ptr(i + 1, i), A.ptr(std::min<blasint>(i + 2, n), i), 1,
+    Larfg(ihi - i, A.ptr(i + 1, i), A.ptr(Min<blasint>(i + 2, n), i), 1,
           TAU.ptr(i));
 
     // Apply H(i) to A(1:ihi,i+1:ihi) from the right.
@@ -415,8 +413,8 @@ void Lahr2(blasint n, blasint k, blasint nb, T* a, blasint lda, T* tau, T* t,
 
     // Generate the elementary reflector H(I) to annihilate
     // A(K+I+1:N,I).
-    Larfg(n - k - i + 1, A.ptr(k + i, i),
-          A.ptr(std::min<blasint>(k + i + 1, n), i), 1, TAU.ptr(i));
+    Larfg(n - k - i + 1, A.ptr(k + i, i), A.ptr(Min<blasint>(k + i + 1, n), i),
+          1, TAU.ptr(i));
     ei = A(k + i, i);
     A(k + i, i) = one;
 
@@ -468,13 +466,13 @@ blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
   const bool lquery = (lwork == -1);
   if (n < 0) {
     info = -1;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -2;
-  } else if (ihi < std::min(ilo, n) || ihi > n) {
+  } else if (ihi < Min(ilo, n) || ihi > n) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -5;
-  } else if (lwork < std::max<blasint>(1, n) && !lquery) {
+  } else if (lwork < Max<blasint>(1, n) && !lquery) {
     info = -8;
   }
 
@@ -486,7 +484,7 @@ blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
       lwkopt = 1;
     } else {
       const blasint nb =
-          std::min(nbmax, Ilaenv<T>(1, "GEHRD", " ", n, ilo, ihi, -1));
+          Min(nbmax, Ilaenv<T>(1, "GEHRD", " ", n, ilo, ihi, -1));
       lwkopt = n * nb + tsize;
     }
     WORK(1) = WorkSize<T>(lwkopt);
@@ -500,7 +498,7 @@ blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
 
   // Set elements 1:ILO-1 and IHI:N-1 of TAU to zero.
   for (blasint i = 1; i <= ilo - 1; ++i) TAU(i) = zero;
-  for (blasint i = std::max<blasint>(1, ihi); i <= n - 1; ++i) TAU(i) = zero;
+  for (blasint i = Max<blasint>(1, ihi); i <= n - 1; ++i) TAU(i) = zero;
 
   // Quick return if possible.
   if (nh <= 1) {
@@ -509,20 +507,19 @@ blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
   }
 
   // Determine the block size.
-  blasint nb = std::min(nbmax, Ilaenv<T>(1, "GEHRD", " ", n, ilo, ihi, -1));
+  blasint nb = Min(nbmax, Ilaenv<T>(1, "GEHRD", " ", n, ilo, ihi, -1));
   blasint nbmin = 2;
   blasint nx = 0;  // Set (and used) only if nb > 1 and nb < nh.
   if (nb > 1 && nb < nh) {
     // Determine when to cross over from blocked to unblocked code (last
     // block is always handled by unblocked code).
-    nx = std::max(nb, Ilaenv<T>(3, "GEHRD", " ", n, ilo, ihi, -1));
+    nx = Max(nb, Ilaenv<T>(3, "GEHRD", " ", n, ilo, ihi, -1));
     if (nx < nh) {
       // Determine if workspace is large enough for blocked code.
       if (lwork < lwkopt) {
         // Not enough workspace to use optimal NB: determine the minimum
         // value of NB, and reduce NB or force use of unblocked code.
-        nbmin =
-            std::max<blasint>(2, Ilaenv<T>(2, "GEHRD", " ", n, ilo, ihi, -1));
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, "GEHRD", " ", n, ilo, ihi, -1));
         if (lwork >= (n * nbmin + tsize)) {
           nb = (lwork - tsize) / n;
         } else {
@@ -541,7 +538,7 @@ blasint Gehrd(blasint n, blasint ilo, blasint ihi, T* a, blasint lda, T* tau,
     // Use blocked code.
     const blasint iwt = 1 + n * nb;
     for (i = ilo; i <= ihi - 1 - nx; i += nb) {
-      const blasint ib = std::min(nb, ihi - i);
+      const blasint ib = Min(nb, ihi - i);
 
       // Reduce columns i:i+ib-1 to Hessenberg form, returning the matrices
       // V and T of the block reflector H = I - V*T*V**H which performs the
@@ -597,13 +594,13 @@ blasint Unghr(blasint n, blasint ilo, blasint ihi, T* a, blasint lda,
   const bool lquery = (lwork == -1);
   if (n < 0) {
     info = -1;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -2;
-  } else if (ihi < std::min(ilo, n) || ihi > n) {
+  } else if (ihi < Min(ilo, n) || ihi > n) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -5;
-  } else if (lwork < std::max<blasint>(1, nh) && !lquery) {
+  } else if (lwork < Max<blasint>(1, nh) && !lquery) {
     info = -8;
   }
 
@@ -611,7 +608,7 @@ blasint Unghr(blasint n, blasint ilo, blasint ihi, T* a, blasint lda,
   if (info == 0) {
     const blasint nb =
         Ilaenv<T>(1, RealOrComplex<T>("ORGQR", "UNGQR"), " ", nh, nh, nh, -1);
-    lwkopt = std::max<blasint>(1, nh) * nb;
+    lwkopt = Max<blasint>(1, nh) * nb;
     WORK(1) = WorkSize<T>(lwkopt);
   }
 
@@ -679,10 +676,10 @@ blasint Unmhr(char side, char trans, blasint m, blasint n, blasint ilo,
   blasint nq, nw;
   if (left) {
     nq = m;
-    nw = std::max<blasint>(1, n);
+    nw = Max<blasint>(1, n);
   } else {
     nq = n;
-    nw = std::max<blasint>(1, m);
+    nw = Max<blasint>(1, m);
   }
   if (!left && !Lsame(side, 'R')) {
     info = -1;
@@ -692,13 +689,13 @@ blasint Unmhr(char side, char trans, blasint m, blasint n, blasint ilo,
     info = -3;
   } else if (n < 0) {
     info = -4;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, nq)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, nq)) {
     info = -5;
-  } else if (ihi < std::min(ilo, nq) || ihi > nq) {
+  } else if (ihi < Min(ilo, nq) || ihi > nq) {
     info = -6;
-  } else if (lda < std::max<blasint>(1, nq)) {
+  } else if (lda < Max<blasint>(1, nq)) {
     info = -8;
-  } else if (ldc < std::max<blasint>(1, m)) {
+  } else if (ldc < Max<blasint>(1, m)) {
     info = -11;
   } else if (lwork < nw && !lquery) {
     info = -13;

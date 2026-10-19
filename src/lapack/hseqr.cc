@@ -74,10 +74,10 @@ void Lanv2(R* a, R* b, R* c, R* d, R* rt1r, R* rt1i, R* rt2r, R* rt2i, R* cs,
   } else {
     temp = *a - *d;
     p = half * temp;
-    bcmax = std::max(std::abs(*b), std::abs(*c));
-    bcmis = std::min(std::abs(*b), std::abs(*c)) * std::copysign(one, *b) *
+    bcmax = Max(std::abs(*b), std::abs(*c));
+    bcmis = Min(std::abs(*b), std::abs(*c)) * std::copysign(one, *b) *
             std::copysign(one, *c);
-    scale = std::max(std::abs(p), bcmax);
+    scale = Max(std::abs(p), bcmax);
     z = (p / scale) * p + (bcmax / scale) * bcmis;
     // If Z is of the order of the machine accuracy, postpone the
     // decision on the nature of eigenvalues
@@ -99,7 +99,7 @@ void Lanv2(R* a, R* b, R* c, R* d, R* rt1r, R* rt1i, R* rt2r, R* rt2i, R* cs,
       sigma = *b + *c;
     L10:
       count = count + 1;
-      scale = std::max(std::abs(temp), std::abs(sigma));
+      scale = Max(std::abs(temp), std::abs(sigma));
       if (scale >= safmx2) {
         sigma = sigma * safmn2;
         temp = temp * safmn2;
@@ -316,7 +316,7 @@ blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
     i2 = n;
   }
   // ITMAX is the total number of QR iterations allowed.
-  itmax = 30 * std::max<blasint>(10, nh);
+  itmax = 30 * Max<blasint>(10, nh);
   // KDEFL counts the number of iterations since a deflation
   kdefl = 0;
   // The main loop begins here. I is the loop index and decreases from
@@ -345,12 +345,12 @@ L20:
       // .    1997). It has better mathematical foundation and
       // .    improves accuracy in some cases.  ====
       if (std::abs(H(k, k - 1)) <= ulp * tst) {
-        ab = std::max(std::abs(H(k, k - 1)), std::abs(H(k - 1, k)));
-        ba = std::min(std::abs(H(k, k - 1)), std::abs(H(k - 1, k)));
-        aa = std::max(std::abs(H(k, k)), std::abs(H(k - 1, k - 1) - H(k, k)));
-        bb = std::min(std::abs(H(k, k)), std::abs(H(k - 1, k - 1) - H(k, k)));
+        ab = Max(std::abs(H(k, k - 1)), std::abs(H(k - 1, k)));
+        ba = Min(std::abs(H(k, k - 1)), std::abs(H(k - 1, k)));
+        aa = Max(std::abs(H(k, k)), std::abs(H(k - 1, k - 1) - H(k, k)));
+        bb = Min(std::abs(H(k, k)), std::abs(H(k - 1, k - 1) - H(k, k)));
         s = aa + ab;
-        if (ba * (ab / s) <= std::max(smlnum, ulp * (bb * (aa / s)))) goto L40;
+        if (ba * (ab / s) <= Max(smlnum, ulp * (bb * (aa / s)))) goto L40;
       }
     }
   L40:
@@ -460,7 +460,7 @@ L20:
       // restore the Hessenberg form in the (K-1)th column, and thus
       // chases the bulge one step toward the bottom of the active
       // submatrix. NR is the order of G.
-      nr = std::min<blasint>(3, i - k + 1);
+      nr = Min<blasint>(3, i - k + 1);
       if (k > m) Copy(nr, H.ptr(k, k - 1), 1, v, 1);
       Larfg(nr, V.ptr(1), V.ptr(2), 1, &t1);
       if (k > m) {
@@ -489,7 +489,7 @@ L20:
         }
         // Apply G from the right to transform the columns of the
         // matrix in rows I1 to min(K+3,I).
-        for (j = i1; j <= std::min<blasint>(k + 3, i); ++j) {
+        for (j = i1; j <= Min<blasint>(k + 3, i); ++j) {
           sum = H(j, k) + v2 * H(j, k + 1) + v3 * H(j, k + 2);
           H(j, k) = H(j, k) - sum * t1;
           H(j, k + 1) = H(j, k + 1) - sum * t2;
@@ -617,7 +617,7 @@ blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
       sc = Conj(sc) / std::abs(sc);
       H(i, i - 1) = std::abs(H(i, i - 1));
       Scal(jhi - i + 1, sc, H.ptr(i, i), ldh);
-      Scal(std::min<blasint>(jhi, i + 1) - jlo + 1, Conj(sc), H.ptr(jlo, i), 1);
+      Scal(Min<blasint>(jhi, i + 1) - jlo + 1, Conj(sc), H.ptr(jlo, i), 1);
       if (wantz) Scal(ihiz - iloz + 1, Conj(sc), Z.ptr(iloz, i), 1);
     }
   }
@@ -636,7 +636,7 @@ blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
     i2 = n;
   }
   // ITMAX is the total number of QR iterations allowed.
-  itmax = 30 * std::max<blasint>(10, nh);
+  itmax = 30 * Max<blasint>(10, nh);
   // KDEFL counts the number of iterations since a deflation
   kdefl = 0;
   // The main loop begins here. I is the loop index and decreases from
@@ -665,12 +665,12 @@ L30:
       // .    1997). It has better mathematical foundation and
       // .    improves accuracy in some examples.  ====
       if (std::abs(std::real(H(k, k - 1))) <= ulp * tst) {
-        ab = std::max(Cabs1(H(k, k - 1)), Cabs1(H(k - 1, k)));
-        ba = std::min(Cabs1(H(k, k - 1)), Cabs1(H(k - 1, k)));
-        aa = std::max(Cabs1(H(k, k)), Cabs1(H(k - 1, k - 1) - H(k, k)));
-        bb = std::min(Cabs1(H(k, k)), Cabs1(H(k - 1, k - 1) - H(k, k)));
+        ab = Max(Cabs1(H(k, k - 1)), Cabs1(H(k - 1, k)));
+        ba = Min(Cabs1(H(k, k - 1)), Cabs1(H(k - 1, k)));
+        aa = Max(Cabs1(H(k, k)), Cabs1(H(k - 1, k - 1) - H(k, k)));
+        bb = Min(Cabs1(H(k, k)), Cabs1(H(k - 1, k - 1) - H(k, k)));
         s = aa + ab;
-        if (ba * (ab / s) <= std::max(smlnum, ulp * (bb * (aa / s)))) goto L50;
+        if (ba * (ab / s) <= Max(smlnum, ulp * (bb * (aa / s)))) goto L50;
       }
     }
   L50:
@@ -705,7 +705,7 @@ L30:
       if (s != rzero) {
         x = half * (H(i - 1, i - 1) - t);
         sx = Cabs1(x);
-        s = std::max(s, Cabs1(x));
+        s = Max(s, Cabs1(x));
         y = s * std::sqrt((x / s) * (x / s) + (u / s) * (u / s));
         if (sx > rzero) {
           if (std::real(x / sx) * std::real(y) +
@@ -773,7 +773,7 @@ L30:
       }
       // Apply G from the right to transform the columns of the
       // matrix in rows I1 to min(K+2,I).
-      for (j = i1; j <= std::min<blasint>(k + 2, i); ++j) {
+      for (j = i1; j <= Min<blasint>(k + 2, i); ++j) {
         sum = t1 * H(j, k) + t2 * H(j, k + 1);
         H(j, k) = H(j, k) - sum;
         H(j, k + 1) = H(j, k + 1) - sum * Conj(v2);
@@ -902,7 +902,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
   for (incol = ktop - 2 * nbmps + 1; incol <= kbot - 2; incol += 2 * nbmps) {
     // JTOP = Index from which updates from the right start.
     if (accum) {
-      jtop = std::max<blasint>(ktop, incol);
+      jtop = Max<blasint>(ktop, incol);
     } else if (wantt) {
       jtop = 1;
     } else {
@@ -921,16 +921,16 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
     // .    KBOT indicating phantom columns from which to chase
     // .    bulges before they are actually introduced or to which
     // .    to chase bulges beyond column KBOT.)  ====
-    for (krcol = incol;
-         krcol <= std::min<blasint>(incol + 2 * nbmps - 1, kbot - 2); ++krcol) {
+    for (krcol = incol; krcol <= Min<blasint>(incol + 2 * nbmps - 1, kbot - 2);
+         ++krcol) {
       // ==== Bulges number MTOP to MBOT are active double implicit
       // .    shift bulges.  There may or may not also be small
       // .    2-by-2 bulge, if there is room.  The inactive bulges
       // .    (if any) must wait until the active bulges have moved
       // .    down the diagonal to make room.  The phantom matrix
       // .    paradigm described above helps keep track.  ====
-      mtop = std::max<blasint>(1, (ktop - krcol) / 2 + 1);
-      mbot = std::min<blasint>(nbmps, (kbot - krcol - 1) / 2);
+      mtop = Max<blasint>(1, (ktop - krcol) / 2 + 1);
+      mbot = Min<blasint>(nbmps, (kbot - krcol - 1) / 2);
       m22 = mbot + 1;
       bmp22 = (mbot < nbmps) && (krcol + 2 * (m22 - 1)) == (kbot - 2);
       // ==== Generate reflections to chase the chain right
@@ -955,7 +955,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         // .    computational window. ====
         t1 = V(1, m22);
         t2 = t1 * V(2, m22);
-        for (j = jtop; j <= std::min<blasint>(kbot, k + 3); ++j) {
+        for (j = jtop; j <= Min<blasint>(kbot, k + 3); ++j) {
           refsum = H(j, k + 1) + V(2, m22) * H(j, k + 2);
           H(j, k + 1) = H(j, k + 1) - refsum * t1;
           H(j, k + 2) = H(j, k + 2) - refsum * t2;
@@ -963,7 +963,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         // ==== Perform update from left within
         // .    computational window. ====
         if (accum) {
-          jbot = std::min<blasint>(ndcol, kbot);
+          jbot = Min<blasint>(ndcol, kbot);
         } else if (wantt) {
           jbot = n;
         } else {
@@ -995,17 +995,17 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
               if (k <= kbot - 3) tst1 = tst1 + std::abs(H(k + 3, k + 1));
               if (k <= kbot - 4) tst1 = tst1 + std::abs(H(k + 4, k + 1));
             }
-            if (std::abs(H(k + 1, k)) <= std::max(smlnum, ulp * tst1)) {
-              h12 = std::max(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
-              h21 = std::min(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
-              h11 = std::max(std::abs(H(k + 1, k + 1)),
-                             std::abs(H(k, k) - H(k + 1, k + 1)));
-              h22 = std::min(std::abs(H(k + 1, k + 1)),
-                             std::abs(H(k, k) - H(k + 1, k + 1)));
+            if (std::abs(H(k + 1, k)) <= Max(smlnum, ulp * tst1)) {
+              h12 = Max(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
+              h21 = Min(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
+              h11 = Max(std::abs(H(k + 1, k + 1)),
+                        std::abs(H(k, k) - H(k + 1, k + 1)));
+              h22 = Min(std::abs(H(k + 1, k + 1)),
+                        std::abs(H(k, k) - H(k + 1, k + 1)));
               scl = h11 + h12;
               tst2 = h22 * (h11 / scl);
               if (tst2 == zero ||
-                  h21 * (h12 / scl) <= std::max(smlnum, ulp * tst2)) {
+                  h21 * (h12 / scl) <= Max(smlnum, ulp * tst2)) {
                 H(k + 1, k) = zero;
               }
             }
@@ -1016,7 +1016,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
           kms = k - incol;
           t1 = V(1, m22);
           t2 = t1 * V(2, m22);
-          for (j = std::max<blasint>(1, ktop - incol); j <= kdu; ++j) {
+          for (j = Max<blasint>(1, ktop - incol); j <= kdu; ++j) {
             refsum = U(j, kms + 1) + V(2, m22) * U(j, kms + 2);
             U(j, kms + 1) = U(j, kms + 1) - refsum * t1;
             U(j, kms + 2) = U(j, kms + 2) - refsum * t2;
@@ -1111,7 +1111,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         t1 = V(1, m);
         t2 = t1 * V(2, m);
         t3 = t1 * V(3, m);
-        for (j = jtop; j <= std::min<blasint>(kbot, k + 3); ++j) {
+        for (j = jtop; j <= Min<blasint>(kbot, k + 3); ++j) {
           refsum = H(j, k + 1) + V(2, m) * H(j, k + 2) + V(3, m) * H(j, k + 3);
           H(j, k + 1) = H(j, k + 1) - refsum * t1;
           H(j, k + 2) = H(j, k + 2) - refsum * t2;
@@ -1143,17 +1143,16 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
             if (k <= kbot - 3) tst1 = tst1 + std::abs(H(k + 3, k + 1));
             if (k <= kbot - 4) tst1 = tst1 + std::abs(H(k + 4, k + 1));
           }
-          if (std::abs(H(k + 1, k)) <= std::max(smlnum, ulp * tst1)) {
-            h12 = std::max(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
-            h21 = std::min(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
-            h11 = std::max(std::abs(H(k + 1, k + 1)),
-                           std::abs(H(k, k) - H(k + 1, k + 1)));
-            h22 = std::min(std::abs(H(k + 1, k + 1)),
-                           std::abs(H(k, k) - H(k + 1, k + 1)));
+          if (std::abs(H(k + 1, k)) <= Max(smlnum, ulp * tst1)) {
+            h12 = Max(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
+            h21 = Min(std::abs(H(k + 1, k)), std::abs(H(k, k + 1)));
+            h11 = Max(std::abs(H(k + 1, k + 1)),
+                      std::abs(H(k, k) - H(k + 1, k + 1)));
+            h22 = Min(std::abs(H(k + 1, k + 1)),
+                      std::abs(H(k, k) - H(k + 1, k + 1)));
             scl = h11 + h12;
             tst2 = h22 * (h11 / scl);
-            if (tst2 == zero ||
-                h21 * (h12 / scl) <= std::max(smlnum, ulp * tst2)) {
+            if (tst2 == zero || h21 * (h12 / scl) <= Max(smlnum, ulp * tst2)) {
               H(k + 1, k) = zero;
             }
           }
@@ -1161,7 +1160,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
       }
       // ==== Multiply H by reflections from the left ====
       if (accum) {
-        jbot = std::min<blasint>(ndcol, kbot);
+        jbot = Min<blasint>(ndcol, kbot);
       } else if (wantt) {
         jbot = n;
       } else {
@@ -1172,7 +1171,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         t1 = V(1, m);
         t2 = t1 * V(2, m);
         t3 = t1 * V(3, m);
-        for (j = std::max<blasint>(ktop, krcol + 2 * m); j <= jbot; ++j) {
+        for (j = Max<blasint>(ktop, krcol + 2 * m); j <= jbot; ++j) {
           refsum = H(k + 1, j) + V(2, m) * H(k + 2, j) + V(3, m) * H(k + 3, j);
           H(k + 1, j) = H(k + 1, j) - refsum * t1;
           H(k + 2, j) = H(k + 2, j) - refsum * t2;
@@ -1187,9 +1186,9 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         for (m = mbot; m >= mtop; --m) {
           k = krcol + 2 * (m - 1);
           kms = k - incol;
-          i2 = std::max<blasint>(1, ktop - incol);
-          i2 = std::max<blasint>(i2, kms - (krcol - incol) + 1);
-          i4 = std::min<blasint>(kdu, krcol + 2 * (mbot - 1) - incol + 5);
+          i2 = Max<blasint>(1, ktop - incol);
+          i2 = Max<blasint>(i2, kms - (krcol - incol) + 1);
+          i4 = Min<blasint>(kdu, krcol + 2 * (mbot - 1) - incol + 5);
           t1 = V(1, m);
           t2 = t1 * V(2, m);
           t3 = t1 * V(3, m);
@@ -1232,20 +1231,18 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         jtop = ktop;
         jbot = kbot;
       }
-      k1 = std::max<blasint>(1, ktop - incol);
-      nu = (kdu - std::max<blasint>(0, ndcol - kbot)) - k1 + 1;
+      k1 = Max<blasint>(1, ktop - incol);
+      nu = (kdu - Max<blasint>(0, ndcol - kbot)) - k1 + 1;
       // ==== Horizontal Multiply ====
-      for (jcol = std::min<blasint>(ndcol, kbot) + 1; jcol <= jbot;
-           jcol += nh) {
-        jlen = std::min<blasint>(nh, jbot - jcol + 1);
+      for (jcol = Min<blasint>(ndcol, kbot) + 1; jcol <= jbot; jcol += nh) {
+        jlen = Min<blasint>(nh, jbot - jcol + 1);
         Gemm('C', 'N', nu, jlen, nu, one, U.ptr(k1, k1), ldu,
              H.ptr(incol + k1, jcol), ldh, zero, wh, ldwh);
         Lacpy('A', nu, jlen, wh, ldwh, H.ptr(incol + k1, jcol), ldh);
       }
       // ==== Vertical multiply ====
-      for (jrow = jtop; jrow <= std::max<blasint>(ktop, incol) - 1;
-           jrow += nv) {
-        jlen = std::min<blasint>(nv, std::max<blasint>(ktop, incol) - jrow);
+      for (jrow = jtop; jrow <= Max<blasint>(ktop, incol) - 1; jrow += nv) {
+        jlen = Min<blasint>(nv, Max<blasint>(ktop, incol) - jrow);
         Gemm('N', 'N', jlen, nu, nu, one, H.ptr(jrow, incol + k1), ldh,
              U.ptr(k1, k1), ldu, zero, wv, ldwv);
         Lacpy('A', jlen, nu, wv, ldwv, H.ptr(jrow, incol + k1), ldh);
@@ -1253,7 +1250,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
       // ==== Z multiply (also vertical) ====
       if (wantz) {
         for (jrow = iloz; jrow <= ihiz; jrow += nv) {
-          jlen = std::min<blasint>(nv, ihiz - jrow + 1);
+          jlen = Min<blasint>(nv, ihiz - jrow + 1);
           Gemm('N', 'N', jlen, nu, nu, one, Z.ptr(jrow, incol + k1), ldz,
                U.ptr(k1, k1), ldu, zero, wv, ldwv);
           Lacpy('A', jlen, nu, wv, ldwv, Z.ptr(jrow, incol + k1), ldz);
@@ -1316,7 +1313,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
   for (incol = ktop - 2 * nbmps + 1; incol <= kbot - 2; incol += 2 * nbmps) {
     // JTOP = Index from which updates from the right start.
     if (accum) {
-      jtop = std::max<blasint>(ktop, incol);
+      jtop = Max<blasint>(ktop, incol);
     } else if (wantt) {
       jtop = 1;
     } else {
@@ -1335,16 +1332,16 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
     // .    KBOT indicating phantom columns from which to chase
     // .    bulges before they are actually introduced or to which
     // .    to chase bulges beyond column KBOT.)  ====
-    for (krcol = incol;
-         krcol <= std::min<blasint>(incol + 2 * nbmps - 1, kbot - 2); ++krcol) {
+    for (krcol = incol; krcol <= Min<blasint>(incol + 2 * nbmps - 1, kbot - 2);
+         ++krcol) {
       // ==== Bulges number MTOP to MBOT are active double implicit
       // .    shift bulges.  There may or may not also be small
       // .    2-by-2 bulge, if there is room.  The inactive bulges
       // .    (if any) must wait until the active bulges have moved
       // .    down the diagonal to make room.  The phantom matrix
       // .    paradigm described above helps keep track.  ====
-      mtop = std::max<blasint>(1, (ktop - krcol) / 2 + 1);
-      mbot = std::min<blasint>(nbmps, (kbot - krcol - 1) / 2);
+      mtop = Max<blasint>(1, (ktop - krcol) / 2 + 1);
+      mbot = Min<blasint>(nbmps, (kbot - krcol - 1) / 2);
       m22 = mbot + 1;
       bmp22 = (mbot < nbmps) && (krcol + 2 * (m22 - 1)) == (kbot - 2);
       // ==== Generate reflections to chase the chain right
@@ -1369,7 +1366,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         // .    computational window. ====
         t1 = V(1, m22);
         t2 = t1 * Conj(V(2, m22));
-        for (j = jtop; j <= std::min<blasint>(kbot, k + 3); ++j) {
+        for (j = jtop; j <= Min<blasint>(kbot, k + 3); ++j) {
           refsum = H(j, k + 1) + V(2, m22) * H(j, k + 2);
           H(j, k + 1) = H(j, k + 1) - refsum * t1;
           H(j, k + 2) = H(j, k + 2) - refsum * t2;
@@ -1377,7 +1374,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         // ==== Perform update from left within
         // .    computational window. ====
         if (accum) {
-          jbot = std::min<blasint>(ndcol, kbot);
+          jbot = Min<blasint>(ndcol, kbot);
         } else if (wantt) {
           jbot = n;
         } else {
@@ -1409,17 +1406,16 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
               if (k <= kbot - 3) tst1 = tst1 + Cabs1(H(k + 3, k + 1));
               if (k <= kbot - 4) tst1 = tst1 + Cabs1(H(k + 4, k + 1));
             }
-            if (Cabs1(H(k + 1, k)) <= std::max(smlnum, ulp * tst1)) {
-              h12 = std::max(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
-              h21 = std::min(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
-              h11 = std::max(Cabs1(H(k + 1, k + 1)),
-                             Cabs1(H(k, k) - H(k + 1, k + 1)));
-              h22 = std::min(Cabs1(H(k + 1, k + 1)),
-                             Cabs1(H(k, k) - H(k + 1, k + 1)));
+            if (Cabs1(H(k + 1, k)) <= Max(smlnum, ulp * tst1)) {
+              h12 = Max(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
+              h21 = Min(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
+              h11 =
+                  Max(Cabs1(H(k + 1, k + 1)), Cabs1(H(k, k) - H(k + 1, k + 1)));
+              h22 =
+                  Min(Cabs1(H(k + 1, k + 1)), Cabs1(H(k, k) - H(k + 1, k + 1)));
               scl = h11 + h12;
               tst2 = h22 * (h11 / scl);
-              if (tst2 == rzero ||
-                  h21 * (h12 / scl) <= std::max(smlnum, ulp * tst2))
+              if (tst2 == rzero || h21 * (h12 / scl) <= Max(smlnum, ulp * tst2))
                 H(k + 1, k) = zero;
             }
           }
@@ -1427,7 +1423,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         // ==== Accumulate orthogonal transformations. ====
         if (accum) {
           kms = k - incol;
-          for (j = std::max<blasint>(1, ktop - incol); j <= kdu; ++j) {
+          for (j = Max<blasint>(1, ktop - incol); j <= kdu; ++j) {
             refsum = V(1, m22) * (U(j, kms + 1) + V(2, m22) * U(j, kms + 2));
             U(j, kms + 1) = U(j, kms + 1) - refsum;
             U(j, kms + 2) = U(j, kms + 2) - refsum * Conj(V(2, m22));
@@ -1518,7 +1514,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         t1 = V(1, m);
         t2 = t1 * Conj(V(2, m));
         t3 = t1 * Conj(V(3, m));
-        for (j = jtop; j <= std::min<blasint>(kbot, k + 3); ++j) {
+        for (j = jtop; j <= Min<blasint>(kbot, k + 3); ++j) {
           refsum = H(j, k + 1) + V(2, m) * H(j, k + 2) + V(3, m) * H(j, k + 3);
           H(j, k + 1) = H(j, k + 1) - refsum * t1;
           H(j, k + 2) = H(j, k + 2) - refsum * t2;
@@ -1553,24 +1549,21 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
             if (k <= kbot - 3) tst1 = tst1 + Cabs1(H(k + 3, k + 1));
             if (k <= kbot - 4) tst1 = tst1 + Cabs1(H(k + 4, k + 1));
           }
-          if (Cabs1(H(k + 1, k)) <= std::max(smlnum, ulp * tst1)) {
-            h12 = std::max(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
-            h21 = std::min(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
-            h11 = std::max(Cabs1(H(k + 1, k + 1)),
-                           Cabs1(H(k, k) - H(k + 1, k + 1)));
-            h22 = std::min(Cabs1(H(k + 1, k + 1)),
-                           Cabs1(H(k, k) - H(k + 1, k + 1)));
+          if (Cabs1(H(k + 1, k)) <= Max(smlnum, ulp * tst1)) {
+            h12 = Max(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
+            h21 = Min(Cabs1(H(k + 1, k)), Cabs1(H(k, k + 1)));
+            h11 = Max(Cabs1(H(k + 1, k + 1)), Cabs1(H(k, k) - H(k + 1, k + 1)));
+            h22 = Min(Cabs1(H(k + 1, k + 1)), Cabs1(H(k, k) - H(k + 1, k + 1)));
             scl = h11 + h12;
             tst2 = h22 * (h11 / scl);
-            if (tst2 == rzero ||
-                h21 * (h12 / scl) <= std::max(smlnum, ulp * tst2))
+            if (tst2 == rzero || h21 * (h12 / scl) <= Max(smlnum, ulp * tst2))
               H(k + 1, k) = zero;
           }
         }
       }
       // ==== Multiply H by reflections from the left ====
       if (accum) {
-        jbot = std::min<blasint>(ndcol, kbot);
+        jbot = Min<blasint>(ndcol, kbot);
       } else if (wantt) {
         jbot = n;
       } else {
@@ -1581,7 +1574,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         t1 = Conj(V(1, m));
         t2 = t1 * V(2, m);
         t3 = t1 * V(3, m);
-        for (j = std::max<blasint>(ktop, krcol + 2 * m); j <= jbot; ++j) {
+        for (j = Max<blasint>(ktop, krcol + 2 * m); j <= jbot; ++j) {
           refsum = H(k + 1, j) + Conj(V(2, m)) * H(k + 2, j) +
                    Conj(V(3, m)) * H(k + 3, j);
           H(k + 1, j) = H(k + 1, j) - refsum * t1;
@@ -1597,9 +1590,9 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         for (m = mbot; m >= mtop; --m) {
           k = krcol + 2 * (m - 1);
           kms = k - incol;
-          i2 = std::max<blasint>(1, ktop - incol);
-          i2 = std::max<blasint>(i2, kms - (krcol - incol) + 1);
-          i4 = std::min<blasint>(kdu, krcol + 2 * (mbot - 1) - incol + 5);
+          i2 = Max<blasint>(1, ktop - incol);
+          i2 = Max<blasint>(i2, kms - (krcol - incol) + 1);
+          i4 = Min<blasint>(kdu, krcol + 2 * (mbot - 1) - incol + 5);
           t1 = V(1, m);
           t2 = t1 * Conj(V(2, m));
           t3 = t1 * Conj(V(3, m));
@@ -1642,20 +1635,18 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
         jtop = ktop;
         jbot = kbot;
       }
-      k1 = std::max<blasint>(1, ktop - incol);
-      nu = (kdu - std::max<blasint>(0, ndcol - kbot)) - k1 + 1;
+      k1 = Max<blasint>(1, ktop - incol);
+      nu = (kdu - Max<blasint>(0, ndcol - kbot)) - k1 + 1;
       // ==== Horizontal Multiply ====
-      for (jcol = std::min<blasint>(ndcol, kbot) + 1; jcol <= jbot;
-           jcol += nh) {
-        jlen = std::min<blasint>(nh, jbot - jcol + 1);
+      for (jcol = Min<blasint>(ndcol, kbot) + 1; jcol <= jbot; jcol += nh) {
+        jlen = Min<blasint>(nh, jbot - jcol + 1);
         Gemm('C', 'N', nu, jlen, nu, one, U.ptr(k1, k1), ldu,
              H.ptr(incol + k1, jcol), ldh, zero, wh, ldwh);
         Lacpy('A', nu, jlen, wh, ldwh, H.ptr(incol + k1, jcol), ldh);
       }
       // ==== Vertical multiply ====
-      for (jrow = jtop; jrow <= std::max<blasint>(ktop, incol) - 1;
-           jrow += nv) {
-        jlen = std::min<blasint>(nv, std::max<blasint>(ktop, incol) - jrow);
+      for (jrow = jtop; jrow <= Max<blasint>(ktop, incol) - 1; jrow += nv) {
+        jlen = Min<blasint>(nv, Max<blasint>(ktop, incol) - jrow);
         Gemm('N', 'N', jlen, nu, nu, one, H.ptr(jrow, incol + k1), ldh,
              U.ptr(k1, k1), ldu, zero, wv, ldwv);
         Lacpy('A', jlen, nu, wv, ldwv, H.ptr(jrow, incol + k1), ldh);
@@ -1663,7 +1654,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
       // ==== Z multiply (also vertical) ====
       if (wantz) {
         for (jrow = iloz; jrow <= ihiz; jrow += nv) {
-          jlen = std::min<blasint>(nv, ihiz - jrow + 1);
+          jlen = Min<blasint>(nv, ihiz - jrow + 1);
           Gemm('N', 'N', jlen, nu, nu, one, Z.ptr(jrow, incol + k1), ldz,
                U.ptr(k1, k1), ldu, zero, wv, ldwv);
           Lacpy('A', jlen, nu, wv, ldwv, Z.ptr(jrow, incol + k1), ldz);
@@ -1700,7 +1691,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   bool bulge, sorted;
   R aa, bb, beta, cc, cs, dd, evi, evk, foo, s, safmax, safmin, smlnum, sn, tau,
       ulp;
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   if (jw <= 2) {
     lwkopt = 1;
   } else {
@@ -1711,7 +1702,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     info = Unmhr('R', 'N', jw, jw, 1, jw - 1, t, ldt, work, v, ldv, work, -1);
     lwk2 = static_cast<blasint>(WORK(1));
     // ==== Optimal workspace ====
-    lwkopt = jw + std::max<blasint>(lwk1, lwk2);
+    lwkopt = jw + Max<blasint>(lwk1, lwk2);
   }
   // ==== Quick return in case of workspace query. ====
   if (lwork == -1) {
@@ -1730,7 +1721,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   ulp = Lamch<R>('P');
   smlnum = safmin * (R(n) / ulp);
   // ==== Setup deflation window ====
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   kwtop = kbot - jw + 1;
   if (kwtop == ktop) {
     s = zero;
@@ -1743,7 +1734,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     SI(kwtop) = zero;
     *ns = 1;
     *nd = 0;
-    if (std::abs(s) <= std::max(smlnum, ulp * std::abs(H(kwtop, kwtop)))) {
+    if (std::abs(s) <= Max(smlnum, ulp * std::abs(H(kwtop, kwtop)))) {
       *ns = 0;
       *nd = 1;
       if (kwtop > ktop) H(kwtop, kwtop - 1) = zero;
@@ -1782,7 +1773,7 @@ L20:
       // ==== Real eigenvalue ====
       foo = std::abs(Tm(*ns, *ns));
       if (foo == zero) foo = std::abs(s);
-      if (std::abs(s * V(1, *ns)) <= std::max(smlnum, ulp * foo)) {
+      if (std::abs(s * V(1, *ns)) <= Max(smlnum, ulp * foo)) {
         // ==== Deflatable ====
         *ns = *ns - 1;
       } else {
@@ -1797,8 +1788,8 @@ L20:
       foo = std::abs(Tm(*ns, *ns)) + std::sqrt(std::abs(Tm(*ns, *ns - 1))) *
                                          std::sqrt(std::abs(Tm(*ns - 1, *ns)));
       if (foo == zero) foo = std::abs(s);
-      if (std::max(std::abs(s * V(1, *ns)), std::abs(s * V(1, *ns - 1))) <=
-          std::max(smlnum, ulp * foo)) {
+      if (Max(std::abs(s * V(1, *ns)), std::abs(s * V(1, *ns - 1))) <=
+          Max(smlnum, ulp * foo)) {
         // ==== Deflatable ====
         *ns = *ns - 2;
       } else {
@@ -1925,7 +1916,7 @@ L60:
       ltop = ktop;
     }
     for (krow = ltop; krow <= kwtop - 1; krow += nv) {
-      kln = std::min<blasint>(nv, kwtop - krow);
+      kln = Min<blasint>(nv, kwtop - krow);
       Gemm('N', 'N', kln, jw, jw, one, H.ptr(krow, kwtop), ldh, v, ldv, zero,
            wv, ldwv);
       Lacpy('A', kln, jw, wv, ldwv, H.ptr(krow, kwtop), ldh);
@@ -1933,7 +1924,7 @@ L60:
     // ==== Update horizontal slab in H ====
     if (wantt) {
       for (kcol = kbot + 1; kcol <= n; kcol += nh) {
-        kln = std::min<blasint>(nh, n - kcol + 1);
+        kln = Min<blasint>(nh, n - kcol + 1);
         Gemm('C', 'N', jw, kln, jw, one, v, ldv, H.ptr(kwtop, kcol), ldh, zero,
              t, ldt);
         Lacpy('A', jw, kln, t, ldt, H.ptr(kwtop, kcol), ldh);
@@ -1942,7 +1933,7 @@ L60:
     // ==== Update vertical slab in Z ====
     if (wantz) {
       for (krow = iloz; krow <= ihiz; krow += nv) {
-        kln = std::min<blasint>(nv, ihiz - krow + 1);
+        kln = Min<blasint>(nv, ihiz - krow + 1);
         Gemm('N', 'N', kln, jw, jw, one, Z.ptr(krow, kwtop), ldz, v, ldv, zero,
              wv, ldwv);
         Lacpy('A', kln, jw, wv, ldwv, Z.ptr(krow, kwtop), ldz);
@@ -1986,7 +1977,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
       lwk2, lwkopt;
   R foo, safmax, safmin, smlnum, ulp;
   T s, tau;
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   if (jw <= 2) {
     lwkopt = 1;
   } else {
@@ -1997,7 +1988,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     Unmhr('R', 'N', jw, jw, 1, jw - 1, t, ldt, work, v, ldv, work, -1);
     lwk2 = static_cast<blasint>(std::real(WORK(1)));
     // ==== Optimal workspace ====
-    lwkopt = jw + std::max<blasint>(lwk1, lwk2);
+    lwkopt = jw + Max<blasint>(lwk1, lwk2);
   }
   // ==== Quick return in case of workspace query. ====
   if (lwork == -1) {
@@ -2016,7 +2007,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   ulp = Lamch<R>('P');
   smlnum = safmin * (R(n) / ulp);
   // ==== Setup deflation window ====
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   kwtop = kbot - jw + 1;
   if (kwtop == ktop) {
     s = zero;
@@ -2028,7 +2019,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     SH(kwtop) = H(kwtop, kwtop);
     *ns = 1;
     *nd = 0;
-    if (Cabs1(s) <= std::max(smlnum, ulp * Cabs1(H(kwtop, kwtop)))) {
+    if (Cabs1(s) <= Max(smlnum, ulp * Cabs1(H(kwtop, kwtop)))) {
       *ns = 0;
       *nd = 1;
       if (kwtop > ktop) H(kwtop, kwtop - 1) = zero;
@@ -2052,7 +2043,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Small spike tip deflation test ====
     foo = Cabs1(Tm(*ns, *ns));
     if (foo == rzero) foo = Cabs1(s);
-    if (Cabs1(s) * Cabs1(V(1, *ns)) <= std::max(smlnum, ulp * foo)) {
+    if (Cabs1(s) * Cabs1(V(1, *ns)) <= Max(smlnum, ulp * foo)) {
       // ==== One more converged eigenvalue ====
       *ns = *ns - 1;
     } else {
@@ -2111,7 +2102,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
       ltop = ktop;
     }
     for (krow = ltop; krow <= kwtop - 1; krow += nv) {
-      kln = std::min<blasint>(nv, kwtop - krow);
+      kln = Min<blasint>(nv, kwtop - krow);
       Gemm('N', 'N', kln, jw, jw, one, H.ptr(krow, kwtop), ldh, v, ldv, zero,
            wv, ldwv);
       Lacpy('A', kln, jw, wv, ldwv, H.ptr(krow, kwtop), ldh);
@@ -2119,7 +2110,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Update horizontal slab in H ====
     if (wantt) {
       for (kcol = kbot + 1; kcol <= n; kcol += nh) {
-        kln = std::min<blasint>(nh, n - kcol + 1);
+        kln = Min<blasint>(nh, n - kcol + 1);
         Gemm('C', 'N', jw, kln, jw, one, v, ldv, H.ptr(kwtop, kcol), ldh, zero,
              t, ldt);
         Lacpy('A', jw, kln, t, ldt, H.ptr(kwtop, kcol), ldh);
@@ -2128,7 +2119,7 @@ void Laqr2(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Update vertical slab in Z ====
     if (wantz) {
       for (krow = iloz; krow <= ihiz; krow += nv) {
-        kln = std::min<blasint>(nv, ihiz - krow + 1);
+        kln = Min<blasint>(nv, ihiz - krow + 1);
         Gemm('N', 'N', kln, jw, jw, one, Z.ptr(krow, kwtop), ldz, v, ldv, zero,
              wv, ldwv);
         Lacpy('A', kln, jw, wv, ldwv, Z.ptr(krow, kwtop), ldz);
@@ -2171,7 +2162,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   bool bulge, sorted;
   R aa, bb, beta, cc, cs, dd, evi, evk, foo, s, safmax, safmin, smlnum, sn, tau,
       ulp;
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   if (jw <= 2) {
     lwkopt = 1;
   } else {
@@ -2186,7 +2177,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
         Laqr4(true, true, jw, 1, jw, t, ldt, sr, si, 1, jw, v, ldv, work, -1);
     lwk3 = static_cast<blasint>(WORK(1));
     // ==== Optimal workspace ====
-    lwkopt = std::max<blasint>(jw + std::max<blasint>(lwk1, lwk2), lwk3);
+    lwkopt = Max<blasint>(jw + Max<blasint>(lwk1, lwk2), lwk3);
   }
   // ==== Quick return in case of workspace query. ====
   if (lwork == -1) {
@@ -2205,7 +2196,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   ulp = Lamch<R>('P');
   smlnum = safmin * (R(n) / ulp);
   // ==== Setup deflation window ====
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   kwtop = kbot - jw + 1;
   if (kwtop == ktop) {
     s = zero;
@@ -2218,7 +2209,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     SI(kwtop) = zero;
     *ns = 1;
     *nd = 0;
-    if (std::abs(s) <= std::max(smlnum, ulp * std::abs(H(kwtop, kwtop)))) {
+    if (std::abs(s) <= Max(smlnum, ulp * std::abs(H(kwtop, kwtop)))) {
       *ns = 0;
       *nd = 1;
       if (kwtop > ktop) H(kwtop, kwtop - 1) = zero;
@@ -2263,7 +2254,7 @@ L20:
       // ==== Real eigenvalue ====
       foo = std::abs(Tm(*ns, *ns));
       if (foo == zero) foo = std::abs(s);
-      if (std::abs(s * V(1, *ns)) <= std::max(smlnum, ulp * foo)) {
+      if (std::abs(s * V(1, *ns)) <= Max(smlnum, ulp * foo)) {
         // ==== Deflatable ====
         *ns = *ns - 1;
       } else {
@@ -2278,8 +2269,8 @@ L20:
       foo = std::abs(Tm(*ns, *ns)) + std::sqrt(std::abs(Tm(*ns, *ns - 1))) *
                                          std::sqrt(std::abs(Tm(*ns - 1, *ns)));
       if (foo == zero) foo = std::abs(s);
-      if (std::max(std::abs(s * V(1, *ns)), std::abs(s * V(1, *ns - 1))) <=
-          std::max(smlnum, ulp * foo)) {
+      if (Max(std::abs(s * V(1, *ns)), std::abs(s * V(1, *ns - 1))) <=
+          Max(smlnum, ulp * foo)) {
         // ==== Deflatable ====
         *ns = *ns - 2;
       } else {
@@ -2406,7 +2397,7 @@ L60:
       ltop = ktop;
     }
     for (krow = ltop; krow <= kwtop - 1; krow += nv) {
-      kln = std::min<blasint>(nv, kwtop - krow);
+      kln = Min<blasint>(nv, kwtop - krow);
       Gemm('N', 'N', kln, jw, jw, one, H.ptr(krow, kwtop), ldh, v, ldv, zero,
            wv, ldwv);
       Lacpy('A', kln, jw, wv, ldwv, H.ptr(krow, kwtop), ldh);
@@ -2414,7 +2405,7 @@ L60:
     // ==== Update horizontal slab in H ====
     if (wantt) {
       for (kcol = kbot + 1; kcol <= n; kcol += nh) {
-        kln = std::min<blasint>(nh, n - kcol + 1);
+        kln = Min<blasint>(nh, n - kcol + 1);
         Gemm('C', 'N', jw, kln, jw, one, v, ldv, H.ptr(kwtop, kcol), ldh, zero,
              t, ldt);
         Lacpy('A', jw, kln, t, ldt, H.ptr(kwtop, kcol), ldh);
@@ -2423,7 +2414,7 @@ L60:
     // ==== Update vertical slab in Z ====
     if (wantz) {
       for (krow = iloz; krow <= ihiz; krow += nv) {
-        kln = std::min<blasint>(nv, ihiz - krow + 1);
+        kln = Min<blasint>(nv, ihiz - krow + 1);
         Gemm('N', 'N', kln, jw, jw, one, Z.ptr(krow, kwtop), ldz, v, ldv, zero,
              wv, ldwv);
         Lacpy('A', kln, jw, wv, ldwv, Z.ptr(krow, kwtop), ldz);
@@ -2467,7 +2458,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
       lwk2, lwk3, lwkopt, nmin;
   R foo, safmax, safmin, smlnum, ulp;
   T s, tau;
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   if (jw <= 2) {
     lwkopt = 1;
   } else {
@@ -2481,7 +2472,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     infqr = Laqr4(true, true, jw, 1, jw, t, ldt, sh, 1, jw, v, ldv, work, -1);
     lwk3 = static_cast<blasint>(std::real(WORK(1)));
     // ==== Optimal workspace ====
-    lwkopt = std::max<blasint>(jw + std::max<blasint>(lwk1, lwk2), lwk3);
+    lwkopt = Max<blasint>(jw + Max<blasint>(lwk1, lwk2), lwk3);
   }
   // ==== Quick return in case of workspace query. ====
   if (lwork == -1) {
@@ -2500,7 +2491,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
   ulp = Lamch<R>('P');
   smlnum = safmin * (R(n) / ulp);
   // ==== Setup deflation window ====
-  jw = std::min<blasint>(nw, kbot - ktop + 1);
+  jw = Min<blasint>(nw, kbot - ktop + 1);
   kwtop = kbot - jw + 1;
   if (kwtop == ktop) {
     s = zero;
@@ -2512,7 +2503,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     SH(kwtop) = H(kwtop, kwtop);
     *ns = 1;
     *nd = 0;
-    if (Cabs1(s) <= std::max(smlnum, ulp * Cabs1(H(kwtop, kwtop)))) {
+    if (Cabs1(s) <= Max(smlnum, ulp * Cabs1(H(kwtop, kwtop)))) {
       *ns = 0;
       *nd = 1;
       if (kwtop > ktop) H(kwtop, kwtop - 1) = zero;
@@ -2542,7 +2533,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Small spike tip deflation test ====
     foo = Cabs1(Tm(*ns, *ns));
     if (foo == rzero) foo = Cabs1(s);
-    if (Cabs1(s) * Cabs1(V(1, *ns)) <= std::max(smlnum, ulp * foo)) {
+    if (Cabs1(s) * Cabs1(V(1, *ns)) <= Max(smlnum, ulp * foo)) {
       // ==== One more converged eigenvalue ====
       *ns = *ns - 1;
     } else {
@@ -2601,7 +2592,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
       ltop = ktop;
     }
     for (krow = ltop; krow <= kwtop - 1; krow += nv) {
-      kln = std::min<blasint>(nv, kwtop - krow);
+      kln = Min<blasint>(nv, kwtop - krow);
       Gemm('N', 'N', kln, jw, jw, one, H.ptr(krow, kwtop), ldh, v, ldv, zero,
            wv, ldwv);
       Lacpy('A', kln, jw, wv, ldwv, H.ptr(krow, kwtop), ldh);
@@ -2609,7 +2600,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Update horizontal slab in H ====
     if (wantt) {
       for (kcol = kbot + 1; kcol <= n; kcol += nh) {
-        kln = std::min<blasint>(nh, n - kcol + 1);
+        kln = Min<blasint>(nh, n - kcol + 1);
         Gemm('C', 'N', jw, kln, jw, one, v, ldv, H.ptr(kwtop, kcol), ldh, zero,
              t, ldt);
         Lacpy('A', jw, kln, t, ldt, H.ptr(kwtop, kcol), ldh);
@@ -2618,7 +2609,7 @@ void Laqr3(bool wantt, bool wantz, blasint n, blasint ktop, blasint kbot,
     // ==== Update vertical slab in Z ====
     if (wantz) {
       for (krow = iloz; krow <= ihiz; krow += nv) {
-        kln = std::min<blasint>(nv, ihiz - krow + 1);
+        kln = Min<blasint>(nv, ihiz - krow + 1);
         Gemm('N', 'N', kln, jw, jw, one, Z.ptr(krow, kwtop), ldz, v, ldv, zero,
              wv, ldwv);
         Lacpy('A', kln, jw, wv, ldwv, Z.ptr(krow, kwtop), ldz);
@@ -2698,21 +2689,21 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
     // .    (In fact, there is enough subdiagonal space for
     // .    NWR.GE.4.) ====
     nwr = Ilaenv<R>(13, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nwr = std::max<blasint>(2, nwr);
-    nwr = std::min<blasint>({ihi - ilo + 1, (n - 1) / 3, nwr});
+    nwr = Max<blasint>(2, nwr);
+    nwr = Min<blasint>(ihi - ilo + 1, (n - 1) / 3, nwr);
     // ==== NSR = recommended number of simultaneous shifts.
     // .    At this point N .GT. NTINY = 15, so there is at
     // .    enough subdiagonal workspace for NSR to be even
     // .    and greater than or equal to two as required. ====
     nsr = Ilaenv<R>(15, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nsr = std::min<blasint>({nsr, (n - 3) / 6, ihi - ilo});
-    nsr = std::max<blasint>(2, nsr - nsr % 2);
+    nsr = Min<blasint>(nsr, (n - 3) / 6, ihi - ilo);
+    nsr = Max<blasint>(2, nsr - nsr % 2);
     // ==== Estimate optimal workspace ====
     // ==== Workspace query call to DLAQR2 ====
     Laqr2(wantt, wantz, n, ilo, ihi, nwr + 1, h, ldh, iloz, ihiz, z, ldz, &ls,
           &ld, wr, wi, h, ldh, n, h, ldh, n, h, ldh, work, -1);
     // ==== Optimal workspace = MAX(DLAQR5, DLAQR2) ====
-    lwkopt = std::max(3 * nsr / 2, static_cast<blasint>(WORK(1)));
+    lwkopt = Max(3 * nsr / 2, static_cast<blasint>(WORK(1)));
     // ==== Quick return in case of workspace query. ====
     if (lwork == -1) {
       WORK(1) = WorkSize<R>(lwkopt);
@@ -2720,28 +2711,27 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
     }
     // ==== DLAHQR/DLAQR0 crossover point ====
     nmin = Ilaenv<R>(12, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== Nibble crossover point ====
     nibble = Ilaenv<R>(14, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nibble = std::max<blasint>(0, nibble);
+    nibble = Max<blasint>(0, nibble);
     // ==== Accumulate reflections during ttswp?  Use block
     // .    2-by-2 structure during matrix-matrix multiply? ====
     kacc22 = Ilaenv<R>(16, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    kacc22 = std::max<blasint>(0, kacc22);
-    kacc22 = std::min<blasint>(2, kacc22);
+    kacc22 = Max<blasint>(0, kacc22);
+    kacc22 = Min<blasint>(2, kacc22);
     // ==== NWMAX = the largest possible deflation window for
     // .    which there is sufficient workspace. ====
-    nwmax = std::min<blasint>((n - 1) / 3, lwork / 2);
+    nwmax = Min<blasint>((n - 1) / 3, lwork / 2);
     nw = nwmax;
     // ==== NSMAX = the Largest number of simultaneous shifts
     // .    for which there is sufficient workspace. ====
-    nsmax = std::min<blasint>((n - 3) / 6, 2 * lwork / 3);
+    nsmax = Min<blasint>((n - 3) / 6, 2 * lwork / 3);
     nsmax = nsmax - nsmax % 2;
     // ==== NDFL: an iteration count restarted at deflation. ====
     ndfl = 1;
     // ==== ITMAX = iteration limit ====
-    itmax = std::max<blasint>(30, 2 * kexsh) *
-            std::max<blasint>(10, (ihi - ilo + 1));
+    itmax = Max<blasint>(30, 2 * kexsh) * Max<blasint>(10, (ihi - ilo + 1));
     // ==== Last row and column in the active block ====
     kbot = ihi;
     // ==== Main Loop ====
@@ -2771,11 +2761,11 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
       // .      rapidly increase the window to the maximum possible.
       // .      Then, gradually reduce the window size. ====
       nh = kbot - ktop + 1;
-      nwupbd = std::min<blasint>(nh, nwmax);
+      nwupbd = Min<blasint>(nh, nwmax);
       if (ndfl < kexnw) {
-        nw = std::min<blasint>(nwupbd, nwr);
+        nw = Min<blasint>(nwupbd, nwr);
       } else {
-        nw = std::min<blasint>(nwupbd, 2 * nw);
+        nw = Min<blasint>(nwupbd, 2 * nw);
       }
       if (nw < nwmax) {
         if (nw >= nh - 1) {
@@ -2822,11 +2812,11 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
       // .    skipped if many eigenvalues have just been deflated
       // .    or if the remaining active block is small.
       if ((ld == 0) || ((100 * ld <= nw * nibble) &&
-                        (kbot - ktop + 1 > std::min<blasint>(nmin, nwmax)))) {
+                        (kbot - ktop + 1 > Min<blasint>(nmin, nwmax)))) {
         // ==== NS = nominal number of simultaneous shifts.
         // .    This may be lowered (slightly) if DLAQR2
         // .    did not provide that many shifts. ====
-        ns = std::min<blasint>({nsmax, nsr, std::max<blasint>(2, kbot - ktop)});
+        ns = Min<blasint>(nsmax, nsr, Max<blasint>(2, kbot - ktop));
         ns = ns - ns % 2;
         // ==== If there have been no deflations
         // .    in a multiple of KEXSH iterations,
@@ -2836,7 +2826,7 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
         // .    of a trailing principal submatrix. ====
         if (ndfl % kexsh == 0) {
           ks = kbot - ns + 1;
-          for (i = kbot; i >= std::max<blasint>(ks + 1, ktop + 2); i -= 2) {
+          for (i = kbot; i >= Max<blasint>(ks + 1, ktop + 2); i -= 2) {
             ss = std::abs(H(i, i - 1)) + std::abs(H(i - 1, i - 2));
             aa = wilk1 * ss + H(i, i);
             bb = ss;
@@ -2934,7 +2924,7 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
         // .    shifts.  If there aren't NS shifts available,
         // .    then use them all, possibly dropping one to
         // .    make the number of shifts even. ====
-        ns = std::min<blasint>(ns, kbot - ks + 1);
+        ns = Min<blasint>(ns, kbot - ks + 1);
         ns = ns - ns % 2;
         ks = kbot - ns + 1;
         // ==== Small-bulge multi-shift QR sweep:
@@ -3035,21 +3025,21 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
     // .    (In fact, there is enough subdiagonal space for
     // .    NWR.GE.4.) ====
     nwr = Ilaenv<T>(13, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nwr = std::max<blasint>(2, nwr);
-    nwr = std::min<blasint>({ihi - ilo + 1, (n - 1) / 3, nwr});
+    nwr = Max<blasint>(2, nwr);
+    nwr = Min<blasint>(ihi - ilo + 1, (n - 1) / 3, nwr);
     // ==== NSR = recommended number of simultaneous shifts.
     // .    At this point N .GT. NTINY = 15, so there is at
     // .    enough subdiagonal workspace for NSR to be even
     // .    and greater than or equal to two as required. ====
     nsr = Ilaenv<T>(15, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nsr = std::min<blasint>({nsr, (n - 3) / 6, ihi - ilo});
-    nsr = std::max<blasint>(2, nsr - nsr % 2);
+    nsr = Min<blasint>(nsr, (n - 3) / 6, ihi - ilo);
+    nsr = Max<blasint>(2, nsr - nsr % 2);
     // ==== Estimate optimal workspace ====
     // ==== Workspace query call to ZLAQR2 ====
     Laqr2(wantt, wantz, n, ilo, ihi, nwr + 1, h, ldh, iloz, ihiz, z, ldz, &ls,
           &ld, w, h, ldh, n, h, ldh, n, h, ldh, work, -1);
     // ==== Optimal workspace = MAX(ZLAQR5, ZLAQR2) ====
-    lwkopt = std::max(3 * nsr / 2, static_cast<blasint>(std::real(WORK(1))));
+    lwkopt = Max(3 * nsr / 2, static_cast<blasint>(std::real(WORK(1))));
     // ==== Quick return in case of workspace query. ====
     if (lwork == -1) {
       WORK(1) = WorkSize<T>(lwkopt);
@@ -3057,28 +3047,27 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
     }
     // ==== ZLAHQR/ZLAQR0 crossover point ====
     nmin = Ilaenv<T>(12, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== Nibble crossover point ====
     nibble = Ilaenv<T>(14, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    nibble = std::max<blasint>(0, nibble);
+    nibble = Max<blasint>(0, nibble);
     // ==== Accumulate reflections during ttswp?  Use block
     // .    2-by-2 structure during matrix-matrix multiply? ====
     kacc22 = Ilaenv<T>(16, "LAQR4", jbcmpz, n, ilo, ihi, lwork);
-    kacc22 = std::max<blasint>(0, kacc22);
-    kacc22 = std::min<blasint>(2, kacc22);
+    kacc22 = Max<blasint>(0, kacc22);
+    kacc22 = Min<blasint>(2, kacc22);
     // ==== NWMAX = the largest possible deflation window for
     // .    which there is sufficient workspace. ====
-    nwmax = std::min<blasint>((n - 1) / 3, lwork / 2);
+    nwmax = Min<blasint>((n - 1) / 3, lwork / 2);
     nw = nwmax;
     // ==== NSMAX = the Largest number of simultaneous shifts
     // .    for which there is sufficient workspace. ====
-    nsmax = std::min<blasint>((n - 3) / 6, 2 * lwork / 3);
+    nsmax = Min<blasint>((n - 3) / 6, 2 * lwork / 3);
     nsmax = nsmax - nsmax % 2;
     // ==== NDFL: an iteration count restarted at deflation. ====
     ndfl = 1;
     // ==== ITMAX = iteration limit ====
-    itmax = std::max<blasint>(30, 2 * kexsh) *
-            std::max<blasint>(10, (ihi - ilo + 1));
+    itmax = Max<blasint>(30, 2 * kexsh) * Max<blasint>(10, (ihi - ilo + 1));
     // ==== Last row and column in the active block ====
     kbot = ihi;
     // ==== Main Loop ====
@@ -3108,11 +3097,11 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
       // .      rapidly increase the window to the maximum possible.
       // .      Then, gradually reduce the window size. ====
       nh = kbot - ktop + 1;
-      nwupbd = std::min<blasint>(nh, nwmax);
+      nwupbd = Min<blasint>(nh, nwmax);
       if (ndfl < kexnw) {
-        nw = std::min<blasint>(nwupbd, nwr);
+        nw = Min<blasint>(nwupbd, nwr);
       } else {
-        nw = std::min<blasint>(nwupbd, 2 * nw);
+        nw = Min<blasint>(nwupbd, 2 * nw);
       }
       if (nw < nwmax) {
         if (nw >= nh - 1) {
@@ -3159,11 +3148,11 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
       // .    skipped if many eigenvalues have just been deflated
       // .    or if the remaining active block is small.
       if ((ld == 0) || ((100 * ld <= nw * nibble) &&
-                        (kbot - ktop + 1 > std::min<blasint>(nmin, nwmax)))) {
+                        (kbot - ktop + 1 > Min<blasint>(nmin, nwmax)))) {
         // ==== NS = nominal number of simultaneous shifts.
         // .    This may be lowered (slightly) if ZLAQR2
         // .    did not provide that many shifts. ====
-        ns = std::min<blasint>({nsmax, nsr, std::max<blasint>(2, kbot - ktop)});
+        ns = Min<blasint>(nsmax, nsr, Max<blasint>(2, kbot - ktop));
         ns = ns - ns % 2;
         // ==== If there have been no deflations
         // .    in a multiple of KEXSH iterations,
@@ -3243,7 +3232,7 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
         // .    shifts.  If there aren't NS shifts available,
         // .    then use them all, possibly dropping one to
         // .    make the number of shifts even. ====
-        ns = std::min<blasint>(ns, kbot - ks + 1);
+        ns = Min<blasint>(ns, kbot - ks + 1);
         ns = ns - ns % 2;
         ks = kbot - ns + 1;
         // ==== Small-bulge multi-shift QR sweep:
@@ -3350,21 +3339,21 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
     // .    (In fact, there is enough subdiagonal space for
     // .    NWR.GE.4.) ====
     nwr = Ilaenv<R>(13, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nwr = std::max<blasint>(2, nwr);
-    nwr = std::min<blasint>({ihi - ilo + 1, (n - 1) / 3, nwr});
+    nwr = Max<blasint>(2, nwr);
+    nwr = Min<blasint>(ihi - ilo + 1, (n - 1) / 3, nwr);
     // ==== NSR = recommended number of simultaneous shifts.
     // .    At this point N .GT. NTINY = 15, so there is at
     // .    enough subdiagonal workspace for NSR to be even
     // .    and greater than or equal to two as required. ====
     nsr = Ilaenv<R>(15, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nsr = std::min<blasint>({nsr, (n - 3) / 6, ihi - ilo});
-    nsr = std::max<blasint>(2, nsr - nsr % 2);
+    nsr = Min<blasint>(nsr, (n - 3) / 6, ihi - ilo);
+    nsr = Max<blasint>(2, nsr - nsr % 2);
     // ==== Estimate optimal workspace ====
     // ==== Workspace query call to DLAQR3 ====
     Laqr3(wantt, wantz, n, ilo, ihi, nwr + 1, h, ldh, iloz, ihiz, z, ldz, &ls,
           &ld, wr, wi, h, ldh, n, h, ldh, n, h, ldh, work, -1);
     // ==== Optimal workspace = MAX(DLAQR5, DLAQR3) ====
-    lwkopt = std::max(3 * nsr / 2, static_cast<blasint>(WORK(1)));
+    lwkopt = Max(3 * nsr / 2, static_cast<blasint>(WORK(1)));
     // ==== Quick return in case of workspace query. ====
     if (lwork == -1) {
       WORK(1) = WorkSize<R>(lwkopt);
@@ -3372,28 +3361,27 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
     }
     // ==== DLAHQR/DLAQR0 crossover point ====
     nmin = Ilaenv<R>(12, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== Nibble crossover point ====
     nibble = Ilaenv<R>(14, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nibble = std::max<blasint>(0, nibble);
+    nibble = Max<blasint>(0, nibble);
     // ==== Accumulate reflections during ttswp?  Use block
     // .    2-by-2 structure during matrix-matrix multiply? ====
     kacc22 = Ilaenv<R>(16, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    kacc22 = std::max<blasint>(0, kacc22);
-    kacc22 = std::min<blasint>(2, kacc22);
+    kacc22 = Max<blasint>(0, kacc22);
+    kacc22 = Min<blasint>(2, kacc22);
     // ==== NWMAX = the largest possible deflation window for
     // .    which there is sufficient workspace. ====
-    nwmax = std::min<blasint>((n - 1) / 3, lwork / 2);
+    nwmax = Min<blasint>((n - 1) / 3, lwork / 2);
     nw = nwmax;
     // ==== NSMAX = the Largest number of simultaneous shifts
     // .    for which there is sufficient workspace. ====
-    nsmax = std::min<blasint>((n - 3) / 6, 2 * lwork / 3);
+    nsmax = Min<blasint>((n - 3) / 6, 2 * lwork / 3);
     nsmax = nsmax - nsmax % 2;
     // ==== NDFL: an iteration count restarted at deflation. ====
     ndfl = 1;
     // ==== ITMAX = iteration limit ====
-    itmax = std::max<blasint>(30, 2 * kexsh) *
-            std::max<blasint>(10, (ihi - ilo + 1));
+    itmax = Max<blasint>(30, 2 * kexsh) * Max<blasint>(10, (ihi - ilo + 1));
     // ==== Last row and column in the active block ====
     kbot = ihi;
     // ==== Main Loop ====
@@ -3423,11 +3411,11 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
       // .      rapidly increase the window to the maximum possible.
       // .      Then, gradually reduce the window size. ====
       nh = kbot - ktop + 1;
-      nwupbd = std::min<blasint>(nh, nwmax);
+      nwupbd = Min<blasint>(nh, nwmax);
       if (ndfl < kexnw) {
-        nw = std::min<blasint>(nwupbd, nwr);
+        nw = Min<blasint>(nwupbd, nwr);
       } else {
-        nw = std::min<blasint>(nwupbd, 2 * nw);
+        nw = Min<blasint>(nwupbd, 2 * nw);
       }
       if (nw < nwmax) {
         if (nw >= nh - 1) {
@@ -3474,11 +3462,11 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
       // .    skipped if many eigenvalues have just been deflated
       // .    or if the remaining active block is small.
       if ((ld == 0) || ((100 * ld <= nw * nibble) &&
-                        (kbot - ktop + 1 > std::min<blasint>(nmin, nwmax)))) {
+                        (kbot - ktop + 1 > Min<blasint>(nmin, nwmax)))) {
         // ==== NS = nominal number of simultaneous shifts.
         // .    This may be lowered (slightly) if DLAQR3
         // .    did not provide that many shifts. ====
-        ns = std::min<blasint>({nsmax, nsr, std::max<blasint>(2, kbot - ktop)});
+        ns = Min<blasint>(nsmax, nsr, Max<blasint>(2, kbot - ktop));
         ns = ns - ns % 2;
         // ==== If there have been no deflations
         // .    in a multiple of KEXSH iterations,
@@ -3488,7 +3476,7 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
         // .    of a trailing principal submatrix. ====
         if (ndfl % kexsh == 0) {
           ks = kbot - ns + 1;
-          for (i = kbot; i >= std::max<blasint>(ks + 1, ktop + 2); i -= 2) {
+          for (i = kbot; i >= Max<blasint>(ks + 1, ktop + 2); i -= 2) {
             ss = std::abs(H(i, i - 1)) + std::abs(H(i - 1, i - 2));
             aa = wilk1 * ss + H(i, i);
             bb = ss;
@@ -3591,7 +3579,7 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
         // .    shifts.  If there aren't NS shifts available,
         // .    then use them all, possibly dropping one to
         // .    make the number of shifts even. ====
-        ns = std::min<blasint>(ns, kbot - ks + 1);
+        ns = Min<blasint>(ns, kbot - ks + 1);
         ns = ns - ns % 2;
         ks = kbot - ns + 1;
         // ==== Small-bulge multi-shift QR sweep:
@@ -3692,21 +3680,21 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
     // .    (In fact, there is enough subdiagonal space for
     // .    NWR.GE.4.) ====
     nwr = Ilaenv<T>(13, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nwr = std::max<blasint>(2, nwr);
-    nwr = std::min<blasint>({ihi - ilo + 1, (n - 1) / 3, nwr});
+    nwr = Max<blasint>(2, nwr);
+    nwr = Min<blasint>(ihi - ilo + 1, (n - 1) / 3, nwr);
     // ==== NSR = recommended number of simultaneous shifts.
     // .    At this point N .GT. NTINY = 15, so there is at
     // .    enough subdiagonal workspace for NSR to be even
     // .    and greater than or equal to two as required. ====
     nsr = Ilaenv<T>(15, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nsr = std::min<blasint>({nsr, (n - 3) / 6, ihi - ilo});
-    nsr = std::max<blasint>(2, nsr - nsr % 2);
+    nsr = Min<blasint>(nsr, (n - 3) / 6, ihi - ilo);
+    nsr = Max<blasint>(2, nsr - nsr % 2);
     // ==== Estimate optimal workspace ====
     // ==== Workspace query call to ZLAQR3 ====
     Laqr3(wantt, wantz, n, ilo, ihi, nwr + 1, h, ldh, iloz, ihiz, z, ldz, &ls,
           &ld, w, h, ldh, n, h, ldh, n, h, ldh, work, -1);
     // ==== Optimal workspace = MAX(ZLAQR5, ZLAQR3) ====
-    lwkopt = std::max(3 * nsr / 2, static_cast<blasint>(std::real(WORK(1))));
+    lwkopt = Max(3 * nsr / 2, static_cast<blasint>(std::real(WORK(1))));
     // ==== Quick return in case of workspace query. ====
     if (lwork == -1) {
       WORK(1) = WorkSize<T>(lwkopt);
@@ -3714,28 +3702,27 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
     }
     // ==== ZLAHQR/ZLAQR0 crossover point ====
     nmin = Ilaenv<T>(12, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== Nibble crossover point ====
     nibble = Ilaenv<T>(14, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    nibble = std::max<blasint>(0, nibble);
+    nibble = Max<blasint>(0, nibble);
     // ==== Accumulate reflections during ttswp?  Use block
     // .    2-by-2 structure during matrix-matrix multiply? ====
     kacc22 = Ilaenv<T>(16, "LAQR0", jbcmpz, n, ilo, ihi, lwork);
-    kacc22 = std::max<blasint>(0, kacc22);
-    kacc22 = std::min<blasint>(2, kacc22);
+    kacc22 = Max<blasint>(0, kacc22);
+    kacc22 = Min<blasint>(2, kacc22);
     // ==== NWMAX = the largest possible deflation window for
     // .    which there is sufficient workspace. ====
-    nwmax = std::min<blasint>((n - 1) / 3, lwork / 2);
+    nwmax = Min<blasint>((n - 1) / 3, lwork / 2);
     nw = nwmax;
     // ==== NSMAX = the Largest number of simultaneous shifts
     // .    for which there is sufficient workspace. ====
-    nsmax = std::min<blasint>((n - 3) / 6, 2 * lwork / 3);
+    nsmax = Min<blasint>((n - 3) / 6, 2 * lwork / 3);
     nsmax = nsmax - nsmax % 2;
     // ==== NDFL: an iteration count restarted at deflation. ====
     ndfl = 1;
     // ==== ITMAX = iteration limit ====
-    itmax = std::max<blasint>(30, 2 * kexsh) *
-            std::max<blasint>(10, (ihi - ilo + 1));
+    itmax = Max<blasint>(30, 2 * kexsh) * Max<blasint>(10, (ihi - ilo + 1));
     // ==== Last row and column in the active block ====
     kbot = ihi;
     // ==== Main Loop ====
@@ -3765,11 +3752,11 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
       // .      rapidly increase the window to the maximum possible.
       // .      Then, gradually reduce the window size. ====
       nh = kbot - ktop + 1;
-      nwupbd = std::min<blasint>(nh, nwmax);
+      nwupbd = Min<blasint>(nh, nwmax);
       if (ndfl < kexnw) {
-        nw = std::min<blasint>(nwupbd, nwr);
+        nw = Min<blasint>(nwupbd, nwr);
       } else {
-        nw = std::min<blasint>(nwupbd, 2 * nw);
+        nw = Min<blasint>(nwupbd, 2 * nw);
       }
       if (nw < nwmax) {
         if (nw >= nh - 1) {
@@ -3816,11 +3803,11 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
       // .    skipped if many eigenvalues have just been deflated
       // .    or if the remaining active block is small.
       if ((ld == 0) || ((100 * ld <= nw * nibble) &&
-                        (kbot - ktop + 1 > std::min<blasint>(nmin, nwmax)))) {
+                        (kbot - ktop + 1 > Min<blasint>(nmin, nwmax)))) {
         // ==== NS = nominal number of simultaneous shifts.
         // .    This may be lowered (slightly) if ZLAQR3
         // .    did not provide that many shifts. ====
-        ns = std::min<blasint>({nsmax, nsr, std::max<blasint>(2, kbot - ktop)});
+        ns = Min<blasint>(nsmax, nsr, Max<blasint>(2, kbot - ktop));
         ns = ns - ns % 2;
         // ==== If there have been no deflations
         // .    in a multiple of KEXSH iterations,
@@ -3905,7 +3892,7 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
         // .    shifts.  If there aren't NS shifts available,
         // .    then use them all, possibly dropping one to
         // .    make the number of shifts even. ====
-        ns = std::min<blasint>(ns, kbot - ks + 1);
+        ns = Min<blasint>(ns, kbot - ks + 1);
         ns = ns - ns % 2;
         ks = kbot - ns + 1;
         // ==== Small-bulge multi-shift QR sweep:
@@ -3975,7 +3962,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
   wantt = Lsame(job, 'S');
   initz = Lsame(compz, 'I');
   wantz = initz || Lsame(compz, 'V');
-  WORK(1) = R(std::max<blasint>(1, n));
+  WORK(1) = R(Max<blasint>(1, n));
   lquery = lwork == -1;
   blasint info = 0;
   if (!Lsame(job, 'E') && !wantt) {
@@ -3984,15 +3971,15 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -4;
-  } else if (ihi < std::min<blasint>(ilo, n) || ihi > n) {
+  } else if (ihi < Min<blasint>(ilo, n) || ihi > n) {
     info = -5;
-  } else if (ldh < std::max<blasint>(1, n)) {
+  } else if (ldh < Max<blasint>(1, n)) {
     info = -7;
-  } else if (ldz < 1 || (wantz && ldz < std::max<blasint>(1, n))) {
+  } else if (ldz < 1 || (wantz && ldz < Max<blasint>(1, n))) {
     info = -11;
-  } else if (lwork < std::max<blasint>(1, n) && !lquery) {
+  } else if (lwork < Max<blasint>(1, n) && !lquery) {
     info = -13;
   }
   if (info != 0) {
@@ -4008,7 +3995,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
                  work, lwork);
     // ==== Ensure reported workspace size is backward-compatible with
     // .    previous LAPACK versions. ====
-    WORK(1) = std::max(R(std::max<blasint>(1, n)), WORK(1));
+    WORK(1) = Max(R(Max<blasint>(1, n)), WORK(1));
     return info;
   } else {
     // ==== copy eigenvalues isolated by DGEBAL ====
@@ -4031,7 +4018,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
     // ==== DLAHQR/DLAQR0 crossover point ====
     const char opts[3] = {job, compz, '\0'};
     nmin = Ilaenv<R>(12, "HSEQR", opts, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== DLAQR0 for big matrices; DLAHQR for small ones ====
     if (n > nmin) {
       info = Laqr0(wantt, wantz, n, ilo, ihi, h, ldh, wr, wi, ilo, ihi, z, ldz,
@@ -4071,7 +4058,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, R* h,
       Laset('L', n - 2, n - 2, zero, zero, H.ptr(3, 1), ldh);
     // ==== Ensure reported workspace size is backward-compatible with
     // .    previous LAPACK versions. ====
-    WORK(1) = std::max(R(std::max<blasint>(1, n)), WORK(1));
+    WORK(1) = Max(R(Max<blasint>(1, n)), WORK(1));
   }
   return info;
 }
@@ -4096,7 +4083,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
   wantt = Lsame(job, 'S');
   initz = Lsame(compz, 'I');
   wantz = initz || Lsame(compz, 'V');
-  WORK(1) = T(R(std::max<blasint>(1, n)), rzero);
+  WORK(1) = T(R(Max<blasint>(1, n)), rzero);
   lquery = lwork == -1;
   blasint info = 0;
   if (!Lsame(job, 'E') && !wantt) {
@@ -4105,15 +4092,15 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (ilo < 1 || ilo > std::max<blasint>(1, n)) {
+  } else if (ilo < 1 || ilo > Max<blasint>(1, n)) {
     info = -4;
-  } else if (ihi < std::min<blasint>(ilo, n) || ihi > n) {
+  } else if (ihi < Min<blasint>(ilo, n) || ihi > n) {
     info = -5;
-  } else if (ldh < std::max<blasint>(1, n)) {
+  } else if (ldh < Max<blasint>(1, n)) {
     info = -7;
-  } else if (ldz < 1 || (wantz && ldz < std::max<blasint>(1, n))) {
+  } else if (ldz < 1 || (wantz && ldz < Max<blasint>(1, n))) {
     info = -10;
-  } else if (lwork < std::max<blasint>(1, n) && !lquery) {
+  } else if (lwork < Max<blasint>(1, n) && !lquery) {
     info = -12;
   }
   if (info != 0) {
@@ -4129,8 +4116,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
                  lwork);
     // ==== Ensure reported workspace size is backward-compatible with
     // .    previous LAPACK versions. ====
-    WORK(1) =
-        T(std::max(std::real(WORK(1)), R(std::max<blasint>(1, n))), rzero);
+    WORK(1) = T(Max(std::real(WORK(1)), R(Max<blasint>(1, n))), rzero);
     return info;
   } else {
     // ==== copy eigenvalues isolated by ZGEBAL ====
@@ -4147,7 +4133,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
     // ==== ZLAHQR/ZLAQR0 crossover point ====
     const char opts[3] = {job, compz, '\0'};
     nmin = Ilaenv<T>(12, "HSEQR", opts, n, ilo, ihi, lwork);
-    nmin = std::max<blasint>(ntiny, nmin);
+    nmin = Max<blasint>(ntiny, nmin);
     // ==== ZLAQR0 for big matrices; ZLAHQR for small ones ====
     if (n > nmin) {
       info = Laqr0(wantt, wantz, n, ilo, ihi, h, ldh, w, ilo, ihi, z, ldz, work,
@@ -4187,8 +4173,7 @@ blasint Hseqr(char job, char compz, blasint n, blasint ilo, blasint ihi, T* h,
       Laset('L', n - 2, n - 2, zero, zero, H.ptr(3, 1), ldh);
     // ==== Ensure reported workspace size is backward-compatible with
     // .    previous LAPACK versions. ====
-    WORK(1) =
-        T(std::max(R(std::max<blasint>(1, n)), std::real(WORK(1))), rzero);
+    WORK(1) = T(Max(R(Max<blasint>(1, n)), std::real(WORK(1))), rzero);
   }
   return info;
 }

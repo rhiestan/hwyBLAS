@@ -32,16 +32,16 @@ void Las2(R f, R g, R h, R* ssmin, R* ssmax) {
   fa = std::abs(f);
   ga = std::abs(g);
   ha = std::abs(h);
-  fhmn = std::min(fa, ha);
-  fhmx = std::max(fa, ha);
+  fhmn = Min(fa, ha);
+  fhmx = Max(fa, ha);
   if (fhmn == zero) {
     *ssmin = zero;
     if (fhmx == zero) {
       *ssmax = ga;
     } else {
-      *ssmax = std::max(fhmx, ga) *
-               std::sqrt(one + (std::min(fhmx, ga) / std::max(fhmx, ga)) *
-                                   (std::min(fhmx, ga) / std::max(fhmx, ga)));
+      *ssmax =
+          Max(fhmx, ga) * std::sqrt(one + (Min(fhmx, ga) / Max(fhmx, ga)) *
+                                              (Min(fhmx, ga) / Max(fhmx, ga)));
     }
   } else {
     if (ga < fhmx) {
@@ -261,12 +261,11 @@ blasint Bdsqr(char uplo, blasint n, blasint ncvt, blasint nru, blasint ncc,
   } else if (ncc < 0) {
     info = -5;
   } else if ((ncvt == 0 && ldvt < 1) ||
-             (ncvt > 0 && ldvt < std::max<blasint>(1, n))) {
+             (ncvt > 0 && ldvt < Max<blasint>(1, n))) {
     info = -9;
-  } else if (ldu < std::max<blasint>(1, nru)) {
+  } else if (ldu < Max<blasint>(1, nru)) {
     info = -11;
-  } else if ((ncc == 0 && ldc < 1) ||
-             (ncc > 0 && ldc < std::max<blasint>(1, n))) {
+  } else if ((ncc == 0 && ldc < 1) || (ncc > 0 && ldc < Max<blasint>(1, n))) {
     info = -13;
   }
   if (info != 0) {
@@ -309,15 +308,15 @@ blasint Bdsqr(char uplo, blasint n, blasint ncvt, blasint nru, blasint ncc,
   // Compute singular values to relative accuracy TOL
   // (By setting TOL to be negative, algorithm will compute
   // singular values to absolute accuracy ABS(TOL)*norm(input matrix))
-  tolmul = std::max(ten, std::min(hndrd, std::pow(eps, meigth)));
+  tolmul = Max(ten, Min(hndrd, std::pow(eps, meigth)));
   tol = tolmul * eps;
   // Compute approximate maximum, minimum singular values
   smax = zero;
   for (i = 1; i <= n; ++i) {
-    smax = std::max(smax, std::abs(D(i)));
+    smax = Max(smax, std::abs(D(i)));
   }
   for (i = 1; i <= n - 1; ++i) {
-    smax = std::max(smax, std::abs(E(i)));
+    smax = Max(smax, std::abs(E(i)));
   }
   smin = zero;
   if (tol >= zero) {
@@ -327,15 +326,15 @@ blasint Bdsqr(char uplo, blasint n, blasint ncvt, blasint nru, blasint ncc,
     mu = sminoa;
     for (i = 2; i <= n; ++i) {
       mu = std::abs(D(i)) * (mu / (mu + std::abs(E(i - 1))));
-      sminoa = std::min(sminoa, mu);
+      sminoa = Min(sminoa, mu);
       if (sminoa == zero) goto L50;
     }
   L50:
     sminoa = sminoa / std::sqrt(R(n));
-    thresh = std::max(tol * sminoa, maxitr * (n * (n * unfl)));
+    thresh = Max(tol * sminoa, maxitr * (n * (n * unfl)));
   } else {
     // Absolute accuracy desired
-    thresh = std::max(std::abs(tol) * smax, maxitr * (n * (n * unfl)));
+    thresh = Max(std::abs(tol) * smax, maxitr * (n * (n * unfl)));
   }
   // Prepare for main iteration loop for the singular values
   // (MAXIT is the maximum number of passes through the inner
@@ -365,7 +364,7 @@ L60:
     abse = std::abs(E(ll));
     if (tol < zero && abss <= thresh) D(ll) = zero;
     if (abse <= thresh) goto L80;
-    smax = std::max({smax, abss, abse});
+    smax = Max(smax, abss, abse);
   }
   ll = 0;
   goto L90;
@@ -425,7 +424,7 @@ L90:
           goto L60;
         }
         mu = std::abs(D(lll + 1)) * (mu / (mu + std::abs(E(lll))));
-        smin = std::min(smin, mu);
+        smin = Min(smin, mu);
       }
     }
   } else {
@@ -447,7 +446,7 @@ L90:
           goto L60;
         }
         mu = std::abs(D(lll)) * (mu / (mu + std::abs(E(lll))));
-        smin = std::min(smin, mu);
+        smin = Min(smin, mu);
       }
     }
   }
@@ -455,7 +454,7 @@ L90:
   oldm = m;
   // Compute shift.  First, test if shifting would ruin relative
   // accuracy, and if so set the shift to zero.
-  if (tol >= zero && n * tol * (smin / smax) <= std::max(eps, hndrth * tol)) {
+  if (tol >= zero && n * tol * (smin / smax) <= Max(eps, hndrth * tol)) {
     // Use a zero shift to avoid loss of relative accuracy
     shift = zero;
   } else {

@@ -30,12 +30,12 @@ namespace {
 // MIN(a, b) of xLASQ5, NaN if a or b is NaN: the IEEE variant of the dqds
 // transform lets a NaN arise and relies on it reaching DMIN, which xLASQ3
 // tests. (The Fortran standard leaves MIN with a NaN argument unspecified;
-// std::min would return a NaN only if it is its first argument.)
+// Min, as flang's MIN, returns a NaN only if it is its second argument.)
 template <typename R>
 R MinNan(R a, R b) {
   if (std::isnan(a)) return a;
   if (std::isnan(b)) return b;
-  return std::min(a, b);
+  return Min(a, b);
 }
 
 }  // namespace
@@ -74,8 +74,8 @@ void Lasq6(blasint i0, blasint n0, R* z, blasint pp, R* dmin, R* dmin1,
         Z(j4) = Z(j4 + 1) * (Z(j4 - 1) / Z(j4 - 2));
         d = Z(j4 + 1) * (d / Z(j4 - 2));
       }
-      *dmin = std::min(*dmin, d);
-      emin = std::min(emin, Z(j4));
+      *dmin = Min(*dmin, d);
+      emin = Min(emin, Z(j4));
     }
   } else {
     for (j4 = 4 * i0; j4 <= 4 * (n0 - 3); j4 += 4) {
@@ -94,8 +94,8 @@ void Lasq6(blasint i0, blasint n0, R* z, blasint pp, R* dmin, R* dmin1,
         Z(j4 - 1) = Z(j4 + 2) * (Z(j4) / Z(j4 - 3));
         d = Z(j4 + 2) * (d / Z(j4 - 3));
       }
-      *dmin = std::min(*dmin, d);
-      emin = std::min(emin, Z(j4 - 1));
+      *dmin = Min(*dmin, d);
+      emin = Min(emin, Z(j4 - 1));
     }
   }
   // Unroll last two steps.
@@ -118,7 +118,7 @@ void Lasq6(blasint i0, blasint n0, R* z, blasint pp, R* dmin, R* dmin1,
     Z(j4) = Z(j4p2 + 2) * (Z(j4p2) / Z(j4 - 2));
     *dnm1 = Z(j4p2 + 2) * (*dnm2 / Z(j4 - 2));
   }
-  *dmin = std::min(*dmin, *dnm1);
+  *dmin = Min(*dmin, *dnm1);
   *dmin1 = *dmin;
   j4 = j4 + 4;
   j4p2 = j4 + 2 * pp - 1;
@@ -137,7 +137,7 @@ void Lasq6(blasint i0, blasint n0, R* z, blasint pp, R* dmin, R* dmin1,
     Z(j4) = Z(j4p2 + 2) * (Z(j4p2) / Z(j4 - 2));
     *dn = Z(j4p2 + 2) * (*dnm1 / Z(j4 - 2));
   }
-  *dmin = std::min(*dmin, *dn);
+  *dmin = Min(*dmin, *dn);
   Z(j4 + 2) = *dn;
   Z(4 * n0 - pp) = emin;
 }
@@ -404,13 +404,13 @@ void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
           gap1 = a2 - dn - (b1 + b2);
         }
         if (gap1 > zero && gap1 > b1) {
-          s = std::max(dn - (b1 / gap1) * b1, half * dmin);
+          s = Max(dn - (b1 / gap1) * b1, half * dmin);
           *ttype = -2;
         } else {
           s = zero;
           if (dn > b1) s = dn - b1;
-          if (a2 > (b1 + b2)) s = std::min(s, a2 - (b1 + b2));
-          s = std::max(s, third * dmin);
+          if (a2 > (b1 + b2)) s = Min(s, a2 - (b1 + b2));
+          s = Max(s, third * dmin);
           *ttype = -3;
         }
       } else {
@@ -440,7 +440,7 @@ void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
           if (Z(i4) > Z(i4 - 2)) return;
           b2 = b2 * (Z(i4) / Z(i4 - 2));
           a2 = a2 + b2;
-          if (hundrd * std::max(b2, b1) < a2 || cnst1 < a2) goto L20;
+          if (hundrd * Max(b2, b1) < a2 || cnst1 < a2) goto L20;
         }
       L20:
         a2 = cnst3 * a2;
@@ -468,7 +468,7 @@ void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
           if (Z(i4) > Z(i4 - 2)) return;
           b2 = b2 * (Z(i4) / Z(i4 - 2));
           a2 = a2 + b2;
-          if (hundrd * std::max(b2, b1) < a2 || cnst1 < a2) goto L40;
+          if (hundrd * Max(b2, b1) < a2 || cnst1 < a2) goto L40;
         }
       L40:
         a2 = cnst3 * a2;
@@ -501,16 +501,16 @@ void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
         if (Z(i4) > Z(i4 - 2)) return;
         b1 = b1 * (Z(i4) / Z(i4 - 2));
         b2 = b2 + b1;
-        if (hundrd * std::max(b1, a2) < b2) goto L60;
+        if (hundrd * Max(b1, a2) < b2) goto L60;
       }
     L60:
       b2 = std::sqrt(cnst3 * b2);
       a2 = dmin1 / (one + b2 * b2);
       gap2 = half * dmin2 - a2;
       if (gap2 > zero && gap2 > b2 * a2) {
-        s = std::max(s, a2 * (one - cnst2 * a2 * (b2 / gap2) * b2));
+        s = Max(s, a2 * (one - cnst2 * a2 * (b2 / gap2) * b2));
       } else {
-        s = std::max(s, a2 * (one - cnst2 * b2));
+        s = Max(s, a2 * (one - cnst2 * b2));
         *ttype = -8;
       }
     } else {
@@ -541,9 +541,9 @@ void Lasq4(blasint i0, blasint n0, const R* z, blasint pp, blasint n0in, R dmin,
       gap2 = Z(nn - 7) + Z(nn - 9) -
              std::sqrt(Z(nn - 11)) * std::sqrt(Z(nn - 9)) - a2;
       if (gap2 > zero && gap2 > b2 * a2) {
-        s = std::max(s, a2 * (one - cnst2 * a2 * (b2 / gap2) * b2));
+        s = Max(s, a2 * (one - cnst2 * a2 * (b2 / gap2) * b2));
       } else {
-        s = std::max(s, a2 * (one - cnst2 * b2));
+        s = Max(s, a2 * (one - cnst2 * b2));
       }
     } else {
       s = qurtr * dmin2;
@@ -646,12 +646,12 @@ L50:
         Z(4 * *n0 + *pp - 1) = Z(4 * i0 + *pp - 1);
         Z(4 * *n0 - *pp) = Z(4 * i0 - *pp);
       }
-      *dmin2 = std::min(*dmin2, Z(4 * *n0 + *pp - 1));
-      Z(4 * *n0 + *pp - 1) = std::min(
-          {Z(4 * *n0 + *pp - 1), Z(4 * i0 + *pp - 1), Z(4 * i0 + *pp + 3)});
+      *dmin2 = Min(*dmin2, Z(4 * *n0 + *pp - 1));
+      Z(4 * *n0 + *pp - 1) =
+          Min(Z(4 * *n0 + *pp - 1), Z(4 * i0 + *pp - 1), Z(4 * i0 + *pp + 3));
       Z(4 * *n0 - *pp) =
-          std::min({Z(4 * *n0 - *pp), Z(4 * i0 - *pp), Z(4 * i0 - *pp + 4)});
-      *qmax = std::max({*qmax, Z(4 * i0 + *pp - 3), Z(4 * i0 + *pp + 1)});
+          Min(Z(4 * *n0 - *pp), Z(4 * i0 - *pp), Z(4 * i0 - *pp + 4));
+      *qmax = Max(*qmax, Z(4 * i0 + *pp - 3), Z(4 * i0 + *pp + 1));
       *dmin = -zero;
     }
   }
@@ -830,9 +830,9 @@ blasint Lasq2(blasint n, R* z) {
     }
     d = d + Z(k);
     e = e + Z(k + 1);
-    qmax = std::max(qmax, Z(k));
-    emin = std::min(emin, Z(k + 1));
-    zmax = std::max({qmax, zmax, Z(k + 1)});
+    qmax = Max(qmax, Z(k));
+    emin = Min(emin, Z(k + 1));
+    zmax = Max(qmax, zmax, Z(k + 1));
   }
   if (Z(2 * n - 1) < zero) {
     info = -(200 + 2 * n - 1);
@@ -840,8 +840,8 @@ blasint Lasq2(blasint n, R* z) {
     return info;
   }
   d = d + Z(2 * n - 1);
-  qmax = std::max(qmax, Z(2 * n - 1));
-  zmax = std::max(qmax, zmax);
+  qmax = Max(qmax, Z(2 * n - 1));
+  zmax = Max(qmax, zmax);
   // Check for diagonality.
   if (e == zero) {
     for (k = 2; k <= n; ++k) {
@@ -915,13 +915,13 @@ blasint Lasq2(blasint n, R* z) {
         Z(i4 - 2 * pp) = Z(i4 + 1) * (Z(i4 - 1) / Z(i4 - 2 * pp - 2));
         d = Z(i4 + 1) * (d / Z(i4 - 2 * pp - 2));
       }
-      emin = std::min(emin, Z(i4 - 2 * pp));
+      emin = Min(emin, Z(i4 - 2 * pp));
     }
     Z(4 * n0 - pp - 2) = d;
     // Now find qmax.
     qmax = Z(4 * i0 - pp - 2);
     for (i4 = 4 * i0 - pp + 2; i4 <= 4 * n0 - pp - 2; i4 += 4) {
-      qmax = std::max(qmax, Z(i4));
+      qmax = Max(qmax, Z(i4));
     }
     // Prepare for the next iteration on K.
     pp = 1 - pp;
@@ -966,11 +966,11 @@ blasint Lasq2(blasint n, R* z) {
     for (i4 = 4 * n0; i4 >= 8; i4 -= 4) {
       if (Z(i4 - 5) <= zero) goto L100;
       if (qmin >= four * emax) {
-        qmin = std::min(qmin, Z(i4 - 3));
-        emax = std::max(emax, Z(i4 - 5));
+        qmin = Min(qmin, Z(i4 - 3));
+        emax = Max(emax, Z(i4 - 5));
       }
-      qmax = std::max(qmax, Z(i4 - 7) + Z(i4 - 5));
-      emin = std::min(emin, Z(i4 - 5));
+      qmax = Max(qmax, Z(i4 - 7) + Z(i4 - 5));
+      emin = Min(emin, Z(i4 - 5));
     }
     i4 = 4;
   L100:
@@ -1007,7 +1007,7 @@ blasint Lasq2(blasint n, R* z) {
       }
     }
     // Put -(initial shift) into DMIN.
-    dmin = -std::max(zero, qmin - two * std::sqrt(qmin) * std::sqrt(emax));
+    dmin = -Max(zero, qmin - two * std::sqrt(qmin) * std::sqrt(emax));
     // Now I0:N0 is unreduced.
     // PP = 0 for ping, PP = 1 for pong.
     // PP = 2 indicates that flipping was applied to the Z array and
@@ -1035,9 +1035,9 @@ blasint Lasq2(blasint n, R* z) {
               emin = Z(i4 + 3);
               oldemn = Z(i4 + 4);
             } else {
-              qmax = std::max(qmax, Z(i4 + 1));
-              emin = std::min(emin, Z(i4 - 1));
-              oldemn = std::min(oldemn, Z(i4));
+              qmax = Max(qmax, Z(i4 + 1));
+              emin = Min(emin, Z(i4 - 1));
+              oldemn = Min(oldemn, Z(i4));
             }
           }
           Z(4 * n0 - 1) = emin;
@@ -1149,7 +1149,7 @@ blasint Lasq1(blasint n, R* d, R* e, R* work) {
   sigmx = zero;
   for (i = 1; i <= n - 1; ++i) {
     D(i) = std::abs(D(i));
-    sigmx = std::max(sigmx, std::abs(E(i)));
+    sigmx = Max(sigmx, std::abs(E(i)));
   }
   D(n) = std::abs(D(n));
   // Early return if SIGMX is zero (matrix is already diagonal).
@@ -1158,7 +1158,7 @@ blasint Lasq1(blasint n, R* d, R* e, R* work) {
     return info;
   }
   for (i = 1; i <= n; ++i) {
-    sigmx = std::max(sigmx, D(i));
+    sigmx = Max(sigmx, D(i));
   }
   // Copy D and E into WORK (in the Z format) and scale (squaring the
   // input data makes scaling by a power of the radix pointless).

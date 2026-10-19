@@ -59,7 +59,7 @@ blasint Heev(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
     info = -2;
   } else if (n < 0) {
     info = -3;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -5;
   }
 
@@ -67,11 +67,11 @@ blasint Heev(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
   if (info == 0) {
     const blasint nb =
         Ilaenv<T>(1, RealOrComplex<T>("SYTRD", "HETRD"), opts, n, -1, -1, -1);
-    lwkopt = std::max<blasint>(1, (nb + (kComplex ? 1 : 2)) * n);
+    lwkopt = Max<blasint>(1, (nb + (kComplex ? 1 : 2)) * n);
     WORK(1) = WorkSize<T>(lwkopt);
 
     const blasint minimum = kComplex ? 2 * n - 1 : 3 * n - 1;
-    if (lwork < std::max<blasint>(1, minimum) && !lquery) info = -8;
+    if (lwork < Max<blasint>(1, minimum) && !lquery) info = -8;
   }
 
   if (info != 0) {

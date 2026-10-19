@@ -113,7 +113,7 @@ blasint Getrf2(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
   if (info != 0) {
@@ -155,7 +155,7 @@ blasint Getrf2(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
     }
   } else {
     // Use recursive code.
-    const blasint n1 = std::min(m, n) / 2;
+    const blasint n1 = Min(m, n) / 2;
     const blasint n2 = n - n1;
 
     //        [ A11 ]
@@ -182,12 +182,12 @@ blasint Getrf2(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
 
     // Adjust INFO and the pivot indices.
     if (info == 0 && iinfo > 0) info = iinfo + n1;
-    for (blasint i = n1 + 1; i <= std::min(m, n); ++i) {
+    for (blasint i = n1 + 1; i <= Min(m, n); ++i) {
       IPIV(i) = IPIV(i) + n1;
     }
 
     // Apply interchanges to A21.
-    Laswp(n1, A.ptr(1, 1), lda, n1 + 1, std::min(m, n), IPIV.ptr(1), 1);
+    Laswp(n1, A.ptr(1, 1), lda, n1 + 1, Min(m, n), IPIV.ptr(1), 1);
   }
   return info;
 }
@@ -211,7 +211,7 @@ blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
   if (info != 0) {
@@ -224,13 +224,13 @@ blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
 
   // Determine the block size for this environment.
   const blasint nb = Ilaenv<T>(1, "GETRF", " ", m, n, -1, -1);
-  if (nb <= 1 || nb >= std::min(m, n)) {
+  if (nb <= 1 || nb >= Min(m, n)) {
     // Use unblocked code.
     info = Getrf2(m, n, a, lda, ipiv);
   } else {
     // Use blocked code.
-    for (blasint j = 1; j <= std::min(m, n); j += nb) {
-      const blasint jb = std::min(std::min(m, n) - j + 1, nb);
+    for (blasint j = 1; j <= Min(m, n); j += nb) {
+      const blasint jb = Min(Min(m, n) - j + 1, nb);
 
       // Factor diagonal and subdiagonal blocks and test for exact
       // singularity.
@@ -239,7 +239,7 @@ blasint Getrf(blasint m, blasint n, T* a, blasint lda, blasint* ipiv) {
 
       // Adjust INFO and the pivot indices.
       if (info == 0 && iinfo > 0) info = iinfo + j - 1;
-      for (blasint i = j; i <= std::min(m, j + jb - 1); ++i) {
+      for (blasint i = j; i <= Min(m, j + jb - 1); ++i) {
         IPIV(i) = j - 1 + IPIV(i);
       }
 

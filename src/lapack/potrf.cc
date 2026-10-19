@@ -51,7 +51,7 @@ blasint Potrf2(char uplo, blasint n, T* a, blasint lda) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
   }
   if (info != 0) {
@@ -128,7 +128,7 @@ blasint Potrf(char uplo, blasint n, T* a, blasint lda) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
   }
   if (info != 0) {
@@ -153,7 +153,7 @@ blasint Potrf(char uplo, blasint n, T* a, blasint lda) {
     for (blasint j = 1; j <= n; j += nb) {
       // Update and factorize the current diagonal block and test for
       // non-positive-definiteness.
-      const blasint jb = std::min(nb, n - j + 1);
+      const blasint jb = Min(nb, n - j + 1);
       Herk('U', 'C', jb, j - 1, -one, A.ptr(1, j), lda, one, A.ptr(j, j), lda);
       info = Potrf2('U', jb, A.ptr(j, j), lda);
       if (info != 0) return info + j - 1;
@@ -170,7 +170,7 @@ blasint Potrf(char uplo, blasint n, T* a, blasint lda) {
     for (blasint j = 1; j <= n; j += nb) {
       // Update and factorize the current diagonal block and test for
       // non-positive-definiteness.
-      const blasint jb = std::min(nb, n - j + 1);
+      const blasint jb = Min(nb, n - j + 1);
       Herk('L', 'N', jb, j - 1, -one, A.ptr(j, 1), lda, one, A.ptr(j, j), lda);
       info = Potrf2('L', jb, A.ptr(j, j), lda);
       if (info != 0) return info + j - 1;

@@ -41,7 +41,7 @@ blasint Geqr2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
   if (info != 0) {
@@ -49,10 +49,10 @@ blasint Geqr2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work) {
     return info;
   }
 
-  const blasint k = std::min(m, n);
+  const blasint k = Min(m, n);
   for (blasint i = 1; i <= k; ++i) {
     // Generate elementary reflector H(i) to annihilate A(i+1:m,i).
-    Larfg(m - i + 1, A.ptr(i, i), A.ptr(std::min(i + 1, m), i), 1, TAU.ptr(i));
+    Larfg(m - i + 1, A.ptr(i, i), A.ptr(Min(i + 1, m), i), 1, TAU.ptr(i));
     if (i < n) {
       // Apply H(i)**H to A(i:m,i+1:n) from the left.
       Larf1f('L', m - i + 1, n - i, A.ptr(i, i), 1, Conj(TAU(i)),
@@ -80,7 +80,7 @@ blasint Geqrf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   const Vector<T> WORK(work);
 
   // Test the input arguments.
-  const blasint k = std::min(m, n);
+  const blasint k = Min(m, n);
   blasint info = 0;
   blasint nb = Ilaenv<T>(1, "GEQRF", " ", m, n, -1, -1);
   const bool lquery = (lwork == -1);
@@ -88,10 +88,10 @@ blasint Geqrf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   } else if (!lquery) {
-    if (lwork <= 0 || (m > 0 && lwork < std::max<blasint>(1, n))) info = -7;
+    if (lwork <= 0 || (m > 0 && lwork < Max<blasint>(1, n))) info = -7;
   }
   if (info != 0) {
     Xerbla<T>("GEQRF", -info);
@@ -115,7 +115,7 @@ blasint Geqrf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   blasint ldwork = 0;
   if (nb > 1 && nb < k) {
     // Determine when to cross over from blocked to unblocked code.
-    nx = std::max<blasint>(0, Ilaenv<T>(3, "GEQRF", " ", m, n, -1, -1));
+    nx = Max<blasint>(0, Ilaenv<T>(3, "GEQRF", " ", m, n, -1, -1));
     if (nx < k) {
       // Determine if workspace is large enough for blocked code.
       ldwork = n;
@@ -124,7 +124,7 @@ blasint Geqrf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
         // Not enough workspace to use optimal NB: reduce NB and determine
         // the minimum value of NB.
         nb = lwork / ldwork;
-        nbmin = std::max<blasint>(2, Ilaenv<T>(2, "GEQRF", " ", m, n, -1, -1));
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, "GEQRF", " ", m, n, -1, -1));
       }
     }
   }
@@ -133,7 +133,7 @@ blasint Geqrf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   if (nb >= nbmin && nb < k && nx < k) {
     // Use blocked code initially.
     for (; i <= k - nx; i += nb) {
-      const blasint ib = std::min(k - i + 1, nb);
+      const blasint ib = Min(k - i + 1, nb);
 
       // Compute the QR factorization of the current block A(i:m,i:i+ib-1).
       Geqr2(m - i + 1, ib, A.ptr(i, i), lda, TAU.ptr(i), work);
@@ -181,7 +181,7 @@ blasint Gelq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   }
   if (info != 0) {
@@ -189,12 +189,11 @@ blasint Gelq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work) {
     return info;
   }
 
-  const blasint k = std::min(m, n);
+  const blasint k = Min(m, n);
   for (blasint i = 1; i <= k; ++i) {
     // Generate elementary reflector H(i) to annihilate A(i,i+1:n).
     Lacgv(n - i + 1, A.ptr(i, i), lda);
-    Larfg(n - i + 1, A.ptr(i, i), A.ptr(i, std::min(i + 1, n)), lda,
-          TAU.ptr(i));
+    Larfg(n - i + 1, A.ptr(i, i), A.ptr(i, Min(i + 1, n)), lda, TAU.ptr(i));
     if (i < m) {
       // Apply H(i) to A(i+1:m,i:n) from the right.
       Larf1f('R', m - i, n - i + 1, A.ptr(i, i), lda, TAU(i), A.ptr(i + 1, i),
@@ -219,17 +218,17 @@ blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
 
   // Test the input arguments.
   blasint info = 0;
-  const blasint k = std::min(m, n);
+  const blasint k = Min(m, n);
   blasint nb = Ilaenv<T>(1, "GELQF", " ", m, n, -1, -1);
   const bool lquery = (lwork == -1);
   if (m < 0) {
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -4;
   } else if (!lquery) {
-    if (lwork <= 0 || (n > 0 && lwork < std::max<blasint>(1, m))) info = -7;
+    if (lwork <= 0 || (n > 0 && lwork < Max<blasint>(1, m))) info = -7;
   }
   if (info != 0) {
     Xerbla<T>("GELQF", -info);
@@ -253,7 +252,7 @@ blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   blasint ldwork = 0;
   if (nb > 1 && nb < k) {
     // Determine when to cross over from blocked to unblocked code.
-    nx = std::max<blasint>(0, Ilaenv<T>(3, "GELQF", " ", m, n, -1, -1));
+    nx = Max<blasint>(0, Ilaenv<T>(3, "GELQF", " ", m, n, -1, -1));
     if (nx < k) {
       // Determine if workspace is large enough for blocked code.
       ldwork = m;
@@ -262,7 +261,7 @@ blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
         // Not enough workspace to use optimal NB: reduce NB and determine
         // the minimum value of NB.
         nb = lwork / ldwork;
-        nbmin = std::max<blasint>(2, Ilaenv<T>(2, "GELQF", " ", m, n, -1, -1));
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, "GELQF", " ", m, n, -1, -1));
       }
     }
   }
@@ -271,7 +270,7 @@ blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   if (nb >= nbmin && nb < k && nx < k) {
     // Use blocked code initially.
     for (; i <= k - nx; i += nb) {
-      const blasint ib = std::min(k - i + 1, nb);
+      const blasint ib = Min(k - i + 1, nb);
 
       // Compute the LQ factorization of the current block A(i:i+ib-1,i:n).
       Gelq2(ib, n - i + 1, A.ptr(i, i), lda, TAU.ptr(i), work);

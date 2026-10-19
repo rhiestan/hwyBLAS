@@ -65,7 +65,7 @@ blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
     info = -2;
   } else if (n < 0) {
     info = -4;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -6;
   } else if (ldvs < 1 || (wantvs && ldvs < n)) {
     info = -11;
@@ -89,11 +89,11 @@ blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
       ieval = Hseqr('S', jobvs, n, 1, n, a, lda, wr, wi, vs, ldvs, work, -1);
       hswork = static_cast<blasint>(WORK(1));
       if (!wantvs) {
-        maxwrk = std::max<blasint>(maxwrk, n + hswork);
+        maxwrk = Max<blasint>(maxwrk, n + hswork);
       } else {
-        maxwrk = std::max<blasint>(
+        maxwrk = Max<blasint>(
             maxwrk, 2 * n + (n - 1) * Ilaenv<T>(1, "ORGHR", " ", n, 1, n, -1));
-        maxwrk = std::max<blasint>(maxwrk, n + hswork);
+        maxwrk = Max<blasint>(maxwrk, n + hswork);
       }
     }
     WORK(1) = WorkSize<T>(maxwrk);
@@ -185,7 +185,7 @@ blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
         i1 = ieval + 1;
         i2 = ihi - 1;
         Lascl('G', 0, 0, cscale, anrm, ilo - 1, 1, wi,
-              std::max<blasint>(ilo - 1, 1));
+              Max<blasint>(ilo - 1, 1));
       } else if (wantst) {
         i1 = 1;
         i2 = n - 1;
@@ -221,7 +221,7 @@ blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
     }
     // Undo scaling for the imaginary part of the eigenvalues
     Lascl('G', 0, 0, cscale, anrm, n - ieval, 1, WI.ptr(ieval + 1),
-          std::max<blasint>(n - ieval, 1));
+          Max<blasint>(n - ieval, 1));
   }
   if (wantst && info == 0) {
     // Check if reordering successful
@@ -288,7 +288,7 @@ blasint Gees(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
     info = -2;
   } else if (n < 0) {
     info = -4;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -6;
   } else if (ldvs < 1 || (wantvs && ldvs < n)) {
     info = -10;
@@ -313,11 +313,11 @@ blasint Gees(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
       ieval = Hseqr('S', jobvs, n, 1, n, a, lda, w, vs, ldvs, work, -1);
       hswork = static_cast<blasint>(std::real(WORK(1)));
       if (!wantvs) {
-        maxwrk = std::max<blasint>(maxwrk, hswork);
+        maxwrk = Max<blasint>(maxwrk, hswork);
       } else {
-        maxwrk = std::max<blasint>(
+        maxwrk = Max<blasint>(
             maxwrk, n + (n - 1) * Ilaenv<T>(1, "UNGHR", " ", n, 1, n, -1));
-        maxwrk = std::max<blasint>(maxwrk, hswork);
+        maxwrk = Max<blasint>(maxwrk, hswork);
       }
     }
     WORK(1) = WorkSize<T>(maxwrk);

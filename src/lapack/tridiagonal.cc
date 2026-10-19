@@ -51,7 +51,7 @@ blasint Hetd2(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
   }
   if (info != 0) {
@@ -103,7 +103,7 @@ blasint Hetd2(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
       // annihilate A(i+2:n,i).
       T alpha = A(i + 1, i);
       T taui;
-      Larfg(n - i, &alpha, A.ptr(std::min(i + 2, n), i), 1, &taui);
+      Larfg(n - i, &alpha, A.ptr(Min(i + 2, n), i), 1, &taui);
       E(i) = std::real(alpha);
 
       if (taui != zero) {
@@ -213,7 +213,7 @@ void Latrd(char uplo, blasint n, blasint nb, T* a, blasint lda, RealT<T>* e,
       if (i < n) {
         // Generate elementary reflector H(i) to annihilate A(i+2:n,i).
         T alpha = A(i + 1, i);
-        Larfg(n - i, &alpha, A.ptr(std::min(i + 2, n), i), 1, TAU.ptr(i));
+        Larfg(n - i, &alpha, A.ptr(Min(i + 2, n), i), 1, TAU.ptr(i));
         E(i) = std::real(alpha);
         A(i + 1, i) = one;
 
@@ -265,7 +265,7 @@ blasint Hetrd(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
     info = -1;
   } else if (n < 0) {
     info = -2;
-  } else if (lda < std::max<blasint>(1, n)) {
+  } else if (lda < Max<blasint>(1, n)) {
     info = -4;
   } else if (lwork < 1 && !lquery) {
     info = -9;
@@ -275,7 +275,7 @@ blasint Hetrd(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
   if (info == 0) {
     // Determine the block size.
     nb = Ilaenv<T>(1, name, opts, n, -1, -1, -1);
-    lwkopt = std::max<blasint>(1, n * nb);
+    lwkopt = Max<blasint>(1, n * nb);
     WORK(1) = WorkSize<T>(lwkopt);
   }
 
@@ -296,7 +296,7 @@ blasint Hetrd(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
   if (nb > 1 && nb < n) {
     // Determine when to cross over from blocked to unblocked code (last
     // block is always handled by unblocked code).
-    nx = std::max(nb, Ilaenv<T>(3, name, opts, n, -1, -1, -1));
+    nx = Max(nb, Ilaenv<T>(3, name, opts, n, -1, -1, -1));
     if (nx < n) {
       // Determine if workspace is large enough for blocked code.
       ldwork = n;
@@ -305,7 +305,7 @@ blasint Hetrd(char uplo, blasint n, T* a, blasint lda, RealT<T>* d, RealT<T>* e,
         // Not enough workspace to use optimal NB: determine the minimum
         // value of NB, and reduce NB or force use of unblocked code by
         // setting NX = N.
-        nb = std::max<blasint>(lwork / ldwork, 1);
+        nb = Max<blasint>(lwork / ldwork, 1);
         const blasint nbmin = Ilaenv<T>(2, name, opts, n, -1, -1, -1);
         if (nb < nbmin) nx = n;
       }

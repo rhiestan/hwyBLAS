@@ -48,7 +48,7 @@ void Lacpy(char uplo, blasint m, blasint n, const T* a, blasint lda, T* b,
   const Matrix<T> B(b, ldb);
   if (Lsame(uplo, 'U')) {
     for (blasint j = 1; j <= n; ++j) {
-      for (blasint i = 1; i <= std::min(j, m); ++i) B(i, j) = A(i, j);
+      for (blasint i = 1; i <= Min(j, m); ++i) B(i, j) = A(i, j);
     }
   } else if (Lsame(uplo, 'L')) {
     for (blasint j = 1; j <= n; ++j) {
@@ -70,7 +70,7 @@ void Lacp2(char uplo, blasint m, blasint n, const RealT<T>* a, blasint lda,
   const Matrix<T> B(b, ldb);
   if (Lsame(uplo, 'U')) {
     for (blasint j = 1; j <= n; ++j) {
-      for (blasint i = 1; i <= std::min(j, m); ++i) B(i, j) = A(i, j);
+      for (blasint i = 1; i <= Min(j, m); ++i) B(i, j) = A(i, j);
     }
   } else if (Lsame(uplo, 'L')) {
     for (blasint j = 1; j <= n; ++j) {
@@ -262,8 +262,8 @@ R Lapy2(R x, R y) {
   if (!(x_is_nan || y_is_nan)) {
     const R xabs = std::abs(x);
     const R yabs = std::abs(y);
-    const R w = std::max(xabs, yabs);
-    const R z = std::min(xabs, yabs);
+    const R w = Max(xabs, yabs);
+    const R z = Min(xabs, yabs);
     if (z == zero || w > hugeval) {
       result = w;
     } else {
@@ -282,7 +282,7 @@ R Lapy3(R x, R y, R z) {
   const R xabs = std::abs(x);
   const R yabs = std::abs(y);
   const R zabs = std::abs(z);
-  const R w = std::max(std::max(xabs, yabs), zabs);
+  const R w = Max(Max(xabs, yabs), zabs);
   if (w == zero || w > hugeval) {
     // W can be zero for max(0,nan,0); adding all three entries together
     // will make sure NaN will not disappear.
@@ -333,8 +333,8 @@ void Ladiv(R a, R b, R c, R d, R* p, R* q) {
   R bb = b;
   R cc = c;
   R dd = d;
-  const R ab = std::max(std::abs(a), std::abs(b));
-  const R cd = std::max(std::abs(c), std::abs(d));
+  const R ab = Max(std::abs(a), std::abs(b));
+  const R cd = Max(std::abs(c), std::abs(d));
   R s = R(1);
 
   const R ov = Lamch<R>('O');
@@ -413,8 +413,8 @@ blasint Ilalr(blasint m, blasint n, const T* a, blasint lda) {
   blasint ilalr = 0;
   for (blasint j = 1; j <= n; ++j) {
     blasint i = m;
-    while (i >= 1 && A(std::max<blasint>(i, 1), j) == zero) i = i - 1;
-    ilalr = std::max(ilalr, i);
+    while (i >= 1 && A(Max<blasint>(i, 1), j) == zero) i = i - 1;
+    ilalr = Max(ilalr, i);
   }
   return ilalr;
 }
@@ -430,12 +430,12 @@ void Laset(char uplo, blasint m, blasint n, T alpha, T beta, T* a,
     // Set the strictly upper triangular or trapezoidal part of the array
     // to ALPHA.
     for (blasint j = 2; j <= n; ++j) {
-      for (blasint i = 1; i <= std::min(j - 1, m); ++i) A(i, j) = alpha;
+      for (blasint i = 1; i <= Min(j - 1, m); ++i) A(i, j) = alpha;
     }
   } else if (Lsame(uplo, 'L')) {
     // Set the strictly lower triangular or trapezoidal part of the array
     // to ALPHA.
-    for (blasint j = 1; j <= std::min(m, n); ++j) {
+    for (blasint j = 1; j <= Min(m, n); ++j) {
       for (blasint i = j + 1; i <= m; ++i) A(i, j) = alpha;
     }
   } else {
@@ -445,7 +445,7 @@ void Laset(char uplo, blasint m, blasint n, T alpha, T beta, T* a,
     }
   }
   // Set the first min(M,N) diagonal elements to BETA.
-  for (blasint i = 1; i <= std::min(m, n); ++i) A(i, i) = beta;
+  for (blasint i = 1; i <= Min(m, n); ++i) A(i, i) = beta;
 }
 
 // xLASCL: multiplies the M-by-N matrix A by the real scalar CTO/CFROM,
@@ -496,12 +496,12 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
     info = -6;
   } else if (n < 0 || (itype == 4 && n != m) || (itype == 5 && n != m)) {
     info = -7;
-  } else if (itype <= 3 && lda < std::max<blasint>(1, m)) {
+  } else if (itype <= 3 && lda < Max<blasint>(1, m)) {
     info = -9;
   } else if (itype >= 4) {
-    if (kl < 0 || kl > std::max<blasint>(m - 1, 0)) {
+    if (kl < 0 || kl > Max<blasint>(m - 1, 0)) {
       info = -2;
-    } else if (ku < 0 || ku > std::max<blasint>(n - 1, 0) ||
+    } else if (ku < 0 || ku > Max<blasint>(n - 1, 0) ||
                ((itype == 4 || itype == 5) && kl != ku)) {
       info = -3;
     } else if ((itype == 4 && lda < kl + 1) || (itype == 5 && lda < ku + 1) ||
@@ -570,12 +570,12 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
     } else if (itype == 2) {
       // Upper triangular matrix.
       for (blasint j = 1; j <= n; ++j) {
-        for (blasint i = 1; i <= std::min(j, m); ++i) A(i, j) = A(i, j) * mul;
+        for (blasint i = 1; i <= Min(j, m); ++i) A(i, j) = A(i, j) * mul;
       }
     } else if (itype == 3) {
       // Upper Hessenberg matrix.
       for (blasint j = 1; j <= n; ++j) {
-        for (blasint i = 1; i <= std::min(j + 1, m); ++i) {
+        for (blasint i = 1; i <= Min(j + 1, m); ++i) {
           A(i, j) = A(i, j) * mul;
         }
       }
@@ -584,7 +584,7 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
       const blasint k3 = kl + 1;
       const blasint k4 = n + 1;
       for (blasint j = 1; j <= n; ++j) {
-        for (blasint i = 1; i <= std::min(k3, k4 - j); ++i) {
+        for (blasint i = 1; i <= Min(k3, k4 - j); ++i) {
           A(i, j) = A(i, j) * mul;
         }
       }
@@ -593,7 +593,7 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
       const blasint k1 = ku + 2;
       const blasint k3 = ku + 1;
       for (blasint j = 1; j <= n; ++j) {
-        for (blasint i = std::max<blasint>(k1 - j, 1); i <= k3; ++i) {
+        for (blasint i = Max<blasint>(k1 - j, 1); i <= k3; ++i) {
           A(i, j) = A(i, j) * mul;
         }
       }
@@ -604,7 +604,7 @@ blasint Lascl(char type, blasint kl, blasint ku, RealT<T> cfrom, RealT<T> cto,
       const blasint k3 = 2 * kl + ku + 1;
       const blasint k4 = kl + ku + 1 + m;
       for (blasint j = 1; j <= n; ++j) {
-        for (blasint i = std::max(k1 - j, k2); i <= std::min(k3, k4 - j); ++i) {
+        for (blasint i = Max(k1 - j, k2); i <= Min(k3, k4 - j); ++i) {
           A(i, j) = A(i, j) * mul;
         }
       }

@@ -46,7 +46,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
       wntvs;
   R anrm, bignum, eps, smlnum;
   blasint info = 0;
-  minmn = std::min<blasint>(m, n);
+  minmn = Min<blasint>(m, n);
   wntua = Lsame(jobu, 'A');
   wntus = Lsame(jobu, 'S');
   wntuas = wntua || wntus;
@@ -66,7 +66,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
     info = -3;
   } else if (n < 0) {
     info = -4;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -6;
   } else if (ldu < 1 || (wntuas && ldu < m)) {
     info = -9;
@@ -107,91 +107,91 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntun) {
           // Path 1 (M much larger than N, JOBU='N')
           maxwrk = n + lwork_dgeqrf;
-          maxwrk = std::max<blasint>(maxwrk, 3 * n + lwork_dgebrd);
+          maxwrk = Max<blasint>(maxwrk, 3 * n + lwork_dgebrd);
           if (wntvo || wntvas)
-            maxwrk = std::max<blasint>(maxwrk, 3 * n + lwork_dorgbr_p);
-          maxwrk = std::max<blasint>(maxwrk, bdspac);
-          minwrk = std::max<blasint>(4 * n, bdspac);
+            maxwrk = Max<blasint>(maxwrk, 3 * n + lwork_dorgbr_p);
+          maxwrk = Max<blasint>(maxwrk, bdspac);
+          minwrk = Max<blasint>(4 * n, bdspac);
         } else if (wntuo && wntvn) {
           // Path 2 (M much larger than N, JOBU='O', JOBVT='N')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
-          maxwrk = std::max<blasint>(n * n + wrkbl, n * n + m * n + n);
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
+          maxwrk = Max<blasint>(n * n + wrkbl, n * n + m * n + n);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntuo && wntvas) {
           // Path 3 (M much larger than N, JOBU='O', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
-          maxwrk = std::max<blasint>(n * n + wrkbl, n * n + m * n + n);
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
+          maxwrk = Max<blasint>(n * n + wrkbl, n * n + m * n + n);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntus && wntvn) {
           // Path 4 (M much larger than N, JOBU='S', JOBVT='N')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntus && wntvo) {
           // Path 5 (M much larger than N, JOBU='S', JOBVT='O')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = 2 * n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntus && wntvas) {
           // Path 6 (M much larger than N, JOBU='S', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntua && wntvn) {
           // Path 7 (M much larger than N, JOBU='A', JOBVT='N')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntua && wntvo) {
           // Path 8 (M much larger than N, JOBU='A', JOBVT='O')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = 2 * n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         } else if (wntua && wntvas) {
           // Path 9 (M much larger than N, JOBU='A', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_dgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_dorgqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_dorgqr_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, 3 * n + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = n * n + wrkbl;
-          minwrk = std::max<blasint>(3 * n + m, bdspac);
+          minwrk = Max<blasint>(3 * n + m, bdspac);
         }
       } else {
         // Path 10 (M at least N, but not much larger)
@@ -201,18 +201,18 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntus || wntuo) {
           Ungbr('Q', m, n, n, a, lda, dum, dum, -1);
           lwork_dorgbr_q = static_cast<blasint>(dum[0]);
-          maxwrk = std::max<blasint>(maxwrk, 3 * n + lwork_dorgbr_q);
+          maxwrk = Max<blasint>(maxwrk, 3 * n + lwork_dorgbr_q);
         }
         if (wntua) {
           Ungbr('Q', m, m, n, a, lda, dum, dum, -1);
           lwork_dorgbr_q = static_cast<blasint>(dum[0]);
-          maxwrk = std::max<blasint>(maxwrk, 3 * n + lwork_dorgbr_q);
+          maxwrk = Max<blasint>(maxwrk, 3 * n + lwork_dorgbr_q);
         }
         if (!wntvn) {
-          maxwrk = std::max<blasint>(maxwrk, 3 * n + lwork_dorgbr_p);
+          maxwrk = Max<blasint>(maxwrk, 3 * n + lwork_dorgbr_p);
         }
-        maxwrk = std::max<blasint>(maxwrk, bdspac);
-        minwrk = std::max<blasint>(3 * n + m, bdspac);
+        maxwrk = Max<blasint>(maxwrk, bdspac);
+        minwrk = Max<blasint>(3 * n + m, bdspac);
       }
     } else if (minmn > 0) {
       // Compute space needed for DBDSQR
@@ -239,91 +239,91 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntvn) {
           // Path 1t(N much larger than M, JOBVT='N')
           maxwrk = m + lwork_dgelqf;
-          maxwrk = std::max<blasint>(maxwrk, 3 * m + lwork_dgebrd);
+          maxwrk = Max<blasint>(maxwrk, 3 * m + lwork_dgebrd);
           if (wntuo || wntuas)
-            maxwrk = std::max<blasint>(maxwrk, 3 * m + lwork_dorgbr_q);
-          maxwrk = std::max<blasint>(maxwrk, bdspac);
-          minwrk = std::max<blasint>(4 * m, bdspac);
+            maxwrk = Max<blasint>(maxwrk, 3 * m + lwork_dorgbr_q);
+          maxwrk = Max<blasint>(maxwrk, bdspac);
+          minwrk = Max<blasint>(4 * m, bdspac);
         } else if (wntvo && wntun) {
           // Path 2t(N much larger than M, JOBU='N', JOBVT='O')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
-          maxwrk = std::max<blasint>(m * m + wrkbl, m * m + m * n + m);
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
+          maxwrk = Max<blasint>(m * m + wrkbl, m * m + m * n + m);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntvo && wntuas) {
           // Path 3t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='O')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
-          maxwrk = std::max<blasint>(m * m + wrkbl, m * m + m * n + m);
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
+          maxwrk = Max<blasint>(m * m + wrkbl, m * m + m * n + m);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntvs && wntun) {
           // Path 4t(N much larger than M, JOBU='N', JOBVT='S')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntvs && wntuo) {
           // Path 5t(N much larger than M, JOBU='O', JOBVT='S')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = 2 * m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntvs && wntuas) {
           // Path 6t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='S')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_m);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntva && wntun) {
           // Path 7t(N much larger than M, JOBU='N', JOBVT='A')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntva && wntuo) {
           // Path 8t(N much larger than M, JOBU='O', JOBVT='A')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = 2 * m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         } else if (wntva && wntuas) {
           // Path 9t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='A')
           wrkbl = m + lwork_dgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_dorglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
-          wrkbl = std::max<blasint>(wrkbl, bdspac);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_dorglq_n);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dgebrd);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_p);
+          wrkbl = Max<blasint>(wrkbl, 3 * m + lwork_dorgbr_q);
+          wrkbl = Max<blasint>(wrkbl, bdspac);
           maxwrk = m * m + wrkbl;
-          minwrk = std::max<blasint>(3 * m + n, bdspac);
+          minwrk = Max<blasint>(3 * m + n, bdspac);
         }
       } else {
         // Path 10t(N greater than M, but not much larger)
@@ -334,21 +334,21 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Compute space needed for DORGBR P
           Ungbr('P', m, n, m, a, n, dum, dum, -1);
           lwork_dorgbr_p = static_cast<blasint>(dum[0]);
-          maxwrk = std::max<blasint>(maxwrk, 3 * m + lwork_dorgbr_p);
+          maxwrk = Max<blasint>(maxwrk, 3 * m + lwork_dorgbr_p);
         }
         if (wntva) {
           Ungbr('P', n, n, m, a, n, dum, dum, -1);
           lwork_dorgbr_p = static_cast<blasint>(dum[0]);
-          maxwrk = std::max<blasint>(maxwrk, 3 * m + lwork_dorgbr_p);
+          maxwrk = Max<blasint>(maxwrk, 3 * m + lwork_dorgbr_p);
         }
         if (!wntun) {
-          maxwrk = std::max<blasint>(maxwrk, 3 * m + lwork_dorgbr_q);
+          maxwrk = Max<blasint>(maxwrk, 3 * m + lwork_dorgbr_q);
         }
-        maxwrk = std::max<blasint>(maxwrk, bdspac);
-        minwrk = std::max<blasint>(3 * m + n, bdspac);
+        maxwrk = Max<blasint>(maxwrk, bdspac);
+        minwrk = Max<blasint>(3 * m + n, bdspac);
       }
     }
-    maxwrk = std::max<blasint>(maxwrk, minwrk);
+    maxwrk = Max<blasint>(maxwrk, minwrk);
     WORK(1) = WorkSize<T>(maxwrk);
     if (lwork < minwrk && !lquery) {
       info = -13;
@@ -423,14 +423,14 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         // Path 2 (M much larger than N, JOBU='O', JOBVT='N')
         // N left singular vectors to be overwritten on A and
         // no right singular vectors to be computed
-        if (lwork >= n * n + std::max<blasint>(4 * n, bdspac)) {
+        if (lwork >= n * n + Max<blasint>(4 * n, bdspac)) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n + n) + lda * n) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n + n) + lda * n) {
             // WORK(IU) is LDA by N, WORK(IR) is LDA by N
             ldwrku = lda;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n + n) + n * n) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n + n) + n * n) {
             // WORK(IU) is LDA by N, WORK(IR) is N by N
             ldwrku = lda;
             ldwrkr = n;
@@ -475,7 +475,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // WORK(IR), storing result in WORK(IU) and copying to A
           // (Workspace: need N*N + 2*N, prefer N*N + M*N + N)
           for (i = 1; i <= m; i += ldwrku) {
-            chunk = std::min<blasint>(m - i + 1, ldwrku);
+            chunk = Min<blasint>(m - i + 1, ldwrku);
             Gemm('N', 'N', chunk, n, n, one, A.ptr(i, 1), lda, WORK.ptr(ir),
                  ldwrkr, zero, WORK.ptr(iu), ldwrku);
             Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -505,14 +505,14 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         // Path 3 (M much larger than N, JOBU='O', JOBVT='S' or 'A')
         // N left singular vectors to be overwritten on A and
         // N right singular vectors to be computed in VT
-        if (lwork >= n * n + std::max<blasint>(4 * n, bdspac)) {
+        if (lwork >= n * n + Max<blasint>(4 * n, bdspac)) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n + n) + lda * n) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n + n) + lda * n) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by N
             ldwrku = lda;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n + n) + n * n) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n + n) + n * n) {
             // WORK(IU) is LDA by N and WORK(IR) is N by N
             ldwrku = lda;
             ldwrkr = n;
@@ -563,7 +563,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // WORK(IR), storing result in WORK(IU) and copying to A
           // (Workspace: need N*N + 2*N, prefer N*N + M*N + N)
           for (i = 1; i <= m; i += ldwrku) {
-            chunk = std::min<blasint>(m - i + 1, ldwrku);
+            chunk = Min<blasint>(m - i + 1, ldwrku);
             Gemm('N', 'N', chunk, n, n, one, A.ptr(i, 1), lda, WORK.ptr(ir),
                  ldwrkr, zero, WORK.ptr(iu), ldwrku);
             Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -612,7 +612,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 4 (M much larger than N, JOBU='S', JOBVT='N')
           // N left singular vectors to be computed in U and
           // no right singular vectors to be computed
-          if (lwork >= n * n + std::max<blasint>(4 * n, bdspac)) {
+          if (lwork >= n * n + Max<blasint>(4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -698,7 +698,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 5 (M much larger than N, JOBU='S', JOBVT='O')
           // N left singular vectors to be computed in U and
           // N right singular vectors to be overwritten on A
-          if (lwork >= 2 * n * n + std::max<blasint>(4 * n, bdspac)) {
+          if (lwork >= 2 * n * n + Max<blasint>(4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * n) {
@@ -811,7 +811,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // or 'A')
           // N left singular vectors to be computed in U and
           // N right singular vectors to be computed in VT
-          if (lwork >= n * n + std::max<blasint>(4 * n, bdspac)) {
+          if (lwork >= n * n + Max<blasint>(4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -911,7 +911,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 7 (M much larger than N, JOBU='A', JOBVT='N')
           // M left singular vectors to be computed in U and
           // no right singular vectors to be computed
-          if (lwork >= n * n + std::max<blasint>({n + m, 4 * n, bdspac})) {
+          if (lwork >= n * n + Max<blasint>(n + m, 4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -1001,7 +1001,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 8 (M much larger than N, JOBU='A', JOBVT='O')
           // M left singular vectors to be computed in U and
           // N right singular vectors to be overwritten on A
-          if (lwork >= 2 * n * n + std::max<blasint>({n + m, 4 * n, bdspac})) {
+          if (lwork >= 2 * n * n + Max<blasint>(n + m, 4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * n) {
@@ -1117,7 +1117,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // or 'A')
           // M left singular vectors to be computed in U and
           // N right singular vectors to be computed in VT
-          if (lwork >= n * n + std::max<blasint>({n + m, 4 * n, bdspac})) {
+          if (lwork >= n * n + Max<blasint>(n + m, 4 * n, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -1331,15 +1331,15 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         // Path 2t(N much larger than M, JOBU='N', JOBVT='O')
         // M right singular vectors to be overwritten on A and
         // no left singular vectors to be computed
-        if (lwork >= m * m + std::max<blasint>(4 * m, bdspac)) {
+        if (lwork >= m * m + Max<blasint>(4 * m, bdspac)) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n + m) + lda * m) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n + m) + lda * m) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by M
             ldwrku = lda;
             chunk = n;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n + m) + m * m) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n + m) + m * m) {
             // WORK(IU) is LDA by N and WORK(IR) is M by M
             ldwrku = lda;
             chunk = n;
@@ -1386,7 +1386,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // in A, storing result in WORK(IU) and copying to A
           // (Workspace: need M*M + 2*M, prefer M*M + M*N + M)
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Gemm('N', 'N', m, blk, m, one, WORK.ptr(ir), ldwrkr, A.ptr(1, i),
                  lda, zero, WORK.ptr(iu), ldwrku);
             Lacpy('F', m, blk, WORK.ptr(iu), ldwrku, A.ptr(1, i), lda);
@@ -1416,15 +1416,15 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
         // Path 3t(N much larger than M, JOBU='S' or 'A', JOBVT='O')
         // M right singular vectors to be overwritten on A and
         // M left singular vectors to be computed in U
-        if (lwork >= m * m + std::max<blasint>(4 * m, bdspac)) {
+        if (lwork >= m * m + Max<blasint>(4 * m, bdspac)) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n + m) + lda * m) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n + m) + lda * m) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by M
             ldwrku = lda;
             chunk = n;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n + m) + m * m) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n + m) + m * m) {
             // WORK(IU) is LDA by N and WORK(IR) is M by M
             ldwrku = lda;
             chunk = n;
@@ -1477,7 +1477,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // in A, storing result in WORK(IU) and copying to A
           // (Workspace: need M*M + 2*M, prefer M*M + M*N + M))
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Gemm('N', 'N', m, blk, m, one, WORK.ptr(ir), ldwrkr, A.ptr(1, i),
                  lda, zero, WORK.ptr(iu), ldwrku);
             Lacpy('F', m, blk, WORK.ptr(iu), ldwrku, A.ptr(1, i), lda);
@@ -1526,7 +1526,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 4t(N much larger than M, JOBU='N', JOBVT='S')
           // M right singular vectors to be computed in VT and
           // no left singular vectors to be computed
-          if (lwork >= m * m + std::max<blasint>(4 * m, bdspac)) {
+          if (lwork >= m * m + Max<blasint>(4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * m) {
@@ -1612,7 +1612,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 5t(N much larger than M, JOBU='O', JOBVT='S')
           // M right singular vectors to be computed in VT and
           // M left singular vectors to be overwritten on A
-          if (lwork >= 2 * m * m + std::max<blasint>(4 * m, bdspac)) {
+          if (lwork >= 2 * m * m + Max<blasint>(4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * m) {
@@ -1723,7 +1723,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // JOBVT='S')
           // M right singular vectors to be computed in VT and
           // M left singular vectors to be computed in U
-          if (lwork >= m * m + std::max<blasint>(4 * m, bdspac)) {
+          if (lwork >= m * m + Max<blasint>(4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * m) {
@@ -1823,7 +1823,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 7t(N much larger than M, JOBU='N', JOBVT='A')
           // N right singular vectors to be computed in VT and
           // no left singular vectors to be computed
-          if (lwork >= m * m + std::max<blasint>({n + m, 4 * m, bdspac})) {
+          if (lwork >= m * m + Max<blasint>(n + m, 4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * m) {
@@ -1912,7 +1912,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 8t(N much larger than M, JOBU='O', JOBVT='A')
           // N right singular vectors to be computed in VT and
           // M left singular vectors to be overwritten on A
-          if (lwork >= 2 * m * m + std::max<blasint>({n + m, 4 * m, bdspac})) {
+          if (lwork >= 2 * m * m + Max<blasint>(n + m, 4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * m) {
@@ -2026,7 +2026,7 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
           // JOBVT='A')
           // N right singular vectors to be computed in VT and
           // M left singular vectors to be computed in U
-          if (lwork >= m * m + std::max<blasint>({n + m, 4 * m, bdspac})) {
+          if (lwork >= m * m + Max<blasint>(n + m, 4 * m, bdspac)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * m) {
@@ -2254,7 +2254,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
       wntvs;
   R anrm, bignum, eps, smlnum;
   blasint info = 0;
-  minmn = std::min<blasint>(m, n);
+  minmn = Min<blasint>(m, n);
   wntua = Lsame(jobu, 'A');
   wntus = Lsame(jobu, 'S');
   wntuas = wntua || wntus;
@@ -2274,7 +2274,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
     info = -3;
   } else if (n < 0) {
     info = -4;
-  } else if (lda < std::max<blasint>(1, m)) {
+  } else if (lda < Max<blasint>(1, m)) {
     info = -6;
   } else if (ldu < 1 || (wntuas && ldu < m)) {
     info = -9;
@@ -2314,80 +2314,80 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntun) {
           // Path 1 (M much larger than N, JOBU='N')
           maxwrk = n + lwork_zgeqrf;
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zgebrd);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zgebrd);
           if (wntvo || wntvas)
-            maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_p);
+            maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_p);
           minwrk = 3 * n;
         } else if (wntuo && wntvn) {
           // Path 2 (M much larger than N, JOBU='O', JOBVT='N')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          maxwrk = std::max<blasint>(n * n + wrkbl, n * n + m * n);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          maxwrk = Max<blasint>(n * n + wrkbl, n * n + m * n);
           minwrk = 2 * n + m;
         } else if (wntuo && wntvas) {
           // Path 3 (M much larger than N, JOBU='O', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
-          maxwrk = std::max<blasint>(n * n + wrkbl, n * n + m * n);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
+          maxwrk = Max<blasint>(n * n + wrkbl, n * n + m * n);
           minwrk = 2 * n + m;
         } else if (wntus && wntvn) {
           // Path 4 (M much larger than N, JOBU='S', JOBVT='N')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
           maxwrk = n * n + wrkbl;
           minwrk = 2 * n + m;
         } else if (wntus && wntvo) {
           // Path 5 (M much larger than N, JOBU='S', JOBVT='O')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
           maxwrk = 2 * n * n + wrkbl;
           minwrk = 2 * n + m;
         } else if (wntus && wntvas) {
           // Path 6 (M much larger than N, JOBU='S', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
           maxwrk = n * n + wrkbl;
           minwrk = 2 * n + m;
         } else if (wntua && wntvn) {
           // Path 7 (M much larger than N, JOBU='A', JOBVT='N')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
           maxwrk = n * n + wrkbl;
           minwrk = 2 * n + m;
         } else if (wntua && wntvo) {
           // Path 8 (M much larger than N, JOBU='A', JOBVT='O')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
           maxwrk = 2 * n * n + wrkbl;
           minwrk = 2 * n + m;
         } else if (wntua && wntvas) {
           // Path 9 (M much larger than N, JOBU='A', JOBVT='S' or
           // 'A')
           wrkbl = n + lwork_zgeqrf;
-          wrkbl = std::max<blasint>(wrkbl, n + lwork_zungqr_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
-          wrkbl = std::max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, n + lwork_zungqr_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, 2 * n + lwork_zungbr_p);
           maxwrk = n * n + wrkbl;
           minwrk = 2 * n + m;
         }
@@ -2399,15 +2399,15 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntus || wntuo) {
           Ungbr('Q', m, n, n, a, lda, cdum, cdum, -1);
           lwork_zungbr_q = static_cast<blasint>(std::real(cdum[0]));
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_q);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_q);
         }
         if (wntua) {
           Ungbr('Q', m, m, n, a, lda, cdum, cdum, -1);
           lwork_zungbr_q = static_cast<blasint>(std::real(cdum[0]));
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_q);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_q);
         }
         if (!wntvn) {
-          maxwrk = std::max<blasint>(maxwrk, 2 * n + lwork_zungbr_p);
+          maxwrk = Max<blasint>(maxwrk, 2 * n + lwork_zungbr_p);
         }
         minwrk = 2 * n + m;
       }
@@ -2435,80 +2435,80 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (wntvn) {
           // Path 1t(N much larger than M, JOBVT='N')
           maxwrk = m + lwork_zgelqf;
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zgebrd);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zgebrd);
           if (wntuo || wntuas)
-            maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_q);
+            maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_q);
           minwrk = 3 * m;
         } else if (wntvo && wntun) {
           // Path 2t(N much larger than M, JOBU='N', JOBVT='O')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          maxwrk = std::max<blasint>(m * m + wrkbl, m * m + m * n);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          maxwrk = Max<blasint>(m * m + wrkbl, m * m + m * n);
           minwrk = 2 * m + n;
         } else if (wntvo && wntuas) {
           // Path 3t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='O')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
-          maxwrk = std::max<blasint>(m * m + wrkbl, m * m + m * n);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
+          maxwrk = Max<blasint>(m * m + wrkbl, m * m + m * n);
           minwrk = 2 * m + n;
         } else if (wntvs && wntun) {
           // Path 4t(N much larger than M, JOBU='N', JOBVT='S')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
           maxwrk = m * m + wrkbl;
           minwrk = 2 * m + n;
         } else if (wntvs && wntuo) {
           // Path 5t(N much larger than M, JOBU='O', JOBVT='S')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
           maxwrk = 2 * m * m + wrkbl;
           minwrk = 2 * m + n;
         } else if (wntvs && wntuas) {
           // Path 6t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='S')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_m);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_m);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
           maxwrk = m * m + wrkbl;
           minwrk = 2 * m + n;
         } else if (wntva && wntun) {
           // Path 7t(N much larger than M, JOBU='N', JOBVT='A')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
           maxwrk = m * m + wrkbl;
           minwrk = 2 * m + n;
         } else if (wntva && wntuo) {
           // Path 8t(N much larger than M, JOBU='O', JOBVT='A')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
           maxwrk = 2 * m * m + wrkbl;
           minwrk = 2 * m + n;
         } else if (wntva && wntuas) {
           // Path 9t(N much larger than M, JOBU='S' or 'A',
           // JOBVT='A')
           wrkbl = m + lwork_zgelqf;
-          wrkbl = std::max<blasint>(wrkbl, m + lwork_zunglq_n);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
-          wrkbl = std::max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
+          wrkbl = Max<blasint>(wrkbl, m + lwork_zunglq_n);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zgebrd);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_p);
+          wrkbl = Max<blasint>(wrkbl, 2 * m + lwork_zungbr_q);
           maxwrk = m * m + wrkbl;
           minwrk = 2 * m + n;
         }
@@ -2521,20 +2521,20 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Compute space needed for ZUNGBR P
           Ungbr('P', m, n, m, a, n, cdum, cdum, -1);
           lwork_zungbr_p = static_cast<blasint>(std::real(cdum[0]));
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_p);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_p);
         }
         if (wntva) {
           Ungbr('P', n, n, m, a, n, cdum, cdum, -1);
           lwork_zungbr_p = static_cast<blasint>(std::real(cdum[0]));
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_p);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_p);
         }
         if (!wntun) {
-          maxwrk = std::max<blasint>(maxwrk, 2 * m + lwork_zungbr_q);
+          maxwrk = Max<blasint>(maxwrk, 2 * m + lwork_zungbr_q);
         }
         minwrk = 2 * m + n;
       }
     }
-    maxwrk = std::max<blasint>(maxwrk, minwrk);
+    maxwrk = Max<blasint>(maxwrk, minwrk);
     WORK(1) = WorkSize<T>(maxwrk);
     if (lwork < minwrk && !lquery) {
       info = -13;
@@ -2616,11 +2616,11 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (lwork >= n * n + 3 * n) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n) + lda * n) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n) + lda * n) {
             // WORK(IU) is LDA by N, WORK(IR) is LDA by N
             ldwrku = lda;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n) + n * n) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n) + n * n) {
             // WORK(IU) is LDA by N, WORK(IR) is N by N
             ldwrku = lda;
             ldwrkr = n;
@@ -2671,7 +2671,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // (CWorkspace: need N*N+N, prefer N*N+M*N)
           // (RWorkspace: 0)
           for (i = 1; i <= m; i += ldwrku) {
-            chunk = std::min<blasint>(m - i + 1, ldwrku);
+            chunk = Min<blasint>(m - i + 1, ldwrku);
             Gemm('N', 'N', chunk, n, n, cone, A.ptr(i, 1), lda, WORK.ptr(ir),
                  ldwrkr, czero, WORK.ptr(iu), ldwrku);
             Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -2707,11 +2707,11 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (lwork >= n * n + 3 * n) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n) + lda * n) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n) + lda * n) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by N
             ldwrku = lda;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n) + n * n) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n) + n * n) {
             // WORK(IU) is LDA by N and WORK(IR) is N by N
             ldwrku = lda;
             ldwrkr = n;
@@ -2769,7 +2769,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // (CWorkspace: need N*N+N, prefer N*N+M*N)
           // (RWorkspace: 0)
           for (i = 1; i <= m; i += ldwrku) {
-            chunk = std::min<blasint>(m - i + 1, ldwrku);
+            chunk = Min<blasint>(m - i + 1, ldwrku);
             Gemm('N', 'N', chunk, n, n, cone, A.ptr(i, 1), lda, WORK.ptr(ir),
                  ldwrkr, czero, WORK.ptr(iu), ldwrku);
             Lacpy('F', chunk, n, WORK.ptr(iu), ldwrku, A.ptr(i, 1), lda);
@@ -3163,7 +3163,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 7 (M much larger than N, JOBU='A', JOBVT='N')
           // M left singular vectors to be computed in U and
           // no right singular vectors to be computed
-          if (lwork >= n * n + std::max<blasint>(n + m, 3 * n)) {
+          if (lwork >= n * n + Max<blasint>(n + m, 3 * n)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -3264,7 +3264,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 8 (M much larger than N, JOBU='A', JOBVT='O')
           // M left singular vectors to be computed in U and
           // N right singular vectors to be overwritten on A
-          if (lwork >= 2 * n * n + std::max<blasint>(n + m, 3 * n)) {
+          if (lwork >= 2 * n * n + Max<blasint>(n + m, 3 * n)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * n) {
@@ -3394,7 +3394,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // or 'A')
           // M left singular vectors to be computed in U and
           // N right singular vectors to be computed in VT
-          if (lwork >= n * n + std::max<blasint>(n + m, 3 * n)) {
+          if (lwork >= n * n + Max<blasint>(n + m, 3 * n)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * n) {
@@ -3637,12 +3637,12 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (lwork >= m * m + 3 * m) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n) + lda * m) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n) + lda * m) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by M
             ldwrku = lda;
             chunk = n;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n) + m * m) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n) + m * m) {
             // WORK(IU) is LDA by N and WORK(IR) is M by M
             ldwrku = lda;
             chunk = n;
@@ -3695,7 +3695,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // (CWorkspace: need M*M+M, prefer M*M+M*N)
           // (RWorkspace: 0)
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Gemm('N', 'N', m, blk, m, cone, WORK.ptr(ir), ldwrkr, A.ptr(1, i),
                  lda, czero, WORK.ptr(iu), ldwrku);
             Lacpy('F', m, blk, WORK.ptr(iu), ldwrku, A.ptr(1, i), lda);
@@ -3731,12 +3731,12 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
         if (lwork >= m * m + 3 * m) {
           // Sufficient workspace for a fast algorithm
           ir = 1;
-          if (lwork >= std::max<blasint>(wrkbl, lda * n) + lda * m) {
+          if (lwork >= Max<blasint>(wrkbl, lda * n) + lda * m) {
             // WORK(IU) is LDA by N and WORK(IR) is LDA by M
             ldwrku = lda;
             chunk = n;
             ldwrkr = lda;
-          } else if (lwork >= std::max<blasint>(wrkbl, lda * n) + m * m) {
+          } else if (lwork >= Max<blasint>(wrkbl, lda * n) + m * m) {
             // WORK(IU) is LDA by N and WORK(IR) is M by M
             ldwrku = lda;
             chunk = n;
@@ -3796,7 +3796,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // (CWorkspace: need M*M+M, prefer M*M+M*N))
           // (RWorkspace: 0)
           for (i = 1; i <= n; i += chunk) {
-            blk = std::min<blasint>(n - i + 1, chunk);
+            blk = Min<blasint>(n - i + 1, chunk);
             Gemm('N', 'N', m, blk, m, cone, WORK.ptr(ir), ldwrkr, A.ptr(1, i),
                  lda, czero, WORK.ptr(iu), ldwrku);
             Lacpy('F', m, blk, WORK.ptr(iu), ldwrku, A.ptr(1, i), lda);
@@ -4190,7 +4190,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 7t(N much larger than M, JOBU='N', JOBVT='A')
           // N right singular vectors to be computed in VT and
           // no left singular vectors to be computed
-          if (lwork >= m * m + std::max<blasint>(n + m, 3 * m)) {
+          if (lwork >= m * m + Max<blasint>(n + m, 3 * m)) {
             // Sufficient workspace for a fast algorithm
             ir = 1;
             if (lwork >= wrkbl + lda * m) {
@@ -4291,7 +4291,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // Path 8t(N much larger than M, JOBU='O', JOBVT='A')
           // N right singular vectors to be computed in VT and
           // M left singular vectors to be overwritten on A
-          if (lwork >= 2 * m * m + std::max<blasint>(n + m, 3 * m)) {
+          if (lwork >= 2 * m * m + Max<blasint>(n + m, 3 * m)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + 2 * lda * m) {
@@ -4420,7 +4420,7 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
           // JOBVT='A')
           // N right singular vectors to be computed in VT and
           // M left singular vectors to be computed in U
-          if (lwork >= m * m + std::max<blasint>(n + m, 3 * m)) {
+          if (lwork >= m * m + Max<blasint>(n + m, 3 * m)) {
             // Sufficient workspace for a fast algorithm
             iu = 1;
             if (lwork >= wrkbl + lda * m) {
