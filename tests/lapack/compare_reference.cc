@@ -32,7 +32,8 @@
 // The routines that take a factorization get the same one in both
 // libraries. The same holds for xPOTRF: the routines that take a Cholesky
 // factor get hwyBLAS's, and the drivers that factor with xPOTRF (xPOSV,
-// xPOSVX with FACT = 'N' or 'E') are compared with the tolerance. The
+// xPOSVX with FACT = 'N' or 'E', xSYGV, xSYGVD and their xHE* routines)
+// are compared with the tolerance. The
 // Bunch-Kaufman routines (xSYTRF, xHETRF and the routines and drivers
 // built on them) and xPSTRF have no such deviation and are compared
 // bitwise.
@@ -1518,7 +1519,7 @@ std::vector<T> Cholesky(const BlasLibrary& hwy, std::vector<T> a, I n,
   const I ld = std::max<I>(n, 1);
   I info = 0;
   hwy.Get<F>((std::string(Prefix<T>()) + "potrf_").c_str())(&uplo, &n, a.data(),
-                                                             &ld, &info, 1);
+                                                            &ld, &info, 1);
   return a;
 }
 
@@ -1626,8 +1627,8 @@ Result Porfs(const BlasLibrary& lib, const std::vector<T>& a,
   const std::string name = std::string(Prefix<T>()) + "porfs_";
   if constexpr (kComplex<T>) {
     using F = void (*)(const char*, const I*, const I*, const T*, const I*,
-                       const T*, const I*, const T*, const I*, T*, const I*,
-                       R*, R*, T*, R*, I*, size_t);
+                       const T*, const I*, const T*, const I*, T*, const I*, R*,
+                       R*, T*, R*, I*, size_t);
     std::vector<T> work(2 * ld);
     std::vector<R> rwork(ld);
     lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, f.data(), &ld,
@@ -1635,8 +1636,8 @@ Result Porfs(const BlasLibrary& lib, const std::vector<T>& a,
                              berr.data(), work.data(), rwork.data(), &info, 1);
   } else {
     using F = void (*)(const char*, const I*, const I*, const T*, const I*,
-                       const T*, const I*, const T*, const I*, T*, const I*,
-                       R*, R*, T*, I*, I*, size_t);
+                       const T*, const I*, const T*, const I*, T*, const I*, R*,
+                       R*, T*, I*, I*, size_t);
     std::vector<T> work(3 * ld);
     std::vector<I> iwork(ld);
     lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, f.data(), &ld,
@@ -1666,27 +1667,27 @@ Result Posvx(const BlasLibrary& lib, char fact, char uplo, std::vector<T> a,
   I info = 0;
   const std::string name = std::string(Prefix<T>()) + "posvx_";
   if constexpr (kComplex<T>) {
-    using F = void (*)(const char*, const char*, const I*, const I*, T*,
-                       const I*, T*, const I*, char*, R*, T*, const I*, T*,
-                       const I*, R*, R*, R*, T*, R*, I*, size_t, size_t,
-                       size_t);
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, T*, const I*, T*,
+                 const I*, char*, R*, T*, const I*, T*, const I*, R*, R*, R*,
+                 T*, R*, I*, size_t, size_t, size_t);
     std::vector<T> work(2 * ld);
     std::vector<R> rwork(ld);
     lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
                              &ld, &equed, s.data(), b.data(), &ld, x.data(),
-                             &ld, &rcond, ferr.data(), berr.data(),
-                             work.data(), rwork.data(), &info, 1, 1, 1);
+                             &ld, &rcond, ferr.data(), berr.data(), work.data(),
+                             rwork.data(), &info, 1, 1, 1);
   } else {
-    using F = void (*)(const char*, const char*, const I*, const I*, T*,
-                       const I*, T*, const I*, char*, R*, T*, const I*, T*,
-                       const I*, R*, R*, R*, T*, I*, I*, size_t, size_t,
-                       size_t);
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, T*, const I*, T*,
+                 const I*, char*, R*, T*, const I*, T*, const I*, R*, R*, R*,
+                 T*, I*, I*, size_t, size_t, size_t);
     std::vector<T> work(3 * ld);
     std::vector<I> iwork(ld);
     lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
                              &ld, &equed, s.data(), b.data(), &ld, x.data(),
-                             &ld, &rcond, ferr.data(), berr.data(),
-                             work.data(), iwork.data(), &info, 1, 1, 1);
+                             &ld, &rcond, ferr.data(), berr.data(), work.data(),
+                             iwork.data(), &info, 1, 1, 1);
   }
   const Kind factored = fact == 'F' ? Kind::kOther : Kind::kRounded;
   const Kind value = fact == 'F' ? Kind::kValues : Kind::kRounded;
@@ -1740,9 +1741,8 @@ Result Sytrf(const BlasLibrary& lib, bool herm, std::vector<T> a, I n,
   std::vector<I> ipiv(ld);
   std::vector<T> work(std::max<I>(lwork, 1));
   I info = 0;
-  lib.Get<F>(SyName<T>(herm, "trf_").c_str())(&uplo, &n, a.data(), &ld,
-                                              ipiv.data(), work.data(), &lwork,
-                                              &info, 1);
+  lib.Get<F>(SyName<T>(herm, "trf_").c_str())(
+      &uplo, &n, a.data(), &ld, ipiv.data(), work.data(), &lwork, &info, 1);
   Result r;
   r.lwork = std::real(work[0]);
   AddInt(r, "info", info);
@@ -1765,8 +1765,7 @@ Bk<T> Bunch(const BlasLibrary& hwy, bool herm, std::vector<T> a, I n,
   f(&uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), &q, &lwork, &info, 1);
   lwork = std::max<I>(1, static_cast<I>(std::real(q)));
   std::vector<T> work(lwork);
-  f(&uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), work.data(), &lwork, &info,
-    1);
+  f(&uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), work.data(), &lwork, &info, 1);
   return bk;
 }
 
@@ -1780,9 +1779,9 @@ Result Sytrs(const BlasLibrary& lib, bool herm, bool level3, Bk<T> bk,
     using F = void (*)(const char*, const I*, const I*, T*, const I*, const I*,
                        T*, const I*, T*, I*, size_t);
     std::vector<T> work(ld);
-    lib.Get<F>(SyName<T>(herm, "trs2_").c_str())(
-        &uplo, &n, &nrhs, bk.f.data(), &ld, bk.ipiv.data(), b.data(), &ld,
-        work.data(), &info, 1);
+    lib.Get<F>(SyName<T>(herm, "trs2_").c_str())(&uplo, &n, &nrhs, bk.f.data(),
+                                                 &ld, bk.ipiv.data(), b.data(),
+                                                 &ld, work.data(), &info, 1);
   } else {
     using F = void (*)(const char*, const I*, const I*, const T*, const I*,
                        const I*, T*, const I*, I*, size_t);
@@ -1799,8 +1798,8 @@ Result Sytrs(const BlasLibrary& lib, bool herm, bool level3, Bk<T> bk,
 
 template <typename T>
 Result Sytri(const BlasLibrary& lib, bool herm, Bk<T> bk, I n, char uplo) {
-  using F = void (*)(const char*, const I*, T*, const I*, const I*, T*, I*,
-                     size_t);
+  using F =
+      void (*)(const char*, const I*, T*, const I*, const I*, T*, I*, size_t);
   const I ld = std::max<I>(n, 1);
   std::vector<T> work(2 * ld);
   I info = 0;
@@ -1813,8 +1812,8 @@ Result Sytri(const BlasLibrary& lib, bool herm, Bk<T> bk, I n, char uplo) {
 }
 
 template <typename T>
-Result Sycon(const BlasLibrary& lib, bool herm, const Bk<T>& bk, I n,
-             char uplo, Real<T> anorm) {
+Result Sycon(const BlasLibrary& lib, bool herm, const Bk<T>& bk, I n, char uplo,
+             Real<T> anorm) {
   using R = Real<T>;
   const I ld = std::max<I>(n, 1);
   R rcond = -1;
@@ -1913,20 +1912,20 @@ Result Sysvx(const BlasLibrary& lib, bool herm, char fact, char uplo,
   I info = 0;
   const std::string name = SyName<T>(herm, "svx_");
   if constexpr (kComplex<T>) {
-    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
-                       const I*, T*, const I*, I*, const T*, const I*, T*,
-                       const I*, R*, R*, R*, T*, const I*, R*, I*, size_t,
-                       size_t);
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, const T*,
+                 const I*, T*, const I*, I*, const T*, const I*, T*, const I*,
+                 R*, R*, R*, T*, const I*, R*, I*, size_t, size_t);
     std::vector<R> rwork(ld);
     lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
                              &ld, ipiv.data(), b.data(), &ld, x.data(), &ld,
                              &rcond, ferr.data(), berr.data(), work.data(),
                              &lwork, rwork.data(), &info, 1, 1);
   } else {
-    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
-                       const I*, T*, const I*, I*, const T*, const I*, T*,
-                       const I*, R*, R*, R*, T*, const I*, I*, I*, size_t,
-                       size_t);
+    using F =
+        void (*)(const char*, const char*, const I*, const I*, const T*,
+                 const I*, T*, const I*, I*, const T*, const I*, T*, const I*,
+                 R*, R*, R*, T*, const I*, I*, I*, size_t, size_t);
     std::vector<I> iwork(ld);
     lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
                              &ld, ipiv.data(), b.data(), &ld, x.data(), &ld,
@@ -1947,8 +1946,8 @@ Result Sysvx(const BlasLibrary& lib, bool herm, char fact, char uplo,
 
 template <typename T>
 Result Syconv(const BlasLibrary& lib, Bk<T> bk, I n, char uplo, char way) {
-  using F = void (*)(const char*, const char*, const I*, T*, const I*,
-                     const I*, T*, I*, size_t, size_t);
+  using F = void (*)(const char*, const char*, const I*, T*, const I*, const I*,
+                     T*, I*, size_t, size_t);
   const I ld = std::max<I>(n, 1);
   std::vector<T> e(ld);
   I info = 0;
@@ -1961,8 +1960,7 @@ Result Syconv(const BlasLibrary& lib, Bk<T> bk, I n, char uplo, char way) {
   Add(r, "a", Kind::kOther, bk.f);
   Add(r, "e", Kind::kOther, e);
   if (way == 'R') {
-    f(&uplo, &way, &n, bk.f.data(), &ld, bk.ipiv.data(), e.data(), &info, 1,
-      1);
+    f(&uplo, &way, &n, bk.f.data(), &ld, bk.ipiv.data(), e.data(), &info, 1, 1);
     AddInt(r, "info", info);
     Add(r, "a reverted", Kind::kOther, bk.f);
   }
@@ -2073,8 +2071,8 @@ void RunSymmetric(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
                 });
         // LWORK < N: the factorization unblocked, the solution by xSYTRS.
         if (n > 1) {
-          snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c lwork=n-1",
-                   int(n), kind, uplo);
+          snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c lwork=n-1", int(n),
+                   kind, uplo);
           Case<T>(hwy, ref, sy + "sv", what, n, [&](const BlasLibrary& lib, I) {
             return Sysv(lib, herm, a, b, n, nrhs, uplo, n - 1);
           });
@@ -2114,6 +2112,344 @@ void RunSymmetric(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
                       return Syconv(lib, bk, n, uplo, way);
                     });
           }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Divide and conquer eigensolvers and the generalized symmetric-definite
+// problem
+
+// The workspaces of the divide and conquer routines that the comparison
+// does not query (the largest that xSTEDC needs; Case only varies LWORK).
+I LargeRwork(I n) { return 1 + 3 * n + 2 * n * 32 + 4 * n * n + 5 * n; }
+I LargeIwork(I n) { return 6 + 6 * n + 5 * n * 32; }
+
+// syevd and heevd.
+template <typename T>
+Result Syevd(const BlasLibrary& lib, std::vector<T> a, I n, char jobz,
+             char uplo, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(n, 1);
+  std::vector<R> w(std::max<I>(n, 1));
+  std::vector<T> work(std::max<I>(lwork, 1));
+  const I lrwork = lwork == -1 ? -1 : LargeRwork(n);
+  const I liwork = lwork == -1 ? -1 : LargeIwork(n);
+  std::vector<R> rwork(std::max<I>(lrwork, 1));
+  std::vector<I> iwork(std::max<I>(liwork, 1));
+  I info = 0;
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const I*, T*, const I*, R*, T*,
+                 const I*, R*, const I*, I*, const I*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "heevd_").c_str())(
+        &jobz, &uplo, &n, a.data(), &lda, w.data(), work.data(), &lwork,
+        rwork.data(), &lrwork, iwork.data(), &liwork, &info, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const I*, T*, const I*, R*, T*,
+                       const I*, I*, const I*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "syevd_").c_str())(
+        &jobz, &uplo, &n, a.data(), &lda, w.data(), work.data(), &lwork,
+        iwork.data(), &liwork, &info, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "w", Kind::kValues, w);
+  // With JOBZ = 'N', A is destroyed.
+  if (jobz == 'V') Add(r, "z", Kind::kOther, a);
+  return r;
+}
+
+// stedc (compz 'I', 'V' with the given z, 'N') and, for real T, stevd
+// (jobz 'V' for compz 'I', 'N').
+template <typename T>
+Result Stedc(const BlasLibrary& lib, bool stevd, std::vector<Real<T>> d,
+             std::vector<Real<T>> e, std::vector<T> z, I n, char compz,
+             I lwork) {
+  using R = Real<T>;
+  const I ldz = std::max<I>(n, 1);
+  e.resize(std::max<I>(n, 1));
+  std::vector<T> work(std::max<I>(lwork, 1));
+  const I lrwork = lwork == -1 ? -1 : LargeRwork(n);
+  const I liwork = lwork == -1 ? -1 : LargeIwork(n);
+  std::vector<R> rwork(std::max<I>(lrwork, 1));
+  std::vector<I> iwork(std::max<I>(liwork, 1));
+  I info = 0;
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, R*, R*, T*, const I*, T*,
+                       const I*, R*, const I*, I*, const I*, I*, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "stedc_").c_str())(
+        &compz, &n, d.data(), e.data(), z.data(), &ldz, work.data(), &lwork,
+        rwork.data(), &lrwork, iwork.data(), &liwork, &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, R*, R*, T*, const I*, T*,
+                       const I*, I*, const I*, I*, size_t);
+    const char jobz = compz == 'N' ? 'N' : 'V';
+    lib.Get<F>(
+        (std::string(Prefix<T>()) + (stevd ? "stevd_" : "stedc_")).c_str())(
+        stevd ? &jobz : &compz, &n, d.data(), e.data(), z.data(), &ldz,
+        work.data(), &lwork, iwork.data(), &liwork, &info, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "d", Kind::kValues, d);
+  // E is destroyed; it is the same in a faithful port (the deflation
+  // passes parts of it as RHO, which xLAED2 / xLAED8 modify).
+  Add(r, "e", Kind::kOther, e);
+  if (compz != 'N') Add(r, "z", Kind::kOther, z);
+  return r;
+}
+
+// The reflectors of the reduction to tridiagonal form by hwyBLAS's xSYTRD /
+// xHETRD.
+template <typename T>
+struct Reduction {
+  std::vector<T> a, tau;
+};
+
+template <typename T>
+Reduction<T> Tridiagonalize(const BlasLibrary& hwy, std::vector<T> a, I n,
+                            char uplo) {
+  using R = Real<T>;
+  const I lda = std::max<I>(n, 1), lwork = 64 * lda;
+  std::vector<R> d(lda), e(lda);
+  std::vector<T> tau(lda), work(lwork);
+  I info = 0;
+  using F = void (*)(const char*, const I*, T*, const I*, R*, R*, T*, T*,
+                     const I*, I*, size_t);
+  hwy.Get<F>(
+      (std::string(Prefix<T>()) + (kComplex<T> ? "hetrd_" : "sytrd_")).c_str())(
+      &uplo, &n, a.data(), &lda, d.data(), e.data(), tau.data(), work.data(),
+      &lwork, &info, 1);
+  return {a, tau};
+}
+
+// ormtr / unmtr, and ormql / unmql with the reflectors of uplo = 'U'.
+template <typename T>
+Result Ormtr(const BlasLibrary& lib, bool ql, const Reduction<T>& red,
+             std::vector<T> c, I n, I nc, char side, char uplo, char trans,
+             I lwork) {
+  const I lda = std::max<I>(n, 1);
+  const I m = side == 'L' ? n : nc, ncol = side == 'L' ? nc : n;
+  const I ldc = std::max<I>(m, 1);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  const std::string name =
+      std::string(Prefix<T>()) + (kComplex<T> ? "unm" : "orm");
+  if (ql) {
+    // The k = n-1 reflectors in columns 2..n, of order n-1.
+    const I k = std::max<I>(n - 1, 0);
+    const I mq = side == 'L' ? k : nc, nq = side == 'L' ? nc : k;
+    const I ldcq = std::max<I>(mq, 1);
+    using F = void (*)(const char*, const char*, const I*, const I*, const I*,
+                       const T*, const I*, const T*, T*, const I*, T*, const I*,
+                       I*, size_t, size_t);
+    lib.Get<F>((name + "ql_").c_str())(
+        &side, &trans, &mq, &nq, &k, red.a.data() + (n > 1 ? lda : 0), &lda,
+        red.tau.data(), c.data(), &ldcq, work.data(), &lwork, &info, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const char*, const I*,
+                       const I*, const T*, const I*, const T*, T*, const I*, T*,
+                       const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>((name + "tr_").c_str())(
+        &side, &uplo, &trans, &m, &ncol, red.a.data(), &lda, red.tau.data(),
+        c.data(), &ldc, work.data(), &lwork, &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "c", Kind::kOther, c);
+  return r;
+}
+
+// sygst / hegst with hwyBLAS's Cholesky factor f.
+template <typename T>
+Result Sygst(const BlasLibrary& lib, std::vector<T> a, const std::vector<T>& f,
+             I n, I itype, char uplo) {
+  const I lda = std::max<I>(n, 1);
+  I info = 0;
+  using F = void (*)(const I*, const char*, const I*, T*, const I*, const T*,
+                     const I*, I*, size_t);
+  lib.Get<F>(
+      (std::string(Prefix<T>()) + (kComplex<T> ? "hegst_" : "sygst_")).c_str())(
+      &itype, &uplo, &n, a.data(), &lda, f.data(), &lda, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// sygv / hegv and sygvd / hegvd. They factor B with xPOTRF, whose leaf
+// kernels round differently (see the top): all results with a tolerance.
+template <typename T>
+Result Sygv(const BlasLibrary& lib, bool dc, std::vector<T> a, std::vector<T> b,
+            I n, I itype, char jobz, char uplo, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(n, 1);
+  std::vector<R> w(lda);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  const I lrwork = lwork == -1 ? -1 : LargeRwork(n);
+  const I liwork = lwork == -1 ? -1 : LargeIwork(n);
+  std::vector<R> rwork(std::max<I>(std::max<I>(lrwork, 3 * n), 1));
+  std::vector<I> iwork(std::max<I>(liwork, 1));
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) +
+                           (kComplex<T> ? "hegv" : "sygv") + (dc ? "d_" : "_");
+  if (dc) {
+    if constexpr (kComplex<T>) {
+      using F = void (*)(const I*, const char*, const char*, const I*, T*,
+                         const I*, T*, const I*, R*, T*, const I*, R*, const I*,
+                         I*, const I*, I*, size_t, size_t);
+      lib.Get<F>(name.c_str())(&itype, &jobz, &uplo, &n, a.data(), &lda,
+                               b.data(), &lda, w.data(), work.data(), &lwork,
+                               rwork.data(), &lrwork, iwork.data(), &liwork,
+                               &info, 1, 1);
+    } else {
+      using F = void (*)(const I*, const char*, const char*, const I*, T*,
+                         const I*, T*, const I*, R*, T*, const I*, I*, const I*,
+                         I*, size_t, size_t);
+      lib.Get<F>(name.c_str())(&itype, &jobz, &uplo, &n, a.data(), &lda,
+                               b.data(), &lda, w.data(), work.data(), &lwork,
+                               iwork.data(), &liwork, &info, 1, 1);
+    }
+  } else {
+    if constexpr (kComplex<T>) {
+      using F =
+          void (*)(const I*, const char*, const char*, const I*, T*, const I*,
+                   T*, const I*, R*, T*, const I*, R*, I*, size_t, size_t);
+      lib.Get<F>(name.c_str())(&itype, &jobz, &uplo, &n, a.data(), &lda,
+                               b.data(), &lda, w.data(), work.data(), &lwork,
+                               rwork.data(), &info, 1, 1);
+    } else {
+      using F =
+          void (*)(const I*, const char*, const char*, const I*, T*, const I*,
+                   T*, const I*, R*, T*, const I*, I*, size_t, size_t);
+      lib.Get<F>(name.c_str())(&itype, &jobz, &uplo, &n, a.data(), &lda,
+                               b.data(), &lda, w.data(), work.data(), &lwork,
+                               &info, 1, 1);
+    }
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "w", Kind::kRounded, w);
+  if (jobz == 'V') Add(r, "z", Kind::kRounded, a);
+  Add(r, "b", Kind::kRounded, b);
+  return r;
+}
+
+// The divide and conquer routines for matrices of order n: Hermitian
+// random and with a multiple eigenvalue (I + ones: deflation), tridiagonal
+// random, split, graded and with clustered eigenvalues (Wilkinson), and
+// the generalized problems.
+template <typename T>
+void RunSyevd(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  using R = Real<T>;
+  char what[80];
+  const char ctrans = kComplex<T> ? 'C' : 'T';
+  for (const int kind : {0, 1}) {
+    std::vector<T> a = Hermitian<T>(n);
+    if (kind == 1) {
+      for (I j = 0; j < n; ++j) {
+        for (I i = 0; i < n; ++i) {
+          a[i + static_cast<size_t>(j) * n] = T(i == j ? 2 : 1);
+        }
+      }
+    }
+    for (const char uplo : {'U', 'L'}) {
+      for (const char jobz : {'V', 'N'}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d jobz=%c uplo=%c", int(n),
+                 kind, jobz, uplo);
+        Case<T>(hwy, ref, kComplex<T> ? "heevd" : "syevd", what, n,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Syevd(lib, a, n, jobz, uplo, lw);
+                });
+      }
+      if (kind == 1) continue;
+      const Reduction<T> red = Tridiagonalize(hwy, a, n, uplo);
+      const I nc = 3;
+      for (const char side : {'L', 'R'}) {
+        for (const char trans : {'N', ctrans}) {
+          const std::vector<T> c =
+              TestMatrix<T>(0, side == 'L' ? n : nc, side == 'L' ? nc : n);
+          snprintf(what, sizeof(what), "n=%d side=%c uplo=%c trans=%c", int(n),
+                   side, uplo, trans);
+          Case<T>(hwy, ref, kComplex<T> ? "unmtr" : "ormtr", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Ormtr(lib, false, red, c, n, nc, side, uplo, trans,
+                                 lw);
+                  });
+          if (uplo == 'U' && n > 1) {
+            const std::vector<T> cq = TestMatrix<T>(0, side == 'L' ? n - 1 : nc,
+                                                    side == 'L' ? nc : n - 1);
+            Case<T>(hwy, ref, kComplex<T> ? "unmql" : "ormql", what, n,
+                    [&](const BlasLibrary& lib, I lw) {
+                      return Ormtr(lib, true, red, cq, n, nc, side, uplo, trans,
+                                   lw);
+                    });
+          }
+        }
+      }
+    }
+  }
+
+  // Tridiagonal: random, split (zeros on the off-diagonal), graded, and
+  // Wilkinson (clustered eigenvalues).
+  for (const int kind : {0, 1, 2, 3}) {
+    std::vector<R> d(std::max<I>(n, 1)), e(std::max<I>(n, 1));
+    for (I i = 0; i < n; ++i) {
+      d[i] = std::real(Random<T>());
+      e[i] = std::real(Random<T>());
+      if (kind == 1 && i % 7 == 6) e[i] = 0;
+      if (kind == 2) {
+        d[i] *= static_cast<R>(std::ldexp(1.0, -(i % 20)));
+        e[i] *= static_cast<R>(std::ldexp(1.0, -(i % 20)));
+      }
+      if (kind == 3) {
+        d[i] = static_cast<R>(std::abs(n / 2 - i));
+        e[i] = 1;
+      }
+    }
+    const std::vector<T> z = TestMatrix<T>(0, n, n);
+    for (const char compz : {'I', 'V', 'N'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d compz=%c", int(n), kind,
+               compz);
+      Case<T>(hwy, ref, "stedc", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Stedc(lib, false, d, e, z, n, compz, lw);
+      });
+      if (!kComplex<T> && compz != 'V') {
+        Case<T>(hwy, ref, "stevd", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Stedc(lib, true, d, e, z, n, compz, lw);
+        });
+      }
+    }
+  }
+
+  // The generalized problem.
+  const std::vector<T> a = Hermitian<T>(n);
+  const std::vector<T> b = PositiveDefinite<T>(n);
+  for (const char uplo : {'U', 'L'}) {
+    const std::vector<T> f = Cholesky(hwy, b, n, uplo);
+    for (const I itype : {1, 2, 3}) {
+      snprintf(what, sizeof(what), "n=%d itype=%d uplo=%c", int(n), int(itype),
+               uplo);
+      Case<T>(hwy, ref, kComplex<T> ? "hegst" : "sygst", what, n,
+              [&](const BlasLibrary& lib, I) {
+                return Sygst(lib, a, f, n, itype, uplo);
+              });
+      for (const char jobz : {'V', 'N'}) {
+        snprintf(what, sizeof(what), "n=%d itype=%d jobz=%c uplo=%c", int(n),
+                 int(itype), jobz, uplo);
+        for (const bool dc : {false, true}) {
+          Case<T>(hwy, ref,
+                  std::string(kComplex<T> ? "hegv" : "sygv") + (dc ? "d" : ""),
+                  what, n, [&](const BlasLibrary& lib, I lw) {
+                    return Sygv(lib, dc, a, b, n, itype, jobz, uplo, lw);
+                  });
         }
       }
     }
@@ -2197,6 +2533,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunEigen<T>(hwy, ref, n);
     RunLinear<T>(hwy, ref, n);
     RunSymmetric<T>(hwy, ref, n);
+    RunSyevd<T>(hwy, ref, n);
   }
 }
 

@@ -56,6 +56,36 @@ class ScopedBlockSize {
   hwyblas_ilaenv_function previous_ = nullptr;
 };
 
+// Forces the maximum size SMLSIZ of the subproblems of divide and conquer
+// (ILAENV ispec = 9) while it exists, so that small matrices are split into
+// several levels.
+class ScopedSubproblemSize {
+ public:
+  explicit ScopedSubproblemSize(hwyblas_int smlsiz) {
+    smlsiz_ = smlsiz;
+    previous_ = hwyblas_set_ilaenv(smlsiz > 0 ? &Ilaenv : nullptr);
+  }
+  ~ScopedSubproblemSize() {
+    hwyblas_set_ilaenv(previous_);
+    smlsiz_ = 0;
+  }
+  ScopedSubproblemSize(const ScopedSubproblemSize&) = delete;
+  ScopedSubproblemSize& operator=(const ScopedSubproblemSize&) = delete;
+
+ private:
+  static hwyblas_int Ilaenv(const hwyblas_int* ispec, const char* name,
+                            const char* opts, const hwyblas_int* n1,
+                            const hwyblas_int* n2, const hwyblas_int* n3,
+                            const hwyblas_int* n4, size_t name_len,
+                            size_t opts_len) {
+    if (*ispec == 9) return smlsiz_;
+    return ilaenv_(ispec, name, opts, n1, n2, n3, n4, name_len, opts_len);
+  }
+
+  static inline hwyblas_int smlsiz_ = 0;
+  hwyblas_ilaenv_function previous_ = nullptr;
+};
+
 // Block sizes to test: ILAENV's own (0), unblocked (1), and small ones that
 // split small matrices into several blocks.
 inline const std::vector<hwyblas_int>& BlockSizes() {

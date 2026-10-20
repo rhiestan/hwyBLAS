@@ -64,13 +64,17 @@ The translator produces the conventions described in
   template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`),
   or as two overloads of the same name where their arguments differ (`WR`
   and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES, xGEEV, xGEEVX,
-  xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA). Where they differ
+  xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA; the complex Q
+  of ZSTEDC, ZLAED0, ZLAED7 and ZLAED8, whose other xLAED* routines are
+  real). Where they differ
   only in their workspaces (the real routine keeps a real vector in a part
   of WORK and has IWORK, the complex one keeps it in RWORK: xGECON, xGERFS,
   xGESVX, xTRCON, xTRRFS), one template takes `work`, `rwork` (complex T)
   and `iwork` (real T); its views have the complex routine's names and
   point into the real routine's WORK for real T, so that the statements
-  are the same (also xPOCON, xPORFS, xPOSVX, xSYCON, xSYRFS, xSYSVX).
+  are the same (also xPOCON, xPORFS, xPOSVX, xSYCON, xSYRFS, xSYSVX; and
+  xSYEV, xSYEVD, xSYGV, xSYGVD with their xHE* routines, which take
+  `rwork` for complex T only).
 - **Symmetric and Hermitian**: the real symmetric routines (`d`, `s`) are
   the complex *symmetric* ones (`z`/`c` `SY`) with `ABS` for `CABS1`, so
   `Sytrf`, `Sytrs`, `Sytri`, `Sycon` ... serve all four types and are
@@ -200,7 +204,11 @@ attention:
   arrays one array with two views (xLALN2);
 - `INT(WORK(1))` of a complex workspace query needs `std::real`;
 - `INFO` / `IERR` values the Fortran sets but never reads (the compiler
-  warns) are dropped, with a comment where it matters.
+  warns) are dropped, with a comment where it matters;
+- a scalar argument that the routine changes is a pointer, also where the
+  Fortran documents it as input: RHO of xLAED1 and xLAED7 is changed by
+  xLAED2 and xLAED8, and xLAED0 passes an element of E, which therefore
+  changes as in the Fortran.
 
 Once a file has been finished by hand, it is edited directly and not
 assembled again.
@@ -237,7 +245,9 @@ options; xTREVC3 and xTRSNA on the same Schur form; xGESV, xGESVX,
 xGETRS, xGETRI, xGECON, xGEEQU, xGERFS, xTRTRI, xTRTRS, xLATRS, xTRCON,
 xTRRFS, xLANTR; xPOSV, xPOSVX, xPOTRS, xPOTRI, xLAUUM, xPOCON, xPOEQU,
 xPORFS, xPSTRF; xSYTRF, xSYSV, xSYSVX, xSYTRS, xSYTRS2, xSYTRI, xSYCON,
-xSYRFS, xSYCONV and the xHE* routines) in both on the same matrices of
+xSYRFS, xSYCONV and the xHE* routines; xSYEVD / xHEEVD, xSTEDC, xSTEVD,
+xORMTR / xUNMTR, xORMQL / xUNMQL, xSYGST / xHEGST, xSYGV / xHEGV and
+xSYGVD / xHEGVD) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS
@@ -246,7 +256,7 @@ The exceptions are deviations that change rounding by design: the leaf
 kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
 factors the tool compares with a tolerance (their pivots and INFO
 exactly), as the results of the drivers that factor with them (xGESV,
-xGESVX, xPOSV, xPOSVX). The routines that take a factorization (or a
+xGESVX, xPOSV, xPOSVX, xSYGV, xSYGVD). The routines that take a factorization (or a
 Schur form, for xTREVC3 and xTRSNA) get the same one in both libraries; xGETRF and the
 drivers that factor with it (xGESV, xGESVX) only get matrices with clear
 pivots, since on graded matrices or ties the different rounding can

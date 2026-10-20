@@ -494,6 +494,21 @@ template <typename T>
 blasint Ungql(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
               T* work, blasint lwork);
 
+template <typename T>
+blasint Unm2l(char side, char trans, blasint m, blasint n, blasint k,
+              const T* a, blasint lda, const T* tau, T* c, blasint ldc,
+              T* work);
+
+template <typename T>
+blasint Unmql(char side, char trans, blasint m, blasint n, blasint k,
+              const T* a, blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork);
+
+template <typename T>
+blasint Unmtr(char side, char uplo, char trans, blasint m, blasint n,
+              const T* a, blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork);
+
 // ---------------------------------------------------------------------------
 // Symmetric (Hermitian) eigenproblems (tridiagonal.cc, ungtr.cc, steqr.cc,
 // syev.cc)
@@ -546,6 +561,113 @@ blasint Steqr(char compz, blasint n, RealT<T>* d, RealT<T>* e, T* z,
 template <typename T>
 blasint Heev(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
              T* work, blasint lwork, RealT<T>* rwork);
+
+// ---------------------------------------------------------------------------
+// Divide and conquer symmetric eigensolvers (stedc.cc, syevd.cc, sygv.cc)
+
+// The xLAED* routines are real (R); xSTEDC, xLAED0, xLAED7 and xLAED8 have
+// complex overloads (ZSTEDC, ZLAED0, ZLAED7, ZLAED8).
+template <typename R>
+void Laed5(blasint i, R* d, R* z, R* delta, R rho, R* dlam);
+
+template <typename R>
+blasint Laed4(blasint n, blasint i, R* d, R* z, R* delta, R rho, R* dlam);
+
+template <typename R>
+blasint Laed3(blasint k, blasint n, blasint n1, R* d, R* q, blasint ldq, R rho,
+              R* dlambda, R* q2, blasint* indx, blasint* ctot, R* w, R* s);
+
+template <typename R>
+blasint Laed2(blasint* k, blasint n, blasint n1, R* d, R* q, blasint ldq,
+              blasint* indxq, R* rho, R* z, R* dlambda, R* w, R* q2,
+              blasint* indx, blasint* indxc, blasint* indxp, blasint* coltyp);
+
+template <typename R>
+blasint Laed1(blasint n, R* d, R* q, blasint ldq, blasint* indxq, R* rho,
+              blasint cutpnt, R* work, blasint* iwork);
+
+template <typename R>
+blasint Laeda(blasint n, blasint tlvls, blasint curlvl, blasint curpbm,
+              blasint* prmptr, blasint* perm, blasint* givptr, blasint* givcol,
+              R* givnum, R* q, blasint* qptr, R* z, R* ztemp);
+
+template <typename R>
+blasint Laed9(blasint k, blasint kstart, blasint kstop, blasint n, R* d, R* q,
+              blasint ldq, R rho, R* dlambda, R* w, R* s, blasint lds);
+
+template <typename R>
+blasint Laed8(blasint icompq, blasint* k, blasint n, blasint qsiz, R* d, R* q,
+              blasint ldq, blasint* indxq, R* rho, blasint cutpnt, R* z,
+              R* dlambda, R* q2, blasint ldq2, R* w, blasint* perm,
+              blasint* givptr, blasint* givcol, R* givnum, blasint* indxp,
+              blasint* indx);
+template <typename T>
+blasint Laed8(blasint* k, blasint n, blasint qsiz, T* q, blasint ldq,
+              RealT<T>* d, RealT<T>* rho, blasint cutpnt, RealT<T>* z,
+              RealT<T>* dlambda, T* q2, blasint ldq2, RealT<T>* w,
+              blasint* indxp, blasint* indx, blasint* indxq, blasint* perm,
+              blasint* givptr, blasint* givcol, RealT<T>* givnum);
+
+template <typename R>
+blasint Laed7(blasint icompq, blasint n, blasint qsiz, blasint tlvls,
+              blasint curlvl, blasint curpbm, R* d, R* q, blasint ldq,
+              blasint* indxq, R* rho, blasint cutpnt, R* qstore, blasint* qptr,
+              blasint* prmptr, blasint* perm, blasint* givptr, blasint* givcol,
+              R* givnum, R* work, blasint* iwork);
+template <typename T>
+blasint Laed7(blasint n, blasint cutpnt, blasint qsiz, blasint tlvls,
+              blasint curlvl, blasint curpbm, RealT<T>* d, T* q, blasint ldq,
+              RealT<T>* rho, blasint* indxq, RealT<T>* qstore, blasint* qptr,
+              blasint* prmptr, blasint* perm, blasint* givptr, blasint* givcol,
+              RealT<T>* givnum, T* work, RealT<T>* rwork, blasint* iwork);
+
+template <typename R>
+blasint Laed0(blasint icompq, blasint qsiz, blasint n, R* d, R* e, R* q,
+              blasint ldq, R* qstore, blasint ldqs, R* work, blasint* iwork);
+template <typename T>
+blasint Laed0(blasint qsiz, blasint n, RealT<T>* d, RealT<T>* e, T* q,
+              blasint ldq, T* qstore, blasint ldqs, RealT<T>* rwork,
+              blasint* iwork);
+
+template <typename R>
+blasint Stedc(char compz, blasint n, R* d, R* e, R* z, blasint ldz, R* work,
+              blasint lwork, blasint* iwork, blasint liwork);
+template <typename T>
+blasint Stedc(char compz, blasint n, RealT<T>* d, RealT<T>* e, T* z,
+              blasint ldz, T* work, blasint lwork, RealT<T>* rwork,
+              blasint lrwork, blasint* iwork, blasint liwork);
+
+// rwork and lrwork are used for complex T only.
+template <typename T>
+blasint Heevd(char jobz, char uplo, blasint n, T* a, blasint lda, RealT<T>* w,
+              T* work, blasint lwork, RealT<T>* rwork, blasint lrwork,
+              blasint* iwork, blasint liwork);
+
+// B is restored on exit (complex T conjugates parts of it in between).
+template <typename T>
+blasint Hegs2(blasint itype, char uplo, blasint n, T* a, blasint lda, T* b,
+              blasint ldb);
+
+template <typename T>
+blasint Hegst(blasint itype, char uplo, blasint n, T* a, blasint lda, T* b,
+              blasint ldb);
+
+// rwork is used for complex T only (max(1, 3 * n - 2) elements).
+template <typename T>
+blasint Hegv(blasint itype, char jobz, char uplo, blasint n, T* a, blasint lda,
+             T* b, blasint ldb, RealT<T>* w, T* work, blasint lwork,
+             RealT<T>* rwork);
+
+// rwork and lrwork are used for complex T only.
+template <typename T>
+blasint Hegvd(blasint itype, char jobz, char uplo, blasint n, T* a, blasint lda,
+              T* b, blasint ldb, RealT<T>* w, T* work, blasint lwork,
+              RealT<T>* rwork, blasint lrwork, blasint* iwork, blasint liwork);
+
+// Real R only.
+template <typename R>
+blasint Stevd(char jobz, blasint n, R* d, R* e, R* z, blasint ldz, R* work,
+              blasint lwork, blasint* iwork, blasint liwork);
 
 // ---------------------------------------------------------------------------
 // Bidiagonal reduction (bidiagonal.cc)

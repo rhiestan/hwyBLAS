@@ -37,13 +37,17 @@ if(HWYBLAS_LAPACK)
     lapack/lapacke_geev.cc
     lapack/lapacke_linear.cc
     lapack/lapacke_symmetric.cc
+    lapack/lapacke_syevd.cc
     lapack/lasq.cc
     lapack/norms.cc
     lapack/posv.cc
     lapack/potrf.cc
     lapack/steqr.cc
     lapack/triangular.cc
+    lapack/stedc.cc
     lapack/syev.cc
+    lapack/syevd.cc
+    lapack/sygv.cc
     lapack/sysv.cc
     lapack/sytrf.cc
     lapack/tridiagonal.cc

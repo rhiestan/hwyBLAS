@@ -78,6 +78,18 @@ void Herk(char uplo, char trans, blasint n, blasint k, RealT<T> alpha,
                            &k, &alpha, Raw(a), &lda, &beta, Raw(c), &ldc);
 }
 
+// C := alpha * A * B + beta * C (side = 'L') or alpha * B * A + beta * C
+// (side = 'R') with symmetric (Hermitian) A, of which the triangle uplo is
+// referenced: xSYMM for real T, xHEMM for complex T.
+template <typename T>
+void Hemm(char side, char uplo, blasint m, blasint n, T alpha, const T* a,
+          blasint lda, const T* b, blasint ldb, T beta, T* c, blasint ldc) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, ssymm_, dsymm_, chemm_, zhemm_, &side, &uplo, &m,
+                           &n, Raw(&alpha), Raw(a), &lda, Raw(b), &ldb,
+                           Raw(&beta), Raw(c), &ldc);
+}
+
 // B := alpha * op(A) * B or alpha * B * op(A), A triangular.
 template <typename T>
 void Trmm(char side, char uplo, char transa, char diag, blasint m, blasint n,

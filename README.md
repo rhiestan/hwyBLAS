@@ -85,6 +85,10 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?heev` (Hermitian eigenproblem), `?hetrd`, `?hetd2`, `?ungtr`, `?ungql`, `?ung2l` | c z |
 | `?latrd`, `?steqr`, `?lasr` (tridiagonal reduction and QL / QR iteration) | s d c z |
 | `?sterf`, `?lae2`, `?laev2`, `?lartg`, `?lanst`, `?lasrt` | s d |
+| `?syevd` (symmetric eigenproblem by divide and conquer), `?sygv`, `?sygvd` (generalized symmetric-definite eigenproblem), `?sygst`, `?sygs2` (reduction to standard form), `?ormtr`, `?ormql`, `?orm2l` | s d |
+| `?heevd`, `?hegv`, `?hegvd`, `?hegst`, `?hegs2`, `?unmtr`, `?unmql`, `?unm2l` | c z |
+| `?stedc` (tridiagonal divide and conquer), `?laed0`, `?laed7`, `?laed8` | s d c z |
+| `?stevd`, `?laed1` - `?laed5`, `?laed9`, `?laeda` | s d |
 | `?gesvd` (singular value decomposition), `?gebrd`, `?gebd2`, `?labrd` (bidiagonal reduction), `?bdsqr` (bidiagonal QR iteration) | s d c z |
 | `?orgbr`, `?ormbr` (Q and P of the bidiagonal reduction) | s d |
 | `?ungbr`, `?unmbr` | c z |
