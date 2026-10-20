@@ -60,7 +60,8 @@ The translator produces the conventions described in
   `if constexpr`, or the two are ported as separate functions behind one
   template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`),
   or as two overloads of the same name where their arguments differ (`WR`
-  and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES). Where they differ
+  and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES, xGEEV, xGEEVX,
+  xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA). Where they differ
   only in their workspaces (the real routine keeps a real vector in a part
   of WORK and has IWORK, the complex one keeps it in RWORK: xGECON, xGERFS,
   xGESVX, xTRCON, xTRRFS), one template takes `work`, `rwork` (complex T)
@@ -77,7 +78,8 @@ python doc/fortran_port/f2cc.py ../LAPACK/lapack-3.12.1/SRC/dlamrg.f > tr/dlamrg
 The script:
 
 1. Joins continuation lines and keeps comments (without the `*>` Doxygen
-   block and the `..` separators). Statements are upper-cased (Fortran is
+   block and the `..` separators; trailing `!` comments, as in xTREVC3,
+   are dropped). Statements are upper-cased (Fortran is
    case-insensitive, and newer routines such as xLAQR0 are partly lower
    case).
 2. Collects the declarations: types, array ranks, `PARAMETER`s,
@@ -214,7 +216,8 @@ comparison sees them. It builds the reference LAPACK as a shared library
 (without floating-point contraction) against hwyBLAS's BLAS, loads it next
 to hwyBLAS in one process, redirects hwyBLAS's ILAENV to the reference one
 and calls every driver (xGETRF, xPOTRF, xGEQRF, xGELQF, xGEQP3,
-xSYEV/xHEEV, xGESVD, xGESDD, xGEES, with all job options; xGESV, xGESVX,
+xSYEV/xHEEV, xGESVD, xGESDD, xGEES, xGEEV, xGEEVX, xGEESX, with all job
+options; xTREVC3 and xTRSNA on the same Schur form; xGESV, xGESVX,
 xGETRS, xGETRI, xGECON, xGEEQU, xGERFS, xTRTRI, xTRTRS, xLATRS, xTRCON,
 xTRRFS, xLANTR) in both on the same matrices of orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
@@ -223,9 +226,10 @@ and of the error estimates of xGERFS, which the unit tests cannot see).
 The exceptions are deviations that change rounding by design: the leaf
 kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
 factors the tool compares with a tolerance (their pivots and INFO
-exactly). The routines that take a factorization get the same one in both
-libraries; the drivers that factor (xGESV, xGESVX) only get matrices with
-clear pivots, since on graded matrices or ties the different rounding can
+exactly). The routines that take a factorization (or a Schur form, for
+xTREVC3 and xTRSNA) get the same one in both libraries; xGETRF and the
+drivers that factor with it (xGESV, xGESVX) only get matrices with clear
+pivots, since on graded matrices or ties the different rounding can
 change a pivot. The complex results differ in the last bits, because
 flang evaluates mixed real and complex operations as complex ones (for
 COMPLEX / REAL a full complex division, for REAL * COMPLEX a complex

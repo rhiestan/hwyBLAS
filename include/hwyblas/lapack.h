@@ -1827,6 +1827,115 @@ HWYBLAS_API void zgees_(const char* jobvs, const char* sort,
                         double* work, const hwyblas_int* lwork, double* rwork,
                         hwyblas_int* bwork, hwyblas_int* info);
 
+/* The eigenvalues (wr + i*wi, or w) of the n x n matrix A
+ * (destroyed) and for jobvl / jobvr = 'V' its left / right eigenvectors
+ * (vl, vr; real routines: a complex conjugate pair j, j+1 has the vectors
+ * v(:,j) +- i*v(:,j+1)), normalized to norm 1 with a real largest
+ * component. work: lwork >= max(1, 3n), 4n with eigenvectors (real), or
+ * max(1, 2n) (complex) elements (lwork = -1: query); rwork: 2n. info > 0:
+ * the QR algorithm failed, eigenvalues info+1:n have converged. */
+HWYBLAS_API void sgeev_(const char* jobvl, const char* jobvr,
+                        const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                        float* wr, float* wi, float* vl,
+                        const hwyblas_int* ldvl, float* vr,
+                        const hwyblas_int* ldvr, float* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dgeev_(const char* jobvl, const char* jobvr,
+                        const hwyblas_int* n, double* a, const hwyblas_int* lda,
+                        double* wr, double* wi, double* vl,
+                        const hwyblas_int* ldvl, double* vr,
+                        const hwyblas_int* ldvr, double* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void cgeev_(const char* jobvl, const char* jobvr,
+                        const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                        float* w, float* vl, const hwyblas_int* ldvl, float* vr,
+                        const hwyblas_int* ldvr, float* work,
+                        const hwyblas_int* lwork, float* rwork,
+                        hwyblas_int* info);
+HWYBLAS_API void zgeev_(const char* jobvl, const char* jobvr,
+                        const hwyblas_int* n, double* a, const hwyblas_int* lda,
+                        double* w, double* vl, const hwyblas_int* ldvl,
+                        double* vr, const hwyblas_int* ldvr, double* work,
+                        const hwyblas_int* lwork, double* rwork,
+                        hwyblas_int* info);
+
+/* ?geev with balancing (balanc = 'N', 'P', 'S' or 'B'; ilo,
+ * ihi and scale as for ?gebal; abnrm: the 1-norm of the balanced matrix)
+ * and reciprocal condition numbers of the eigenvalues (sense = 'E',
+ * rconde; needs both eigenvector sets) and/or right eigenvectors ('V',
+ * rcondv; 'B': both). work: lwork >= max(1, 2n), 3n with eigenvectors,
+ * n*n + 6n for sense = 'V' or 'B' (real); max(1, 2n), n*n + 2n for 'V' or
+ * 'B' (complex); iwork: 2n - 2; rwork: 2n. */
+HWYBLAS_API void sgeevx_(
+    const char* balanc, const char* jobvl, const char* jobvr, const char* sense,
+    const hwyblas_int* n, float* a, const hwyblas_int* lda, float* wr,
+    float* wi, float* vl, const hwyblas_int* ldvl, float* vr,
+    const hwyblas_int* ldvr, hwyblas_int* ilo, hwyblas_int* ihi, float* scale,
+    float* abnrm, float* rconde, float* rcondv, float* work,
+    const hwyblas_int* lwork, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dgeevx_(
+    const char* balanc, const char* jobvl, const char* jobvr, const char* sense,
+    const hwyblas_int* n, double* a, const hwyblas_int* lda, double* wr,
+    double* wi, double* vl, const hwyblas_int* ldvl, double* vr,
+    const hwyblas_int* ldvr, hwyblas_int* ilo, hwyblas_int* ihi, double* scale,
+    double* abnrm, double* rconde, double* rcondv, double* work,
+    const hwyblas_int* lwork, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void cgeevx_(const char* balanc, const char* jobvl,
+                         const char* jobvr, const char* sense,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         float* w, float* vl, const hwyblas_int* ldvl,
+                         float* vr, const hwyblas_int* ldvr, hwyblas_int* ilo,
+                         hwyblas_int* ihi, float* scale, float* abnrm,
+                         float* rconde, float* rcondv, float* work,
+                         const hwyblas_int* lwork, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zgeevx_(
+    const char* balanc, const char* jobvl, const char* jobvr, const char* sense,
+    const hwyblas_int* n, double* a, const hwyblas_int* lda, double* w,
+    double* vl, const hwyblas_int* ldvl, double* vr, const hwyblas_int* ldvr,
+    hwyblas_int* ilo, hwyblas_int* ihi, double* scale, double* abnrm,
+    double* rconde, double* rcondv, double* work, const hwyblas_int* lwork,
+    double* rwork, hwyblas_int* info);
+
+/* ?gees with the reciprocal condition numbers of the average of
+ * the selected eigenvalues (sense = 'E', rconde) and/or of their right
+ * invariant subspace ('V', rcondv; 'B': both; needs sort = 'S'). work:
+ * lwork >= max(1, 3n) (real), max(1, 2n) (complex), plus 2*sdim*(n-sdim)
+ * for sense != 'N' (n*n/2 suffices); iwork: liwork >= sdim*(n-sdim) for
+ * 'V' or 'B' (lwork, liwork = -1: query). info = -16 / -18 (real), -15
+ * (complex): workspace too small for sdim. */
+HWYBLAS_API void sgeesx_(const char* jobvs, const char* sort,
+                         hwyblas_select2_float select, const char* sense,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* sdim, float* wr, float* wi, float* vs,
+                         const hwyblas_int* ldvs, float* rconde, float* rcondv,
+                         float* work, const hwyblas_int* lwork,
+                         hwyblas_int* iwork, const hwyblas_int* liwork,
+                         hwyblas_int* bwork, hwyblas_int* info);
+HWYBLAS_API void dgeesx_(const char* jobvs, const char* sort,
+                         hwyblas_select2_double select, const char* sense,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* sdim, double* wr,
+                         double* wi, double* vs, const hwyblas_int* ldvs,
+                         double* rconde, double* rcondv, double* work,
+                         const hwyblas_int* lwork, hwyblas_int* iwork,
+                         const hwyblas_int* liwork, hwyblas_int* bwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgeesx_(const char* jobvs, const char* sort,
+                         hwyblas_select1_float select, const char* sense,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         hwyblas_int* sdim, float* w, float* vs,
+                         const hwyblas_int* ldvs, float* rconde, float* rcondv,
+                         float* work, const hwyblas_int* lwork, float* rwork,
+                         hwyblas_int* bwork, hwyblas_int* info);
+HWYBLAS_API void zgeesx_(const char* jobvs, const char* sort,
+                         hwyblas_select1_double select, const char* sense,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* sdim, double* w,
+                         double* vs, const hwyblas_int* ldvs, double* rconde,
+                         double* rcondv, double* work, const hwyblas_int* lwork,
+                         double* rwork, hwyblas_int* bwork, hwyblas_int* info);
+
 /* Balancing (?gebal: job = 'N', 'P' permute, 'S' scale or 'B' both;
  * scale: n elements) and back-transformation of eigenvectors (?gebak,
  * side = 'R' or 'L'). */
@@ -2355,6 +2464,97 @@ HWYBLAS_API void zlarfx_(const char* side, const hwyblas_int* m,
                          const hwyblas_int* n, const double* v,
                          const double* tau, double* c, const hwyblas_int* ldc,
                          double* work);
+
+/* Eigenvectors of the Schur form T (?hseqr): right (side = 'R'),
+ * left ('L') or both ('B'); all of them (howmny = 'A'), all back-transformed
+ * with the Schur vectors in vl / vr ('B'), or the ones selected by the
+ * LOGICAL array select ('S'; real routines: normalizes select for complex
+ * pairs). mm: columns of vl / vr; m: columns used. work: lwork >= max(1,
+ * 3n) (real) or max(1, 2n) (complex), more for the blocked back-transform
+ * (lwork = -1: query); rwork: lrwork >= max(1, n). */
+HWYBLAS_API void strevc3_(const char* side, const char* howmny,
+                          hwyblas_int* select, const hwyblas_int* n,
+                          const float* t, const hwyblas_int* ldt, float* vl,
+                          const hwyblas_int* ldvl, float* vr,
+                          const hwyblas_int* ldvr, const hwyblas_int* mm,
+                          hwyblas_int* m, float* work, const hwyblas_int* lwork,
+                          hwyblas_int* info);
+HWYBLAS_API void dtrevc3_(const char* side, const char* howmny,
+                          hwyblas_int* select, const hwyblas_int* n,
+                          const double* t, const hwyblas_int* ldt, double* vl,
+                          const hwyblas_int* ldvl, double* vr,
+                          const hwyblas_int* ldvr, const hwyblas_int* mm,
+                          hwyblas_int* m, double* work,
+                          const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void ctrevc3_(const char* side, const char* howmny,
+                          const hwyblas_int* select, const hwyblas_int* n,
+                          float* t, const hwyblas_int* ldt, float* vl,
+                          const hwyblas_int* ldvl, float* vr,
+                          const hwyblas_int* ldvr, const hwyblas_int* mm,
+                          hwyblas_int* m, float* work, const hwyblas_int* lwork,
+                          float* rwork, const hwyblas_int* lrwork,
+                          hwyblas_int* info);
+HWYBLAS_API void ztrevc3_(const char* side, const char* howmny,
+                          const hwyblas_int* select, const hwyblas_int* n,
+                          double* t, const hwyblas_int* ldt, double* vl,
+                          const hwyblas_int* ldvl, double* vr,
+                          const hwyblas_int* ldvr, const hwyblas_int* mm,
+                          hwyblas_int* m, double* work,
+                          const hwyblas_int* lwork, double* rwork,
+                          const hwyblas_int* lrwork, hwyblas_int* info);
+
+/* Reciprocal condition numbers of eigenvalues (job = 'E', s) and/or
+ * right eigenvectors ('V', sep; 'B': both) of the Schur form T, for all
+ * (howmny = 'A') or the selected ('S') eigenpairs; vl / vr: their
+ * eigenvectors (?trevc3). work: ldwork x (n+6) (real) or (n+1) (complex);
+ * iwork: 2(n-1); rwork: n. */
+HWYBLAS_API void strsna_(const char* job, const char* howmny,
+                         const hwyblas_int* select, const hwyblas_int* n,
+                         const float* t, const hwyblas_int* ldt,
+                         const float* vl, const hwyblas_int* ldvl,
+                         const float* vr, const hwyblas_int* ldvr, float* s,
+                         float* sep, const hwyblas_int* mm, hwyblas_int* m,
+                         float* work, const hwyblas_int* ldwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dtrsna_(const char* job, const char* howmny,
+                         const hwyblas_int* select, const hwyblas_int* n,
+                         const double* t, const hwyblas_int* ldt,
+                         const double* vl, const hwyblas_int* ldvl,
+                         const double* vr, const hwyblas_int* ldvr, double* s,
+                         double* sep, const hwyblas_int* mm, hwyblas_int* m,
+                         double* work, const hwyblas_int* ldwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void ctrsna_(const char* job, const char* howmny,
+                         const hwyblas_int* select, const hwyblas_int* n,
+                         const float* t, const hwyblas_int* ldt,
+                         const float* vl, const hwyblas_int* ldvl,
+                         const float* vr, const hwyblas_int* ldvr, float* s,
+                         float* sep, const hwyblas_int* mm, hwyblas_int* m,
+                         float* work, const hwyblas_int* ldwork, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void ztrsna_(const char* job, const char* howmny,
+                         const hwyblas_int* select, const hwyblas_int* n,
+                         const double* t, const hwyblas_int* ldt,
+                         const double* vl, const hwyblas_int* ldvl,
+                         const double* vr, const hwyblas_int* ldvr, double* s,
+                         double* sep, const hwyblas_int* mm, hwyblas_int* m,
+                         double* work, const hwyblas_int* ldwork, double* rwork,
+                         hwyblas_int* info);
+
+/* Solves op(T)*p = scale*c (lreal) or op(T + iB)*(p+iq) =
+ * scale*(c+id) in real arithmetic with the quasi-triangular T (ltran:
+ * op(T) = T**T; ltran and lreal are LOGICALs; B = diag(w, b(2:n))); x
+ * holds c (and d) and returns the solution; work: n. */
+HWYBLAS_API void slaqtr_(const hwyblas_int* ltran, const hwyblas_int* lreal,
+                         const hwyblas_int* n, const float* t,
+                         const hwyblas_int* ldt, const float* b, const float* w,
+                         float* scale, float* x, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dlaqtr_(const hwyblas_int* ltran, const hwyblas_int* lreal,
+                         const hwyblas_int* n, const double* t,
+                         const hwyblas_int* ldt, const double* b,
+                         const double* w, double* scale, double* x,
+                         double* work, hwyblas_int* info);
 
 /* Complex auxiliary routines: ?lartg (a plane rotation with real c and
  * complex s), ?rot (applies one; the BLAS's csrot / zdrot have a real

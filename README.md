@@ -93,6 +93,8 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?unghr`, `?unmhr` | c z |
 | `?hseqr`, `?laqr0` - `?laqr5`, `?lahqr` (Hessenberg QR algorithm), `?trsen`, `?trexc`, `?trsyl`, `?lacn2` (reordering of the Schur form), `?larfx` | s d c z |
 | `?lanv2`, `?laexc`, `?lasy2`, `?laln2` | s d |
+| `?geev` (eigenvalues and eigenvectors), `?geevx` (with balancing options and condition numbers), `?geesx` (Schur factorization with condition numbers), `?trevc3` (eigenvectors of the Schur form), `?trsna` (their condition numbers) | s d c z |
+| `?laqtr` (quasi-triangular systems in real arithmetic) | s d |
 | `?lartg`, `?rot` (with complex sine), `icmax1`, `izmax1`, `scsum1`, `dzsum1` | c z |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |
@@ -102,8 +104,9 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?lapy2`, `?lapy3`, `?ladiv`, `?isnan`, `?laisnan` | s d |
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
-LAPACKE has the reference LAPACKE's functions for these routines (with a
-documented fix in `LAPACKE_?gesvx`, see `hwyblas/lapacke.h`).
+LAPACKE has the reference LAPACKE's functions for these routines (with
+documented fixes in `LAPACKE_?gesvx` and `LAPACKE_?geesx`, see
+`hwyblas/lapacke.h`).
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in

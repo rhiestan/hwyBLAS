@@ -28,11 +28,13 @@ if(HWYBLAS_LAPACK)
     lapack/gesdd.cc
     lapack/gesvd.cc
     lapack/gees.cc
+    lapack/geev.cc
     lapack/getrf.cc
     lapack/hessenberg.cc
     lapack/hseqr.cc
     lapack/householder.cc
     lapack/lapacke.cc
+    lapack/lapacke_geev.cc
     lapack/lapacke_linear.cc
     lapack/lasq.cc
     lapack/norms.cc
@@ -41,7 +43,9 @@ if(HWYBLAS_LAPACK)
     lapack/triangular.cc
     lapack/syev.cc
     lapack/tridiagonal.cc
+    lapack/trevc.cc
     lapack/trsen.cc
+    lapack/trsna.cc
     lapack/ungqr.cc
     lapack/ungtr.cc
   )

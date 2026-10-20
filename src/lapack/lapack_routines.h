@@ -747,6 +747,69 @@ blasint Gees(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
              blasint ldvs, T* work, blasint lwork, RealT<T>* rwork,
              blasint* bwork);
 
+// ---------------------------------------------------------------------------
+// Eigenvectors and condition numbers of a general matrix (trevc.cc,
+// trsna.cc, geev.cc). SELECT is a LOGICAL array (nonzero is true); xTREVC3
+// normalizes the real one (in/out).
+
+template <typename R>
+blasint Trevc3(char side, char howmny, blasint* select, blasint n, const R* t,
+               blasint ldt, R* vl, blasint ldvl, R* vr, blasint ldvr,
+               blasint mm, blasint* m, R* work, blasint lwork);
+template <typename T>
+blasint Trevc3(char side, char howmny, const blasint* select, blasint n, T* t,
+               blasint ldt, T* vl, blasint ldvl, T* vr, blasint ldvr,
+               blasint mm, blasint* m, T* work, blasint lwork, RealT<T>* rwork,
+               blasint lrwork);
+
+// Real T only.
+template <typename R>
+blasint Laqtr(bool ltran, bool lreal, blasint n, const R* t, blasint ldt,
+              const R* b, R w, R* scale, R* x, R* work);
+
+template <typename R>
+blasint Trsna(char job, char howmny, const blasint* select, blasint n,
+              const R* t, blasint ldt, const R* vl, blasint ldvl, const R* vr,
+              blasint ldvr, R* s, R* sep, blasint mm, blasint* m, R* work,
+              blasint ldwork, blasint* iwork);
+template <typename T>
+blasint Trsna(char job, char howmny, const blasint* select, blasint n,
+              const T* t, blasint ldt, const T* vl, blasint ldvl, const T* vr,
+              blasint ldvr, RealT<T>* s, RealT<T>* sep, blasint mm, blasint* m,
+              T* work, blasint ldwork, RealT<T>* rwork);
+
+template <typename R>
+blasint Geev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* wr, R* wi,
+             R* vl, blasint ldvl, R* vr, blasint ldvr, R* work, blasint lwork);
+template <typename T>
+blasint Geev(char jobvl, char jobvr, blasint n, T* a, blasint lda, T* w, T* vl,
+             blasint ldvl, T* vr, blasint ldvr, T* work, blasint lwork,
+             RealT<T>* rwork);
+
+template <typename R>
+blasint Geevx(char balanc, char jobvl, char jobvr, char sense, blasint n, R* a,
+              blasint lda, R* wr, R* wi, R* vl, blasint ldvl, R* vr,
+              blasint ldvr, blasint* ilo, blasint* ihi, R* scale, R* abnrm,
+              R* rconde, R* rcondv, R* work, blasint lwork, blasint* iwork);
+template <typename T>
+blasint Geevx(char balanc, char jobvl, char jobvr, char sense, blasint n, T* a,
+              blasint lda, T* w, T* vl, blasint ldvl, T* vr, blasint ldvr,
+              blasint* ilo, blasint* ihi, RealT<T>* scale, RealT<T>* abnrm,
+              RealT<T>* rconde, RealT<T>* rcondv, T* work, blasint lwork,
+              RealT<T>* rwork);
+
+// BWORK is a LOGICAL array of N elements (used if SORT = 'S').
+template <typename R>
+blasint Geesx(char jobvs, char sort, GeesSelectReal<R> select, char sense,
+              blasint n, R* a, blasint lda, blasint* sdim, R* wr, R* wi, R* vs,
+              blasint ldvs, R* rconde, R* rcondv, R* work, blasint lwork,
+              blasint* iwork, blasint liwork, blasint* bwork);
+template <typename T>
+blasint Geesx(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
+              char sense, blasint n, T* a, blasint lda, blasint* sdim, T* w,
+              T* vs, blasint ldvs, RealT<T>* rconde, RealT<T>* rcondv, T* work,
+              blasint lwork, RealT<T>* rwork, blasint* bwork);
+
 }  // namespace lapack
 }  // namespace hwyblas
 

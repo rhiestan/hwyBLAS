@@ -26,10 +26,14 @@
 // different last bits also in real precision: their factors are compared
 // with the tolerance, and their pivots and INFO exactly.
 //
-// The drivers that factor with xGETRF (xGESV, xGESVX with FACT = 'N' or
-// 'E') get only matrices with clear pivots: on graded matrices and ties,
-// the different rounding of the leaf kernels can change the pivots. The
-// routines that take a factorization get the same one in both libraries.
+// xGETRF and the drivers that factor with it (xGESV, xGESVX with FACT =
+// 'N' or 'E') get only matrices with clear pivots: on graded matrices and
+// ties, the different rounding of the leaf kernels can change the pivots.
+// The routines that take a factorization get the same one in both
+// libraries.
+//
+// The eigenvectors and condition numbers of a Schur form (xTREVC3, xTRSNA)
+// get the same Schur form (hwyBLAS's xGEES) in both libraries.
 //
 // The comparison catches changes that keep the results valid, which the
 // residual tests cannot: a different shift strategy, deflation criterion,
@@ -440,6 +444,365 @@ Result Gees(const BlasLibrary& lib, std::vector<T> a, I n, char sort,
   Add(r, "t", Kind::kOther, a);
   Add(r, "vs", Kind::kOther, vs);
   return r;
+}
+
+// The eigenvalues (as complex numbers, also for real T) and their kind.
+template <typename T>
+void AddEigenvalues(Result& r, const std::vector<T>& w, bool compare_w) {
+  Add(r, "w", compare_w ? Kind::kEigenvalues : Kind::kOther, w);
+}
+template <typename R>
+void AddEigenvalues(Result& r, const std::vector<R>& wr,
+                    const std::vector<R>& wi, I n) {
+  std::vector<std::complex<R>> w(static_cast<size_t>(n));
+  for (I i = 0; i < n; ++i) w[i] = std::complex<R>(wr[i], wi[i]);
+  Add(r, "w", Kind::kEigenvalues, w);
+}
+
+template <typename T>
+Result Geev(const BlasLibrary& lib, std::vector<T> a, I n, char jobvl,
+            char jobvr, bool compare_w, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> vl(Size(n, n)), vr(Size(n, n));
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  Result r;
+  const std::string name = std::string(Prefix<T>()) + "geev_";
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const I*, T*, const I*, T*, T*,
+                 const I*, T*, const I*, T*, const I*, R*, I*, size_t, size_t);
+    std::vector<T> w(static_cast<size_t>(n));
+    std::vector<R> rwork(std::max<I>(2 * n, 1));
+    lib.Get<F>(name.c_str())(&jobvl, &jobvr, &n, a.data(), &ld, w.data(),
+                             vl.data(), &ld, vr.data(), &ld, work.data(),
+                             &lwork, rwork.data(), &info, 1, 1);
+    AddEigenvalues(r, w, compare_w);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const I*, T*, const I*, R*, R*, T*,
+                 const I*, T*, const I*, T*, const I*, I*, size_t, size_t);
+    std::vector<R> wr(std::max<I>(n, 1)), wi(std::max<I>(n, 1));
+    lib.Get<F>(name.c_str())(&jobvl, &jobvr, &n, a.data(), &ld, wr.data(),
+                             wi.data(), vl.data(), &ld, vr.data(), &ld,
+                             work.data(), &lwork, &info, 1, 1);
+    AddEigenvalues(r, wr, wi, n);
+  }
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (jobvl == 'V') Add(r, "vl", Kind::kOther, vl);
+  if (jobvr == 'V') Add(r, "vr", Kind::kOther, vr);
+  return r;
+}
+
+template <typename T>
+Result Geevx(const BlasLibrary& lib, std::vector<T> a, I n, char balanc,
+             char jobvl, char jobvr, char sense, bool compare_w, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> vl(Size(n, n)), vr(Size(n, n));
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<R> scale(ld), rconde(ld), rcondv(ld);
+  R abnrm = 0;
+  I ilo = 0, ihi = 0, info = 0;
+  Result r;
+  const std::string name = std::string(Prefix<T>()) + "geevx_";
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const char*, const char*, const char*, const char*, const I*,
+                 T*, const I*, T*, T*, const I*, T*, const I*, I*, I*, R*, R*,
+                 R*, R*, T*, const I*, R*, I*, size_t, size_t, size_t, size_t);
+    std::vector<T> w(static_cast<size_t>(n));
+    std::vector<R> rwork(std::max<I>(2 * n, 1));
+    lib.Get<F>(name.c_str())(
+        &balanc, &jobvl, &jobvr, &sense, &n, a.data(), &ld, w.data(), vl.data(),
+        &ld, vr.data(), &ld, &ilo, &ihi, scale.data(), &abnrm, rconde.data(),
+        rcondv.data(), work.data(), &lwork, rwork.data(), &info, 1, 1, 1, 1);
+    AddEigenvalues(r, w, compare_w);
+  } else {
+    using F = void (*)(const char*, const char*, const char*, const char*,
+                       const I*, T*, const I*, R*, R*, T*, const I*, T*,
+                       const I*, I*, I*, R*, R*, R*, R*, T*, const I*, I*, I*,
+                       size_t, size_t, size_t, size_t);
+    std::vector<R> wr(ld), wi(ld);
+    std::vector<I> iwork(std::max<I>(2 * n - 2, 1));
+    lib.Get<F>(name.c_str())(&balanc, &jobvl, &jobvr, &sense, &n, a.data(), &ld,
+                             wr.data(), wi.data(), vl.data(), &ld, vr.data(),
+                             &ld, &ilo, &ihi, scale.data(), &abnrm,
+                             rconde.data(), rcondv.data(), work.data(), &lwork,
+                             iwork.data(), &info, 1, 1, 1, 1);
+    AddEigenvalues(r, wr, wi, n);
+  }
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "ilo", ilo);
+  AddInt(r, "ihi", ihi);
+  Add(r, "scale", Kind::kValues, scale);
+  Add(r, "abnrm", Kind::kValues, &abnrm, 1);
+  if (jobvl == 'V') Add(r, "vl", Kind::kOther, vl);
+  if (jobvr == 'V') Add(r, "vr", Kind::kOther, vr);
+  const Kind cond = compare_w ? Kind::kValues : Kind::kOther;
+  if (sense == 'E' || sense == 'B') Add(r, "rconde", cond, rconde);
+  if (sense == 'V' || sense == 'B') Add(r, "rcondv", cond, rcondv);
+  if (sense != 'N' || jobvl == 'V' || jobvr == 'V') {
+    Add(r, "t", Kind::kOther, a);
+  }
+  return r;
+}
+
+// xGEESX with JOBVS = 'V' and SORT = 'S'; LIWORK is always large enough.
+template <typename T>
+Result Geesx(const BlasLibrary& lib, std::vector<T> a, I n, char sense,
+             bool compare_w, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  const char jobvs = 'V', sort = 'S';
+  std::vector<T> vs(Size(n, n));
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<I> bwork(ld);
+  I sdim = 0, info = 0;
+  R rconde = 0, rcondv = 0;
+  Result r;
+  const std::string name = std::string(Prefix<T>()) + "geesx_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, I (*)(const R*), const char*,
+                       const I*, T*, const I*, I*, T*, T*, const I*, R*, R*, T*,
+                       const I*, R*, I*, I*, size_t, size_t, size_t);
+    std::vector<T> w(static_cast<size_t>(n));
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&jobvs, &sort, &SelectComplex<R>, &sense, &n,
+                             a.data(), &ld, &sdim, w.data(), vs.data(), &ld,
+                             &rconde, &rcondv, work.data(), &lwork,
+                             rwork.data(), bwork.data(), &info, 1, 1, 1);
+    AddEigenvalues(r, w, compare_w);
+  } else {
+    using F = void (*)(const char*, const char*, I (*)(const R*, const R*),
+                       const char*, const I*, T*, const I*, I*, R*, R*, T*,
+                       const I*, R*, R*, T*, const I*, I*, const I*, I*, I*,
+                       size_t, size_t, size_t);
+    std::vector<R> wr(ld), wi(ld);
+    const I liwork = n * n + 1;
+    std::vector<I> iwork(liwork);
+    lib.Get<F>(name.c_str())(
+        &jobvs, &sort, &SelectReal<R>, &sense, &n, a.data(), &ld, &sdim,
+        wr.data(), wi.data(), vs.data(), &ld, &rconde, &rcondv, work.data(),
+        &lwork, iwork.data(), &liwork, bwork.data(), &info, 1, 1, 1);
+    AddEigenvalues(r, wr, wi, n);
+  }
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "sdim", sdim);
+  Add(r, "t", Kind::kOther, a);
+  Add(r, "vs", Kind::kOther, vs);
+  const Kind cond = compare_w ? Kind::kValues : Kind::kOther;
+  if (sense == 'E' || sense == 'B') Add(r, "rconde", cond, &rconde, 1);
+  if (sense == 'V' || sense == 'B') Add(r, "rcondv", cond, &rcondv, 1);
+  return r;
+}
+
+// The Schur form T and Schur vectors Z of a (hwyBLAS's xGEES), the input of
+// xTREVC3 and xTRSNA in both libraries.
+template <typename T>
+struct SchurForm {
+  std::vector<T> t, z;
+};
+
+template <typename T>
+SchurForm<T> Schur(const BlasLibrary& hwy, const std::vector<T>& a, I n) {
+  Result q = Gees(hwy, a, n, 'N', true, -1);
+  Result r = Gees(hwy, a, n, 'N', true, static_cast<I>(std::max(q.lwork, 1.0)));
+  SchurForm<T> s;
+  for (const Output& o : r.outputs) {
+    std::vector<T>* v = o.name == "t" ? &s.t : o.name == "vs" ? &s.z : nullptr;
+    if (v == nullptr) continue;
+    for (const std::complex<double>& x : o.values) {
+      if constexpr (kComplex<T>) {
+        v->push_back(T(x));
+      } else {
+        v->push_back(static_cast<T>(x.real()));
+      }
+    }
+  }
+  return s;
+}
+
+// SELECT of xTREVC3 and xTRSNA: every third eigenvalue.
+std::vector<I> EveryThird(I n) {
+  std::vector<I> select(std::max<I>(n, 1));
+  for (I i = 0; i < n; ++i) select[i] = i % 3 == 1;
+  return select;
+}
+
+// xTREVC3 with SIDE = 'B': HOWMNY = 'A' and 'S' (every third eigenvalue)
+// for the Schur form, 'B' with the Schur vectors in VL and VR.
+template <typename T>
+Result Trevc3(const BlasLibrary& lib, const SchurForm<T>& s, I n, char howmny,
+              I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  const char side = 'B';
+  std::vector<T> t = s.t;
+  std::vector<T> vl = howmny == 'B' ? s.z : std::vector<T>(Size(n, n));
+  std::vector<T> vr = vl;
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<I> select = howmny == 'S' ? EveryThird(n) : std::vector<I>(ld, 0);
+  I m = 0, info = 0;
+  Result r;
+  const std::string name = std::string(Prefix<T>()) + "trevc3_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const I*, const I*, T*,
+                       const I*, T*, const I*, T*, const I*, const I*, I*, T*,
+                       const I*, R*, const I*, I*, size_t, size_t);
+    std::vector<R> rwork(ld);
+    const I lrwork = lwork == -1 ? -1 : ld;
+    lib.Get<F>(name.c_str())(&side, &howmny, select.data(), &n, t.data(), &ld,
+                             vl.data(), &ld, vr.data(), &ld, &n, &m,
+                             work.data(), &lwork, rwork.data(), &lrwork, &info,
+                             1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, I*, const I*, const T*,
+                       const I*, T*, const I*, T*, const I*, const I*, I*, T*,
+                       const I*, I*, size_t, size_t);
+    lib.Get<F>(name.c_str())(&side, &howmny, select.data(), &n, t.data(), &ld,
+                             vl.data(), &ld, vr.data(), &ld, &n, &m,
+                             work.data(), &lwork, &info, 1, 1);
+  }
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  Add(r, "select", Kind::kInteger, select);
+  Add(r, "vl", Kind::kOther, vl);
+  Add(r, "vr", Kind::kOther, vr);
+  Add(r, "t", Kind::kOther, t);
+  return r;
+}
+
+// xTRSNA with JOB = 'B' for the Schur form and its eigenvectors (hwyBLAS's
+// xTREVC3), for all (HOWMNY = 'A') or every third eigenvalue ('S').
+template <typename T>
+Result Trsna(const BlasLibrary& hwy, const BlasLibrary& lib,
+             const SchurForm<T>& s, I n, char howmny, bool compare) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  // The eigenvectors of the selected eigenvalues.
+  Result v = Trevc3(hwy, s, n, howmny, 3 * ld);
+  std::vector<T> vl, vr;
+  for (const Output& o : v.outputs) {
+    std::vector<T>* p = o.name == "vl" ? &vl : o.name == "vr" ? &vr : nullptr;
+    if (p == nullptr) continue;
+    for (const std::complex<double>& x : o.values) {
+      if constexpr (kComplex<T>) {
+        p->push_back(T(x));
+      } else {
+        p->push_back(static_cast<T>(x.real()));
+      }
+    }
+  }
+  const char job = 'B';
+  std::vector<I> select = howmny == 'S' ? EveryThird(n) : std::vector<I>(ld, 0);
+  std::vector<R> sv(ld), sep(ld);
+  std::vector<T> work(Size(n, n + 6));
+  I m = 0, info = 0;
+  Result r;
+  const std::string name = std::string(Prefix<T>()) + "trsna_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, const T*, const I*, const T*, const I*, R*, R*,
+                       const I*, I*, T*, const I*, R*, I*, size_t, size_t);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&job, &howmny, select.data(), &n, s.t.data(), &ld,
+                             vl.data(), &ld, vr.data(), &ld, sv.data(),
+                             sep.data(), &n, &m, work.data(), &ld, rwork.data(),
+                             &info, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, const T*, const I*, const T*, const I*, R*, R*,
+                       const I*, I*, T*, const I*, I*, I*, size_t, size_t);
+    std::vector<I> iwork(std::max<I>(2 * n - 2, 1));
+    lib.Get<F>(name.c_str())(&job, &howmny, select.data(), &n, s.t.data(), &ld,
+                             vl.data(), &ld, vr.data(), &ld, sv.data(),
+                             sep.data(), &n, &m, work.data(), &ld, iwork.data(),
+                             &info, 1, 1);
+  }
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  const Kind cond = compare ? Kind::kValues : Kind::kOther;
+  Add(r, "s", cond, sv.data(), static_cast<size_t>(m));
+  Add(r, "sep", cond, sep.data(), static_cast<size_t>(m));
+  return r;
+}
+
+// The eigenvalue routines for matrices of order n of the kinds of
+// TestMatrix: xGEEV and xGEEVX (all options for random and graded
+// matrices), xGEESX, and xTREVC3 and xTRSNA for the Schur form of hwyBLAS's
+// xGEES. The complex eigenvalues of graded matrices are too ill-conditioned
+// to be compared with a tolerance.
+template <typename T>
+void RunEigen(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  char what[96];
+  for (int kind = 0; kind < 5; ++kind) {
+    const std::vector<T> a = TestMatrix<T>(kind, n, n);
+    const bool compare_w = !kComplex<T> || kind != 2;
+    static const char kJobs[][2] = {
+        {'V', 'V'}, {'V', 'N'}, {'N', 'V'}, {'N', 'N'}};
+    for (const auto& job : kJobs) {
+      snprintf(what, sizeof(what), "n=%d kind=%d jobvl=%c jobvr=%c", int(n),
+               kind, job[0], job[1]);
+      Case<T>(hwy, ref, "geev", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Geev(lib, a, n, job[0], job[1], compare_w, lw);
+      });
+    }
+    for (const char balanc : {'N', 'P', 'S', 'B'}) {
+      for (const char sense : {'N', 'E', 'V', 'B'}) {
+        if ((kind == 1 || kind == 3 || kind == 4) &&
+            (balanc != 'B' || sense != 'B')) {
+          continue;
+        }
+        for (const auto& job : kJobs) {
+          if ((sense == 'E' || sense == 'B') && job[0] != job[1]) continue;
+          if ((sense == 'E' || sense == 'B') && job[0] == 'N') continue;
+          snprintf(what, sizeof(what),
+                   "n=%d kind=%d balanc=%c sense=%c jobvl=%c jobvr=%c", int(n),
+                   kind, balanc, sense, job[0], job[1]);
+          Case<T>(hwy, ref, "geevx", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Geevx(lib, a, n, balanc, job[0], job[1], sense,
+                                 compare_w, lw);
+                  });
+        }
+      }
+    }
+    for (const char sense : {'N', 'E', 'V', 'B'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d sense=%c", int(n), kind,
+               sense);
+      Case<T>(hwy, ref, "geesx", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Geesx(lib, a, n, sense, compare_w, lw);
+      });
+    }
+    const SchurForm<T> s = Schur(hwy, a, n);
+    for (const char howmny : {'A', 'S', 'B'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d howmny=%c", int(n), kind,
+               howmny);
+      // The optimal workspace (blocked back-transform for HOWMNY = 'B'),
+      // and the minimal one.
+      Case<T>(hwy, ref, "trevc3", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Trevc3(lib, s, n, howmny, lw);
+      });
+      if (howmny == 'B') {
+        snprintf(what, sizeof(what), "n=%d kind=%d howmny=B lwork=3n", int(n),
+                 kind);
+        Case<T>(hwy, ref, "trevc3", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Trevc3(lib, s, n, howmny,
+                        lw == -1 ? -1 : 3 * std::max<I>(n, 1));
+        });
+      } else {
+        Case<T>(hwy, ref, "trsna", what, n, [&](const BlasLibrary& lib, I) {
+          return Trsna(hwy, lib, s, n, howmny, compare_w);
+        });
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1095,9 +1458,12 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
       snprintf(what, sizeof(what), "m=%d n=%d", int(m), int(n));
       const std::vector<T> a = TestMatrix<T>(s % 5 == 4 ? 4 : 0, m, n);
       const I mn = std::max(m, n);
-      Case<T>(hwy, ref, "getrf", what, mn, [&](const BlasLibrary& lib, I lw) {
-        return Getrf(lib, a, m, n, lw);
-      });
+      // xGETRF only on matrices with clear pivots (see the top).
+      if (s % 5 != 4) {
+        Case<T>(hwy, ref, "getrf", what, mn, [&](const BlasLibrary& lib, I lw) {
+          return Getrf(lib, a, m, n, lw);
+        });
+      }
       Case<T>(hwy, ref, "geqrf", what, mn, [&](const BlasLibrary& lib, I lw) {
         return Geqrf(lib, "geqrf_", a, m, n, lw);
       });
@@ -1151,6 +1517,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
         });
       }
     }
+    RunEigen<T>(hwy, ref, n);
     RunLinear<T>(hwy, ref, n);
   }
 }

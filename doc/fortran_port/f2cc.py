@@ -104,6 +104,11 @@ SIGS = {
     'IMAX1': ('Imax1', 'vav'),
     'SUM1': ('Sum1', 'vav'),
     'GEES': ('Gees', 'vvvvavpaaavavaai'),
+    'LATRS': ('Latrs', 'vvvvvavapai'),
+    'RSCL': ('Rscl', 'vvav'),
+    'LAQTR': ('Laqtr', 'vvvavaavpaai'),
+    'TREVC3': ('Trevc3', 'vvavavavavvpavi'),
+    'TRSNA': ('Trsna', 'vvavavavavaavpavai'),
 
 }
 # Argument kinds of the complex routines whose arguments differ from the
@@ -121,6 +126,7 @@ SIGS_COMPLEX = {
     'TRSEN': 'vvavavavapppavi',
     'LACN2': 'vaappa',
     'GEES': 'vvvvavpaavavaaai',
+    'TREVC3': 'vvavavavavvpavavi',
 }
 REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'ORMBR': 'UNMBR', 'ORMQR': 'UNMQR', 'ORMLQ': 'UNMLQ',
@@ -399,6 +405,13 @@ def lines_of(path):
             stmts.append(('C', txt))
             continue
         if len(line) > 5 and line[5] not in ' 0' and stmts:
+            quoted = False
+            for k in range(6, len(line)):
+                if line[k] == "'":
+                    quoted = not quoted
+                elif line[k] == '!' and not quoted:
+                    line = line[:k].rstrip()
+                    break
             # Continuation.
             for k in range(len(stmts) - 1, -1, -1):
                 if stmts[k][0] == 'S':
@@ -409,6 +422,14 @@ def lines_of(path):
         if line[6:].strip().upper() == 'IMPLICIT NONE':
             continue
         label = line[:5].strip()
+        # A trailing ! comment (outside strings) is dropped.
+        quoted = False
+        for k in range(6, len(line)):
+            if line[k] == "'":
+                quoted = not quoted
+            elif line[k] == '!' and not quoted:
+                line = line[:k].rstrip()
+                break
         # Fortran is case-insensitive: statements are translated in upper
         # case (comments keep their case).
         stmts.append(('S', label, line[6:].strip().upper()))
