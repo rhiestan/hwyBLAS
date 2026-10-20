@@ -30,7 +30,12 @@
 // 'N' or 'E') get only matrices with clear pivots: on graded matrices and
 // ties, the different rounding of the leaf kernels can change the pivots.
 // The routines that take a factorization get the same one in both
-// libraries.
+// libraries. The same holds for xPOTRF: the routines that take a Cholesky
+// factor get hwyBLAS's, and the drivers that factor with xPOTRF (xPOSV,
+// xPOSVX with FACT = 'N' or 'E') are compared with the tolerance. The
+// Bunch-Kaufman routines (xSYTRF, xHETRF and the routines and drivers
+// built on them) and xPSTRF have no such deviation and are compared
+// bitwise.
 //
 // The eigenvectors and condition numbers of a Schur form (xTREVC3, xTRSNA)
 // get the same Schur form (hwyBLAS's xGEES) in both libraries.
@@ -1443,6 +1448,678 @@ void RunLinear(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) linear systems. The routines that take a Cholesky
+// factorization get the same one (hwyBLAS's xPOTRF) in both libraries; the
+// drivers that factor with xPOTRF (xPOSV, xPOSVX with FACT = 'N' or 'E')
+// round differently in its leaf kernels, so their factors and solutions are
+// compared with the tolerance. The Bunch-Kaufman routines have no such
+// deviation and are all compared bitwise (also the drivers).
+
+// The name of the symmetric (sy) or Hermitian (he) routine, e.g.
+// SyName<double>(false, "trf_") = "dsytrf_".
+template <typename T>
+std::string SyName(bool herm, const char* rest) {
+  return std::string(Prefix<T>()) + (herm ? "he" : "sy") + rest;
+}
+
+// A complex symmetric (real symmetric) matrix, both triangles set.
+template <typename T>
+std::vector<T> Symmetric(I n) {
+  std::vector<T> a = TestMatrix<T>(0, n, n);
+  for (I j = 0; j < n; ++j) {
+    for (I i = 0; i < j; ++i) {
+      a[j + static_cast<size_t>(i) * n] = a[i + static_cast<size_t>(j) * n];
+    }
+  }
+  return a;
+}
+
+// [0 B; B**H 0] (B**T for !herm) with random B (and 1 at the end for odd
+// n): Bunch-Kaufman chooses mostly 2-by-2 pivots.
+template <typename T>
+std::vector<T> Saddle(I n, bool herm) {
+  std::vector<T> a(Size(n, n));
+  const I p = n / 2;
+  for (I j = 0; j < p; ++j) {
+    for (I i = 0; i < p; ++i) {
+      const T v = Random<T>();
+      a[i + static_cast<size_t>(p + j) * n] = v;
+      a[p + j + static_cast<size_t>(i) * n] = herm ? Conj(v) : v;
+    }
+  }
+  if (n % 2 == 1) a[Size(n, n) - 1] = T(1);
+  return a;
+}
+
+// A positive semidefinite matrix of rank r: B * B**H for an n x r matrix B.
+template <typename T>
+std::vector<T> Semidefinite(I n, I r) {
+  const std::vector<T> b = TestMatrix<T>(0, n, r);
+  std::vector<T> a(Size(n, n));
+  for (I j = 0; j < n; ++j) {
+    for (I i = 0; i < n; ++i) {
+      T s = T(0);
+      for (I k = 0; k < r; ++k) {
+        s += b[i + static_cast<size_t>(k) * n] *
+             Conj(b[j + static_cast<size_t>(k) * n]);
+      }
+      a[i + static_cast<size_t>(j) * n] = i == j ? T(std::real(s)) : s;
+    }
+  }
+  return a;
+}
+
+// The Cholesky factor of a by hwyBLAS's xPOTRF.
+template <typename T>
+std::vector<T> Cholesky(const BlasLibrary& hwy, std::vector<T> a, I n,
+                        char uplo) {
+  using F = void (*)(const char*, const I*, T*, const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  hwy.Get<F>((std::string(Prefix<T>()) + "potrf_").c_str())(&uplo, &n, a.data(),
+                                                             &ld, &info, 1);
+  return a;
+}
+
+template <typename T>
+Result Potrs(const BlasLibrary& lib, const std::vector<T>& f, std::vector<T> b,
+             I n, I nrhs, char uplo) {
+  using F = void (*)(const char*, const I*, const I*, const T*, const I*, T*,
+                     const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "potrs_").c_str())(
+      &uplo, &n, &nrhs, f.data(), &ld, b.data(), &ld, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Posv(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
+            I nrhs, char uplo) {
+  using F = void (*)(const char*, const I*, const I*, T*, const I*, T*,
+                     const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "posv_").c_str())(
+      &uplo, &n, &nrhs, a.data(), &ld, b.data(), &ld, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kRounded, a);
+  Add(r, "x", Kind::kRounded, b);
+  return r;
+}
+
+// xPOTRI or xLAUUM (name) on the factor f.
+template <typename T>
+Result Potri(const BlasLibrary& lib, const char* name, std::vector<T> f, I n,
+             char uplo) {
+  using F = void (*)(const char*, const I*, T*, const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + name).c_str())(&uplo, &n, f.data(),
+                                                        &ld, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kOther, f);
+  return r;
+}
+
+template <typename T>
+Result Pocon(const BlasLibrary& lib, const std::vector<T>& f, I n, char uplo,
+             Real<T> anorm) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  R rcond = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "pocon_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const T*, const I*, const R*, R*,
+                       T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, f.data(), &ld, &anorm, &rcond,
+                             work.data(), rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const T*, const I*, const R*, R*,
+                       T*, I*, I*, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, f.data(), &ld, &anorm, &rcond,
+                             work.data(), iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  return r;
+}
+
+template <typename T>
+Result Poequ(const BlasLibrary& lib, const std::vector<T>& a, I n) {
+  using R = Real<T>;
+  using F = void (*)(const I*, const T*, const I*, R*, R*, R*, I*);
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> s(ld);
+  R v[2] = {-1, -1};
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "poequ_").c_str())(
+      &n, a.data(), &ld, s.data(), &v[0], &v[1], &info);
+  Result r;
+  AddInt(r, "info", info);
+  if (info == 0) Add(r, "s", Kind::kOther, s);
+  Add(r, "scond amax", Kind::kOther, v, info == 0 ? 2 : 0);
+  return r;
+}
+
+// xPORFS (with the factor f) refining the solution x.
+template <typename T>
+Result Porfs(const BlasLibrary& lib, const std::vector<T>& a,
+             const std::vector<T>& f, const std::vector<T>& b, std::vector<T> x,
+             I n, I nrhs, char uplo) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> ferr(std::max<I>(nrhs, 1)), berr(std::max<I>(nrhs, 1));
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "porfs_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const T*, const I*, T*, const I*,
+                       R*, R*, T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, f.data(), &ld,
+                             b.data(), &ld, x.data(), &ld, ferr.data(),
+                             berr.data(), work.data(), rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const T*, const I*, T*, const I*,
+                       R*, R*, T*, I*, I*, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, f.data(), &ld,
+                             b.data(), &ld, x.data(), &ld, ferr.data(),
+                             berr.data(), work.data(), iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "ferr", Kind::kValues, ferr);
+  Add(r, "berr", Kind::kValues, berr);
+  return r;
+}
+
+// xPOSVX. For FACT = 'F', f is the given factor (EQUED = 'N'); the results
+// are then compared bitwise.
+template <typename T>
+Result Posvx(const BlasLibrary& lib, char fact, char uplo, std::vector<T> a,
+             const std::vector<T>& f, std::vector<T> b, I n, I nrhs) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> af = f, x(Size(n, nrhs));
+  std::vector<R> s(ld, 1), ferr(std::max<I>(nrhs, 1)),
+      berr(std::max<I>(nrhs, 1));
+  char equed = 'N';
+  R rcond = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "posvx_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const I*, const I*, T*,
+                       const I*, T*, const I*, char*, R*, T*, const I*, T*,
+                       const I*, R*, R*, R*, T*, R*, I*, size_t, size_t,
+                       size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
+                             &ld, &equed, s.data(), b.data(), &ld, x.data(),
+                             &ld, &rcond, ferr.data(), berr.data(),
+                             work.data(), rwork.data(), &info, 1, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const I*, const I*, T*,
+                       const I*, T*, const I*, char*, R*, T*, const I*, T*,
+                       const I*, R*, R*, R*, T*, I*, I*, size_t, size_t,
+                       size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
+                             &ld, &equed, s.data(), b.data(), &ld, x.data(),
+                             &ld, &rcond, ferr.data(), berr.data(),
+                             work.data(), iwork.data(), &info, 1, 1, 1);
+  }
+  const Kind factored = fact == 'F' ? Kind::kOther : Kind::kRounded;
+  const Kind value = fact == 'F' ? Kind::kValues : Kind::kRounded;
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "equed", equed);
+  Add(r, "s", Kind::kOther, s);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  Add(r, "af", factored, af);
+  Add(r, "x", factored, x);
+  Add(r, "rcond", value, &rcond, 1);
+  Add(r, "ferr", value, ferr);
+  Add(r, "berr", value, berr);
+  return r;
+}
+
+template <typename T>
+Result Pstrf(const BlasLibrary& lib, std::vector<T> a, I n, char uplo) {
+  using R = Real<T>;
+  using F = void (*)(const char*, const I*, T*, const I*, I*, I*, const R*, R*,
+                     I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<I> piv(ld);
+  std::vector<R> work(2 * ld);
+  I rank = -1, info = 0;
+  const R tol = -1;
+  lib.Get<F>((std::string(Prefix<T>()) + "pstrf_").c_str())(
+      &uplo, &n, a.data(), &ld, piv.data(), &rank, &tol, work.data(), &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "rank", rank);
+  Add(r, "piv", Kind::kInteger, piv);
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// A Bunch-Kaufman factorization and its pivots.
+template <typename T>
+struct Bk {
+  std::vector<T> f;
+  std::vector<I> ipiv;
+};
+
+template <typename T>
+Result Sytrf(const BlasLibrary& lib, bool herm, std::vector<T> a, I n,
+             char uplo, I lwork) {
+  using F = void (*)(const char*, const I*, T*, const I*, I*, T*, const I*, I*,
+                     size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<I> ipiv(ld);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  lib.Get<F>(SyName<T>(herm, "trf_").c_str())(&uplo, &n, a.data(), &ld,
+                                              ipiv.data(), work.data(), &lwork,
+                                              &info, 1);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "ipiv", Kind::kInteger, ipiv);
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// The factorization of a by hwyBLAS's xSYTRF / xHETRF.
+template <typename T>
+Bk<T> Bunch(const BlasLibrary& hwy, bool herm, std::vector<T> a, I n,
+            char uplo) {
+  using F = void (*)(const char*, const I*, T*, const I*, I*, T*, const I*, I*,
+                     size_t);
+  const auto f = hwy.Get<F>(SyName<T>(herm, "trf_").c_str());
+  const I ld = std::max<I>(n, 1);
+  Bk<T> bk{std::move(a), std::vector<I>(ld)};
+  T q = T(0);
+  I lwork = -1, info = 0;
+  f(&uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), &q, &lwork, &info, 1);
+  lwork = std::max<I>(1, static_cast<I>(std::real(q)));
+  std::vector<T> work(lwork);
+  f(&uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), work.data(), &lwork, &info,
+    1);
+  return bk;
+}
+
+// xSYTRS / xHETRS, or xSYTRS2 / xHETRS2 if level3.
+template <typename T>
+Result Sytrs(const BlasLibrary& lib, bool herm, bool level3, Bk<T> bk,
+             std::vector<T> b, I n, I nrhs, char uplo) {
+  const I ld = std::max<I>(n, 1);
+  I info = 0;
+  if (level3) {
+    using F = void (*)(const char*, const I*, const I*, T*, const I*, const I*,
+                       T*, const I*, T*, I*, size_t);
+    std::vector<T> work(ld);
+    lib.Get<F>(SyName<T>(herm, "trs2_").c_str())(
+        &uplo, &n, &nrhs, bk.f.data(), &ld, bk.ipiv.data(), b.data(), &ld,
+        work.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const I*, T*, const I*, I*, size_t);
+    lib.Get<F>(SyName<T>(herm, "trs_").c_str())(&uplo, &n, &nrhs, bk.f.data(),
+                                                &ld, bk.ipiv.data(), b.data(),
+                                                &ld, &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, b);
+  Add(r, "a", Kind::kOther, bk.f);  // restored by xSYTRS2
+  return r;
+}
+
+template <typename T>
+Result Sytri(const BlasLibrary& lib, bool herm, Bk<T> bk, I n, char uplo) {
+  using F = void (*)(const char*, const I*, T*, const I*, const I*, T*, I*,
+                     size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> work(2 * ld);
+  I info = 0;
+  lib.Get<F>(SyName<T>(herm, "tri_").c_str())(
+      &uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), work.data(), &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kOther, bk.f);
+  return r;
+}
+
+template <typename T>
+Result Sycon(const BlasLibrary& lib, bool herm, const Bk<T>& bk, I n,
+             char uplo, Real<T> anorm) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  R rcond = -1;
+  I info = 0;
+  std::vector<T> work(2 * ld);
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const T*, const I*, const I*,
+                       const R*, R*, T*, I*, size_t);
+    lib.Get<F>(SyName<T>(herm, "con_").c_str())(&uplo, &n, bk.f.data(), &ld,
+                                                bk.ipiv.data(), &anorm, &rcond,
+                                                work.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const T*, const I*, const I*,
+                       const R*, R*, T*, I*, I*, size_t);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(SyName<T>(herm, "con_").c_str())(
+        &uplo, &n, bk.f.data(), &ld, bk.ipiv.data(), &anorm, &rcond,
+        work.data(), iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  return r;
+}
+
+template <typename T>
+Result Syrfs(const BlasLibrary& lib, bool herm, const std::vector<T>& a,
+             const Bk<T>& bk, const std::vector<T>& b, std::vector<T> x, I n,
+             I nrhs, char uplo) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> ferr(std::max<I>(nrhs, 1)), berr(std::max<I>(nrhs, 1));
+  I info = 0;
+  const std::string name = SyName<T>(herm, "rfs_");
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const I*, const T*, const I*, T*,
+                       const I*, R*, R*, T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, bk.f.data(), &ld,
+                             bk.ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             ferr.data(), berr.data(), work.data(),
+                             rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const T*, const I*,
+                       const T*, const I*, const I*, const T*, const I*, T*,
+                       const I*, R*, R*, T*, I*, I*, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, a.data(), &ld, bk.f.data(), &ld,
+                             bk.ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             ferr.data(), berr.data(), work.data(),
+                             iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "ferr", Kind::kValues, ferr);
+  Add(r, "berr", Kind::kValues, berr);
+  return r;
+}
+
+template <typename T>
+Result Sysv(const BlasLibrary& lib, bool herm, std::vector<T> a,
+            std::vector<T> b, I n, I nrhs, char uplo, I lwork) {
+  using F = void (*)(const char*, const I*, const I*, T*, const I*, I*, T*,
+                     const I*, T*, const I*, I*, size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<I> ipiv(ld);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  lib.Get<F>(SyName<T>(herm, "sv_").c_str())(&uplo, &n, &nrhs, a.data(), &ld,
+                                             ipiv.data(), b.data(), &ld,
+                                             work.data(), &lwork, &info, 1);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "ipiv", Kind::kInteger, ipiv);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "x", Kind::kOther, b);
+  return r;
+}
+
+// xSYSVX / xHESVX; for FACT = 'F', bk is the given factorization.
+template <typename T>
+Result Sysvx(const BlasLibrary& lib, bool herm, char fact, char uplo,
+             const std::vector<T>& a, const Bk<T>& bk, const std::vector<T>& b,
+             I n, I nrhs, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> af = bk.f, x(Size(n, nrhs)), work(std::max<I>(lwork, 1));
+  std::vector<I> ipiv = bk.ipiv;
+  std::vector<R> ferr(std::max<I>(nrhs, 1)), berr(std::max<I>(nrhs, 1));
+  R rcond = -1;
+  I info = 0;
+  const std::string name = SyName<T>(herm, "svx_");
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, T*, const I*, I*, const T*, const I*, T*,
+                       const I*, R*, R*, R*, T*, const I*, R*, I*, size_t,
+                       size_t);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
+                             &ld, ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             &rcond, ferr.data(), berr.data(), work.data(),
+                             &lwork, rwork.data(), &info, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, T*, const I*, I*, const T*, const I*, T*,
+                       const I*, R*, R*, R*, T*, const I*, I*, I*, size_t,
+                       size_t);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&fact, &uplo, &n, &nrhs, a.data(), &ld, af.data(),
+                             &ld, ipiv.data(), b.data(), &ld, x.data(), &ld,
+                             &rcond, ferr.data(), berr.data(), work.data(),
+                             &lwork, iwork.data(), &info, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "ipiv", Kind::kInteger, ipiv);
+  Add(r, "af", Kind::kOther, af);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  Add(r, "ferr", Kind::kValues, ferr);
+  Add(r, "berr", Kind::kValues, berr);
+  return r;
+}
+
+template <typename T>
+Result Syconv(const BlasLibrary& lib, Bk<T> bk, I n, char uplo, char way) {
+  using F = void (*)(const char*, const char*, const I*, T*, const I*,
+                     const I*, T*, I*, size_t, size_t);
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> e(ld);
+  I info = 0;
+  const auto f = lib.Get<F>((std::string(Prefix<T>()) + "syconv_").c_str());
+  const char convert = 'C';
+  f(&uplo, &convert, &n, bk.f.data(), &ld, bk.ipiv.data(), e.data(), &info, 1,
+    1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kOther, bk.f);
+  Add(r, "e", Kind::kOther, e);
+  if (way == 'R') {
+    f(&uplo, &way, &n, bk.f.data(), &ld, bk.ipiv.data(), e.data(), &info, 1,
+      1);
+    AddInt(r, "info", info);
+    Add(r, "a reverted", Kind::kOther, bk.f);
+  }
+  return r;
+}
+
+// The symmetric (Hermitian) linear systems routines for matrices of order n.
+template <typename T>
+void RunSymmetric(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  using R = Real<T>;
+  char what[64];
+  const I nrhs = 3;
+  const std::vector<T> b = TestMatrix<T>(0, n, nrhs);
+
+  // Positive definite: random, and with rows and columns scaled by powers
+  // of 2 (for equilibration).
+  for (const int kind : {0, 1}) {
+    std::vector<T> a = PositiveDefinite<T>(n);
+    if (kind == 1) {
+      for (I j = 0; j < n; ++j) {
+        for (I i = 0; i < n; ++i) {
+          a[i + static_cast<size_t>(j) * n] *=
+              static_cast<R>(std::ldexp(1.0, 3 * (i % 5) + 3 * (j % 5)));
+        }
+      }
+    }
+    for (const char uplo : {'U', 'L'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c", int(n), kind, uplo);
+      const std::vector<T> f = Cholesky(hwy, a, n, uplo);
+      Case<T>(hwy, ref, "posv", what, n, [&](const BlasLibrary& lib, I) {
+        return Posv(lib, a, b, n, nrhs, uplo);
+      });
+      Case<T>(hwy, ref, "potrs", what, n, [&](const BlasLibrary& lib, I) {
+        return Potrs(lib, f, b, n, nrhs, uplo);
+      });
+      Case<T>(hwy, ref, "potri", what, n, [&](const BlasLibrary& lib, I) {
+        return Potri(lib, "potri_", f, n, uplo);
+      });
+      Case<T>(hwy, ref, "lauum", what, n, [&](const BlasLibrary& lib, I) {
+        return Potri(lib, "lauum_", f, n, uplo);
+      });
+      Case<T>(hwy, ref, "pocon", what, n, [&](const BlasLibrary& lib, I) {
+        return Pocon(lib, f, n, uplo, R(3));
+      });
+      Case<T>(hwy, ref, "porfs", what, n, [&](const BlasLibrary& lib, I) {
+        return Porfs(lib, a, f, b, b, n, nrhs, uplo);
+      });
+      for (const char fact : {'N', 'E', 'F'}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c fact=%c", int(n),
+                 kind, uplo, fact);
+        Case<T>(hwy, ref, "posvx", what, n, [&](const BlasLibrary& lib, I) {
+          return Posvx(lib, fact, uplo, a, f, b, n, nrhs);
+        });
+      }
+    }
+    snprintf(what, sizeof(what), "n=%d kind=%d", int(n), kind);
+    Case<T>(hwy, ref, "poequ", what, n,
+            [&](const BlasLibrary& lib, I) { return Poequ(lib, a, n); });
+  }
+
+  // Pivoted Cholesky: positive definite, and semidefinite of rank n/2.
+  for (const I rank : {n, n / 2}) {
+    const std::vector<T> a =
+        rank == n ? PositiveDefinite<T>(n) : Semidefinite<T>(n, rank);
+    for (const char uplo : {'U', 'L'}) {
+      snprintf(what, sizeof(what), "n=%d rank=%d uplo=%c", int(n), int(rank),
+               uplo);
+      Case<T>(hwy, ref, "pstrf", what, n, [&](const BlasLibrary& lib, I) {
+        return Pstrf(lib, a, n, uplo);
+      });
+    }
+  }
+
+  // Indefinite: random, saddle point (2-by-2 pivots) and small integers
+  // (ties), symmetric and (complex T) Hermitian.
+  for (const bool herm : kComplex<T> ? std::vector<bool>{false, true}
+                                     : std::vector<bool>{false}) {
+    const std::string sy = herm ? "he" : "sy";
+    for (const int kind : {0, 1, 2}) {
+      std::vector<T> a;
+      if (kind == 1) {
+        a = Saddle<T>(n, herm);
+      } else {
+        a = herm ? Hermitian<T>(n) : Symmetric<T>(n);
+        if (kind == 2) {
+          for (T& x : a) x = T(static_cast<R>(std::round(4 * std::real(x))));
+        }
+      }
+      for (const char uplo : {'U', 'L'}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c", int(n), kind,
+                 uplo);
+        Case<T>(hwy, ref, sy + "trf", what, n,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Sytrf(lib, herm, a, n, uplo, lw);
+                });
+        // A workspace for panels of 10 columns (xLASYF / xLAHEF with a
+        // smaller NB, for n > 64).
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c lwork=10n", int(n),
+                 kind, uplo);
+        Case<T>(hwy, ref, sy + "trf", what, n, [&](const BlasLibrary& lib, I) {
+          return Sytrf(lib, herm, a, n, uplo, std::max<I>(1, 10 * n));
+        });
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c", int(n), kind,
+                 uplo);
+        Case<T>(hwy, ref, sy + "sv", what, n,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Sysv(lib, herm, a, b, n, nrhs, uplo, lw);
+                });
+        // LWORK < N: the factorization unblocked, the solution by xSYTRS.
+        if (n > 1) {
+          snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c lwork=n-1",
+                   int(n), kind, uplo);
+          Case<T>(hwy, ref, sy + "sv", what, n, [&](const BlasLibrary& lib, I) {
+            return Sysv(lib, herm, a, b, n, nrhs, uplo, n - 1);
+          });
+        }
+        snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c", int(n), kind,
+                 uplo);
+        const Bk<T> bk = Bunch(hwy, herm, a, n, uplo);
+        for (const bool level3 : {false, true}) {
+          Case<T>(hwy, ref, sy + (level3 ? "trs2" : "trs"), what, n,
+                  [&](const BlasLibrary& lib, I) {
+                    return Sytrs(lib, herm, level3, bk, b, n, nrhs, uplo);
+                  });
+        }
+        Case<T>(hwy, ref, sy + "tri", what, n, [&](const BlasLibrary& lib, I) {
+          return Sytri(lib, herm, bk, n, uplo);
+        });
+        Case<T>(hwy, ref, sy + "con", what, n, [&](const BlasLibrary& lib, I) {
+          return Sycon(lib, herm, bk, n, uplo, R(3));
+        });
+        Case<T>(hwy, ref, sy + "rfs", what, n, [&](const BlasLibrary& lib, I) {
+          return Syrfs(lib, herm, a, bk, b, b, n, nrhs, uplo);
+        });
+        for (const char fact : {'N', 'F'}) {
+          snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c fact=%c", int(n),
+                   kind, uplo, fact);
+          Case<T>(hwy, ref, sy + "svx", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Sysvx(lib, herm, fact, uplo, a, bk, b, n, nrhs, lw);
+                  });
+        }
+        if (!herm) {
+          for (const char way : {'C', 'R'}) {
+            snprintf(what, sizeof(what), "n=%d kind=%d uplo=%c way=%c", int(n),
+                     kind, uplo, way);
+            Case<T>(hwy, ref, "syconv", what, n,
+                    [&](const BlasLibrary& lib, I) {
+                      return Syconv(lib, bk, n, uplo, way);
+                    });
+          }
+        }
+      }
+    }
+  }
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -1519,6 +2196,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     }
     RunEigen<T>(hwy, ref, n);
     RunLinear<T>(hwy, ref, n);
+    RunSymmetric<T>(hwy, ref, n);
   }
 }
 

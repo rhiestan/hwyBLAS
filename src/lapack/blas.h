@@ -125,6 +125,36 @@ void Gerc(blasint m, blasint n, T alpha, const T* x, blasint incx, const T* y,
                            Raw(x), &incx, Raw(y), &incy, Raw(a), &lda);
 }
 
+// A := alpha * x * y**T + A: xGER for real T, xGERU for complex T.
+template <typename T>
+void Geru(blasint m, blasint n, T alpha, const T* x, blasint incx, const T* y,
+          blasint incy, T* a, blasint lda) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, sger_, dger_, cgeru_, zgeru_, &m, &n, Raw(&alpha),
+                           Raw(x), &incx, Raw(y), &incy, Raw(a), &lda);
+}
+
+// A := alpha * x * x**H + A with real alpha, triangle uplo: xSYR for real
+// T, xHER for complex T.
+template <typename T>
+void Her(char uplo, blasint n, RealT<T> alpha, const T* x, blasint incx, T* a,
+         blasint lda) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, ssyr_, dsyr_, cher_, zher_, &uplo, &n, &alpha,
+                           Raw(x), &incx, Raw(a), &lda);
+}
+
+// C := alpha * op(A) * op(B) + beta * C, only the triangle uplo of C.
+template <typename T>
+void Gemmtr(char uplo, char transa, char transb, blasint n, blasint k, T alpha,
+            const T* a, blasint lda, const T* b, blasint ldb, T beta, T* c,
+            blasint ldc) {
+  using blas_detail::Raw;
+  HWYBLAS_LAPACK_BLAS_CALL(T, sgemmtr_, dgemmtr_, cgemmtr_, zgemmtr_, &uplo,
+                           &transa, &transb, &n, &k, Raw(&alpha), Raw(a), &lda,
+                           Raw(b), &ldb, Raw(&beta), Raw(c), &ldc);
+}
+
 // y := alpha * A * x + beta * y for symmetric (xSYMV, real T) or Hermitian
 // (xHEMV, complex T) A, triangle uplo.
 template <typename T>

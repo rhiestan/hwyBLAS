@@ -115,9 +115,11 @@ if(HWYBLAS_LAPACK)
     lapack/householder_test.cc
     lapack/linear_test.cc
     lapack/norms_test.cc
+    lapack/posv_test.cc
     lapack/potrf_test.cc
     lapack/qr_test.cc
     lapack/syev_test.cc
+    lapack/sysv_test.cc
     lapack/triangular_test.cc
   )
 endif()

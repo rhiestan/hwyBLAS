@@ -147,6 +147,21 @@ blasint Nint(R x) {
   return static_cast<blasint>(std::lround(x));
 }
 
+// MAXLOC(X(1:n), 1) of a real vector as flang (and gfortran) evaluates it:
+// the 1-based index of the first largest element, ignoring NaNs unless all
+// elements are NaN (then 1); 0 if n < 1.
+template <typename R>
+blasint Maxloc(blasint n, const R* x) {
+  if (n < 1) return 0;
+  blasint loc = 1;
+  for (blasint i = 2; i <= n; ++i) {
+    const R prev = x[loc - 1];
+    const R xi = x[i - 1];
+    if (xi > prev || (std::isnan(prev) && !std::isnan(xi))) loc = i;
+  }
+  return loc;
+}
+
 // A routine name such as "DGETRF": the precision letter of T and `rest`.
 class RoutineName {
  public:

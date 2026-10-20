@@ -429,6 +429,41 @@ lapack_int WithWorkArray(const std::string& name, lapack_int size,
   return info;
 }
 
+// Allocates the work arrays of a routine whose real version takes WORK
+// (real_size elements) and IWORK (int_size), and its complex version WORK
+// (complex_size) and RWORK (rwork_size), and calls f(work, rwork, iwork)
+// with null pointers for the arrays that T's routine does not take.
+template <typename T, typename F>
+lapack_int WithWork(const std::string& name, lapack_int real_size,
+                    lapack_int int_size, lapack_int complex_size,
+                    lapack_int rwork_size, const F& f) {
+  using R = RealT<T>;
+  if constexpr (IsComplex<T>::value) {
+    return WithWorkArray<R>(
+        name, std::max<lapack_int>(1, rwork_size), [&](R* rwork) {
+          return WithWorkArray<T>(
+              name, std::max<lapack_int>(1, complex_size), [&](T* work) {
+                return f(work, rwork, static_cast<lapack_int*>(nullptr));
+              });
+        });
+  } else {
+    return WithWorkArray<lapack_int>(
+        name, std::max<lapack_int>(1, int_size), [&](lapack_int* iwork) {
+          return WithWorkArray<T>(
+              name, std::max<lapack_int>(1, real_size), [&](T* work) {
+                return f(work, static_cast<R*>(nullptr), iwork);
+              });
+        });
+  }
+}
+
+// A triangular matrix argument: only the triangle uplo is transposed.
+template <typename T>
+MatrixArg<T> Triangle(MatrixArg<T> arg, char uplo) {
+  arg.uplo = lapack::Lsame(uplo, 'U') ? 'U' : 'L';
+  return arg;
+}
+
 // Whether the NaN checks are on (LAPACKE_get_nancheck).
 inline bool NanCheck() { return LAPACKE_get_nancheck() != 0; }
 

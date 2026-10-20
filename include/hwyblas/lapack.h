@@ -675,6 +675,598 @@ HWYBLAS_API void cpotrf2_(const char* uplo, const hwyblas_int* n, float* a,
 HWYBLAS_API void zpotrf2_(const char* uplo, const hwyblas_int* n, double* a,
                           const hwyblas_int* lda, hwyblas_int* info);
 
+/* Cholesky factorization with complete pivoting of the symmetric
+ * (Hermitian) positive semidefinite A of order n: P^T*A*P = U^H*U or L*L^H;
+ * piv: P (column piv(k) of A is column k of A*P); rank: the number of steps
+ * done, stopping at a diagonal element <= tol (tol < 0: n*eps*max(A(k,k)));
+ * work: 2n. info = 1: A is rank deficient (rank < n). ?pstrf is blocked,
+ * ?pstf2 unblocked. */
+HWYBLAS_API void spstrf_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const float* tol, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dpstrf_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const double* tol, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void cpstrf_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const float* tol, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zpstrf_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const double* tol, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void spstf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const float* tol, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dpstf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const double* tol, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void cpstf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const float* tol, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zpstf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* piv,
+                         hwyblas_int* rank, const double* tol, double* work,
+                         hwyblas_int* info);
+
+/* ------------------------------------------------------------------------ */
+/* Symmetric (Hermitian) positive definite systems                          */
+
+/* Solves A*X = B with the Cholesky factorization of ?potrf (a);
+ * b: n x nrhs, overwritten with X. */
+HWYBLAS_API void spotrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dpotrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cpotrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zpotrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+
+/* Solves A*X = B for symmetric (Hermitian) positive definite A:
+ * ?potrf (a returns the factor), then ?potrs. info > 0: the leading minor of
+ * order info is not positive. */
+HWYBLAS_API void sposv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dposv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, double* a,
+                        const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cposv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zposv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, double* a,
+                        const hwyblas_int* lda, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+
+/* U*U^H (uplo = 'U') or L^H*L ('L') of the triangular factor in the
+ * triangle uplo of a, in place. ?lauum is blocked, ?lauu2 unblocked. */
+HWYBLAS_API void slauum_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void dlauum_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void clauum_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void zlauum_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void slauu2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void dlauu2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void clauu2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void zlauu2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+
+/* The inverse of A from its Cholesky factorization (?potrf), in
+ * place (triangle uplo). info > 0: the factor is singular. */
+HWYBLAS_API void spotri_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void dpotri_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void cpotri_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void zpotri_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+
+/* Estimates the reciprocal 1-norm condition number of A from its
+ * Cholesky factorization (a) and anorm = norm1(A). work: 3n (real) or 2n
+ * (complex); iwork: n; rwork: n. */
+HWYBLAS_API void spocon_(const char* uplo, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const float* anorm,
+                         float* rcond, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dpocon_(const char* uplo, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* anorm, double* rcond, double* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void cpocon_(const char* uplo, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const float* anorm,
+                         float* rcond, float* work, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zpocon_(const char* uplo, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const double* anorm, double* rcond, double* work,
+                         double* rwork, hwyblas_int* info);
+
+/* Scalings s(i) = 1/sqrt(A(i,i)) that equilibrate A; scond =
+ * min(s)/max(s), amax = max(A(i,i)). info > 0: A(info,info) <= 0. */
+HWYBLAS_API void spoequ_(const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, float* s, float* scond,
+                         float* amax, hwyblas_int* info);
+HWYBLAS_API void dpoequ_(const hwyblas_int* n, const double* a,
+                         const hwyblas_int* lda, double* s, double* scond,
+                         double* amax, hwyblas_int* info);
+HWYBLAS_API void cpoequ_(const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, float* s, float* scond,
+                         float* amax, hwyblas_int* info);
+HWYBLAS_API void zpoequ_(const hwyblas_int* n, const double* a,
+                         const hwyblas_int* lda, double* s, double* scond,
+                         double* amax, hwyblas_int* info);
+
+/* A := diag(s)*A*diag(s) if worthwhile (scond < 0.1 or amax
+ * near underflow or overflow); equed = 'Y' if done, else 'N'. ?laqsy:
+ * symmetric (complex symmetric for c, z), ?laqhe: Hermitian. */
+HWYBLAS_API void slaqsy_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const float* s,
+                         const float* scond, const float* amax, char* equed);
+HWYBLAS_API void dlaqsy_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* s,
+                         const double* scond, const double* amax, char* equed);
+HWYBLAS_API void claqsy_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const float* s,
+                         const float* scond, const float* amax, char* equed);
+HWYBLAS_API void zlaqsy_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* s,
+                         const double* scond, const double* amax, char* equed);
+HWYBLAS_API void claqhe_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const float* s,
+                         const float* scond, const float* amax, char* equed);
+HWYBLAS_API void zlaqhe_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* s,
+                         const double* scond, const double* amax, char* equed);
+
+/* Iterative refinement of the solution x of A*X = B with the
+ * Cholesky factorization af, with forward (ferr) and backward (berr) error
+ * bounds. work: 3n (real) or 2n (complex); iwork: n; rwork: n. */
+HWYBLAS_API void sporfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const float* b,
+                         const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dporfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const double* b,
+                         const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void cporfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const float* b,
+                         const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, float* rwork, hwyblas_int* info);
+HWYBLAS_API void zporfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const double* b,
+                         const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, double* rwork, hwyblas_int* info);
+
+/* Expert driver: solves A*X = B with the Cholesky factorization
+ * (fact = 'F': given in af with equed, s; 'N': computed; 'E': after
+ * equilibration if worthwhile), refines X and returns rcond, ferr and berr.
+ * Workspaces as for ?porfs. info = n+1: rcond < eps. */
+HWYBLAS_API void sposvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, char* equed, float* s,
+                         float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dposvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, char* equed, double* s,
+                         double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cposvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, char* equed, float* s,
+                         float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zposvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, char* equed, double* s,
+                         double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, double* rwork,
+                         hwyblas_int* info);
+
+/* ------------------------------------------------------------------------ */
+/* Symmetric (Hermitian) indefinite systems                                 */
+
+/* Bunch-Kaufman factorization A = U*D*U^T or L*D*L^T (?sytrf;
+ * complex symmetric for c, z) and A = U*D*U^H or L*D*L^H (?hetrf) with D
+ * block diagonal (1x1 and 2x2 blocks) and the interchanges in ipiv. work:
+ * lwork >= 1, n*nb for the optimal block size (lwork = -1: query). info > 0:
+ * D(info,info) is zero. ?lasyf / ?lahef factor a panel of nb columns (kb:
+ * the number factored; w: ldw x nb), ?sytf2 / ?hetf2 are unblocked. */
+HWYBLAS_API void ssytrf_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dsytrf_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void csytrf_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zsytrf_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void chetrf_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zhetrf_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void slasyf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void dlasyf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, double* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void clasyf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void zlasyf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, double* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void clahef_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, float* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void zlahef_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nb, hwyblas_int* kb, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv, double* w,
+                         const hwyblas_int* ldw, hwyblas_int* info);
+HWYBLAS_API void ssytf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void dsytf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void csytf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void zsytf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void chetf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void zhetf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+
+/* Solve A*X = B with the factorization of ?sytrf / ?hetrf; b: n x
+ * nrhs, overwritten with X. ?sytrs2 / ?hetrs2 use Level 3 BLAS (work: n;
+ * a is changed and restored). */
+HWYBLAS_API void ssytrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dsytrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void csytrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zsytrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void chetrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zhetrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void ssytrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, float* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          float* b, const hwyblas_int* ldb, float* work,
+                          hwyblas_int* info);
+HWYBLAS_API void dsytrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, double* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          double* b, const hwyblas_int* ldb, double* work,
+                          hwyblas_int* info);
+HWYBLAS_API void csytrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, float* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          float* b, const hwyblas_int* ldb, float* work,
+                          hwyblas_int* info);
+HWYBLAS_API void zsytrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, double* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          double* b, const hwyblas_int* ldb, double* work,
+                          hwyblas_int* info);
+HWYBLAS_API void chetrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, float* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          float* b, const hwyblas_int* ldb, float* work,
+                          hwyblas_int* info);
+HWYBLAS_API void zhetrs2_(const char* uplo, const hwyblas_int* n,
+                          const hwyblas_int* nrhs, double* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          double* b, const hwyblas_int* ldb, double* work,
+                          hwyblas_int* info);
+
+/* Converts the factorization of ?sytrf (way = 'C') to the form of
+ * ?sytrs2 (the off-diagonal elements of D in e: n) or back ('R'). */
+HWYBLAS_API void ssyconv_(const char* uplo, const char* way,
+                          const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          float* e, hwyblas_int* info);
+HWYBLAS_API void dsyconv_(const char* uplo, const char* way,
+                          const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          double* e, hwyblas_int* info);
+HWYBLAS_API void csyconv_(const char* uplo, const char* way,
+                          const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          float* e, hwyblas_int* info);
+HWYBLAS_API void zsyconv_(const char* uplo, const char* way,
+                          const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, const hwyblas_int* ipiv,
+                          double* e, hwyblas_int* info);
+
+/* The inverse of A from the factorization of ?sytrf / ?hetrf, in
+ * place (triangle uplo); work: n. info > 0: D(info,info) is zero. */
+HWYBLAS_API void ssytri_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* work, hwyblas_int* info);
+HWYBLAS_API void dsytri_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* work, hwyblas_int* info);
+HWYBLAS_API void csytri_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* work, hwyblas_int* info);
+HWYBLAS_API void zsytri_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* work, hwyblas_int* info);
+HWYBLAS_API void chetri_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         float* work, hwyblas_int* info);
+HWYBLAS_API void zhetri_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         double* work, hwyblas_int* info);
+
+/* Estimate the reciprocal 1-norm condition number of A from the
+ * factorization of ?sytrf / ?hetrf and anorm = norm1(A). work: 2n; iwork:
+ * n. */
+HWYBLAS_API void ssycon_(const char* uplo, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         const float* anorm, float* rcond, float* work,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dsycon_(const char* uplo, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const hwyblas_int* ipiv, const double* anorm,
+                         double* rcond, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void csycon_(const char* uplo, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         const float* anorm, float* rcond, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zsycon_(const char* uplo, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const hwyblas_int* ipiv, const double* anorm,
+                         double* rcond, double* work, hwyblas_int* info);
+HWYBLAS_API void checon_(const char* uplo, const hwyblas_int* n, const float* a,
+                         const hwyblas_int* lda, const hwyblas_int* ipiv,
+                         const float* anorm, float* rcond, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zhecon_(const char* uplo, const hwyblas_int* n,
+                         const double* a, const hwyblas_int* lda,
+                         const hwyblas_int* ipiv, const double* anorm,
+                         double* rcond, double* work, hwyblas_int* info);
+
+/* Iterative refinement of the solution x of A*X = B with the
+ * factorization af, ipiv, with forward (ferr) and backward (berr) error
+ * bounds. work: 3n (real) or 2n (complex); iwork: n; rwork: n. */
+HWYBLAS_API void ssyrfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dsyrfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void csyrfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, float* rwork, hwyblas_int* info);
+HWYBLAS_API void zsyrfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, double* rwork, hwyblas_int* info);
+HWYBLAS_API void cherfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* a,
+                         const hwyblas_int* lda, const float* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* ferr, float* berr,
+                         float* work, float* rwork, hwyblas_int* info);
+HWYBLAS_API void zherfs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* a,
+                         const hwyblas_int* lda, const double* af,
+                         const hwyblas_int* ldaf, const hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* ferr, double* berr,
+                         double* work, double* rwork, hwyblas_int* info);
+
+/* Solve A*X = B for symmetric (Hermitian) A: ?sytrf / ?hetrf (a,
+ * ipiv return the factorization), then ?sytrs2 / ?hetrs2 (?sytrs / ?hetrs
+ * if lwork < n). lwork >= 1 (-1: query). info > 0: D(info,info) is zero. */
+HWYBLAS_API void ssysv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, float* b,
+                        const hwyblas_int* ldb, float* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dsysv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, double* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, double* b,
+                        const hwyblas_int* ldb, double* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void csysv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, float* b,
+                        const hwyblas_int* ldb, float* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zsysv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, double* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, double* b,
+                        const hwyblas_int* ldb, double* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void chesv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, float* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, float* b,
+                        const hwyblas_int* ldb, float* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zhesv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* nrhs, double* a,
+                        const hwyblas_int* lda, hwyblas_int* ipiv, double* b,
+                        const hwyblas_int* ldb, double* work,
+                        const hwyblas_int* lwork, hwyblas_int* info);
+
+/* Expert drivers: solve A*X = B with the factorization (fact =
+ * 'F': given in af, ipiv; 'N': computed), refine X and return rcond, ferr
+ * and berr. work: lwork >= max(1, 3n) (real) or max(1, 2n) (complex)
+ * (-1: query); iwork: n; rwork: n. info = n+1: rcond < eps. */
+HWYBLAS_API void ssysvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, const hwyblas_int* lwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void dsysvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, const hwyblas_int* lwork,
+                         hwyblas_int* iwork, hwyblas_int* info);
+HWYBLAS_API void csysvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, const hwyblas_int* lwork,
+                         float* rwork, hwyblas_int* info);
+HWYBLAS_API void zsysvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, const hwyblas_int* lwork,
+                         double* rwork, hwyblas_int* info);
+HWYBLAS_API void chesvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* a, const hwyblas_int* lda, float* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const float* b, const hwyblas_int* ldb, float* x,
+                         const hwyblas_int* ldx, float* rcond, float* ferr,
+                         float* berr, float* work, const hwyblas_int* lwork,
+                         float* rwork, hwyblas_int* info);
+HWYBLAS_API void zhesvx_(const char* fact, const char* uplo,
+                         const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* a, const hwyblas_int* lda, double* af,
+                         const hwyblas_int* ldaf, hwyblas_int* ipiv,
+                         const double* b, const hwyblas_int* ldb, double* x,
+                         const hwyblas_int* ldx, double* rcond, double* ferr,
+                         double* berr, double* work, const hwyblas_int* lwork,
+                         double* rwork, hwyblas_int* info);
+
+/* LAPACK's complex symmetric (not Hermitian) y := alpha*A*x +
+ * beta*y and A := alpha*x*x^T + A (the BLAS has the real and Hermitian
+ * ones). */
+HWYBLAS_API void csymv_(const char* uplo, const hwyblas_int* n,
+                        const float* alpha, const float* a,
+                        const hwyblas_int* lda, const float* x,
+                        const hwyblas_int* incx, const float* beta, float* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void zsymv_(const char* uplo, const hwyblas_int* n,
+                        const double* alpha, const double* a,
+                        const hwyblas_int* lda, const double* x,
+                        const hwyblas_int* incx, const double* beta, double* y,
+                        const hwyblas_int* incy);
+HWYBLAS_API void csyr_(const char* uplo, const hwyblas_int* n,
+                       const float* alpha, const float* x,
+                       const hwyblas_int* incx, float* a,
+                       const hwyblas_int* lda);
+HWYBLAS_API void zsyr_(const char* uplo, const hwyblas_int* n,
+                       const double* alpha, const double* x,
+                       const hwyblas_int* incx, double* a,
+                       const hwyblas_int* lda);
+
 /* ------------------------------------------------------------------------ */
 /* QR and LQ factorizations                                                 */
 

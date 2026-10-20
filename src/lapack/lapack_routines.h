@@ -231,6 +231,183 @@ blasint Potrf2(char uplo, blasint n, T* a, blasint lda);
 template <typename T>
 blasint Potrf(char uplo, blasint n, T* a, blasint lda);
 
+// WORK has 2 * n elements.
+template <typename T>
+blasint Pstf2(char uplo, blasint n, T* a, blasint lda, blasint* piv,
+              blasint* rank, RealT<T> tol, RealT<T>* work);
+
+template <typename T>
+blasint Pstrf(char uplo, blasint n, T* a, blasint lda, blasint* piv,
+              blasint* rank, RealT<T> tol, RealT<T>* work);
+
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) positive definite systems (posv.cc)
+
+template <typename T>
+blasint Potrs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda, T* b,
+              blasint ldb);
+
+template <typename T>
+blasint Posv(char uplo, blasint n, blasint nrhs, T* a, blasint lda, T* b,
+             blasint ldb);
+
+template <typename T>
+blasint Lauu2(char uplo, blasint n, T* a, blasint lda);
+
+template <typename T>
+blasint Lauum(char uplo, blasint n, T* a, blasint lda);
+
+template <typename T>
+blasint Potri(char uplo, blasint n, T* a, blasint lda);
+
+// WORK (3 * n elements) and IWORK (n) for real T, WORK (2 * n) and RWORK
+// (n) for complex T; rwork is used for complex T only, iwork for real T
+// only.
+template <typename T>
+blasint Pocon(char uplo, blasint n, const T* a, blasint lda, RealT<T> anorm,
+              RealT<T>* rcond, T* work, RealT<T>* rwork, blasint* iwork);
+
+template <typename T>
+blasint Poequ(blasint n, const T* a, blasint lda, RealT<T>* s, RealT<T>* scond,
+              RealT<T>* amax);
+
+// xLAQSY: symmetric A (complex symmetric for complex T).
+template <typename T>
+void Laqsy(char uplo, blasint n, T* a, blasint lda, const RealT<T>* s,
+           RealT<T> scond, RealT<T> amax, char* equed);
+
+// Complex T only.
+template <typename T>
+void Laqhe(char uplo, blasint n, T* a, blasint lda, const RealT<T>* s,
+           RealT<T> scond, RealT<T> amax, char* equed);
+
+// Workspaces as for Pocon.
+template <typename T>
+blasint Porfs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda,
+              const T* af, blasint ldaf, const T* b, blasint ldb, T* x,
+              blasint ldx, RealT<T>* ferr, RealT<T>* berr, T* work,
+              RealT<T>* rwork, blasint* iwork);
+
+// Workspaces as for Pocon.
+template <typename T>
+blasint Posvx(char fact, char uplo, blasint n, blasint nrhs, T* a, blasint lda,
+              T* af, blasint ldaf, char* equed, RealT<T>* s, T* b, blasint ldb,
+              T* x, blasint ldx, RealT<T>* rcond, RealT<T>* ferr,
+              RealT<T>* berr, T* work, RealT<T>* rwork, blasint* iwork);
+
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) indefinite systems (sytrf.cc, sysv.cc). The xHE*
+// routines are for complex T only.
+
+// CSYMV / ZSYMV and CSYR / ZSYR for complex T (complex symmetric A); the
+// BLAS's xSYMV and xSYR for real T.
+template <typename T>
+void Symv(char uplo, blasint n, T alpha, const T* a, blasint lda, const T* x,
+          blasint incx, T beta, T* y, blasint incy);
+
+template <typename T>
+void Syr(char uplo, blasint n, T alpha, const T* x, blasint incx, T* a,
+         blasint lda);
+
+template <typename T>
+blasint Sytf2(char uplo, blasint n, T* a, blasint lda, blasint* ipiv);
+
+template <typename T>
+blasint Lasyf(char uplo, blasint n, blasint nb, blasint* kb, T* a, blasint lda,
+              blasint* ipiv, T* w, blasint ldw);
+
+template <typename T>
+blasint Sytrf(char uplo, blasint n, T* a, blasint lda, blasint* ipiv, T* work,
+              blasint lwork);
+
+template <typename T>
+blasint Hetf2(char uplo, blasint n, T* a, blasint lda, blasint* ipiv);
+
+template <typename T>
+blasint Lahef(char uplo, blasint n, blasint nb, blasint* kb, T* a, blasint lda,
+              blasint* ipiv, T* w, blasint ldw);
+
+template <typename T>
+blasint Hetrf(char uplo, blasint n, T* a, blasint lda, blasint* ipiv, T* work,
+              blasint lwork);
+
+template <typename T>
+blasint Sytrs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda,
+              const blasint* ipiv, T* b, blasint ldb);
+
+template <typename T>
+blasint Hetrs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda,
+              const blasint* ipiv, T* b, blasint ldb);
+
+template <typename T>
+blasint Syconv(char uplo, char way, blasint n, T* a, blasint lda,
+               const blasint* ipiv, T* e);
+
+// A is changed, but restored on exit.
+template <typename T>
+blasint Sytrs2(char uplo, blasint n, blasint nrhs, T* a, blasint lda,
+               const blasint* ipiv, T* b, blasint ldb, T* work);
+
+// A is changed, but restored on exit.
+template <typename T>
+blasint Hetrs2(char uplo, blasint n, blasint nrhs, T* a, blasint lda,
+               const blasint* ipiv, T* b, blasint ldb, T* work);
+
+template <typename T>
+blasint Sytri(char uplo, blasint n, T* a, blasint lda, const blasint* ipiv,
+              T* work);
+
+template <typename T>
+blasint Hetri(char uplo, blasint n, T* a, blasint lda, const blasint* ipiv,
+              T* work);
+
+// WORK (2 * n elements); IWORK (n) is used for real T only.
+template <typename T>
+blasint Sycon(char uplo, blasint n, const T* a, blasint lda,
+              const blasint* ipiv, RealT<T> anorm, RealT<T>* rcond, T* work,
+              blasint* iwork);
+
+template <typename T>
+blasint Hecon(char uplo, blasint n, const T* a, blasint lda,
+              const blasint* ipiv, RealT<T> anorm, RealT<T>* rcond, T* work);
+
+// WORK (3 * n elements) and IWORK (n) for real T, WORK (2 * n) and RWORK
+// (n) for complex T; rwork is used for complex T only, iwork for real T
+// only.
+template <typename T>
+blasint Syrfs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda,
+              const T* af, blasint ldaf, const blasint* ipiv, const T* b,
+              blasint ldb, T* x, blasint ldx, RealT<T>* ferr, RealT<T>* berr,
+              T* work, RealT<T>* rwork, blasint* iwork);
+
+template <typename T>
+blasint Herfs(char uplo, blasint n, blasint nrhs, const T* a, blasint lda,
+              const T* af, blasint ldaf, const blasint* ipiv, const T* b,
+              blasint ldb, T* x, blasint ldx, RealT<T>* ferr, RealT<T>* berr,
+              T* work, RealT<T>* rwork);
+
+template <typename T>
+blasint Sysv(char uplo, blasint n, blasint nrhs, T* a, blasint lda,
+             blasint* ipiv, T* b, blasint ldb, T* work, blasint lwork);
+
+template <typename T>
+blasint Hesv(char uplo, blasint n, blasint nrhs, T* a, blasint lda,
+             blasint* ipiv, T* b, blasint ldb, T* work, blasint lwork);
+
+// Workspaces as for Syrfs (WORK has LWORK elements).
+template <typename T>
+blasint Sysvx(char fact, char uplo, blasint n, blasint nrhs, const T* a,
+              blasint lda, T* af, blasint ldaf, blasint* ipiv, const T* b,
+              blasint ldb, T* x, blasint ldx, RealT<T>* rcond, RealT<T>* ferr,
+              RealT<T>* berr, T* work, blasint lwork, RealT<T>* rwork,
+              blasint* iwork);
+
+template <typename T>
+blasint Hesvx(char fact, char uplo, blasint n, blasint nrhs, const T* a,
+              blasint lda, T* af, blasint ldaf, blasint* ipiv, const T* b,
+              blasint ldb, T* x, blasint ldx, RealT<T>* rcond, RealT<T>* ferr,
+              RealT<T>* berr, T* work, blasint lwork, RealT<T>* rwork);
+
 // ---------------------------------------------------------------------------
 // QR and LQ factorizations (geqrf.cc)
 

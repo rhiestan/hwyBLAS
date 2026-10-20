@@ -11,6 +11,7 @@
 #include "hwyblas/lapack.h"
 #include "hwyblas/lapacke.h"
 #include "lapack/lapack_test_util.h"
+#include "lapack/linear_test_util.h"
 #include "test_util.h"
 
 namespace hwyblas_test {
@@ -23,94 +24,10 @@ using ScalarTypes =
     ::testing::Types<float, double, std::complex<float>, std::complex<double>>;
 TYPED_TEST_SUITE(LinearTest, ScalarTypes);
 
-// |re| + |im| (|x| for real x), the absolute value of CABS1.
-template <typename X>
-double Cabs1Ref(X x) {
-  return std::abs(static_cast<double>(std::real(x))) +
-         std::abs(static_cast<double>(std::imag(x)));
-}
-
 // CABS1 in the working precision, as the routines compute it.
 template <typename T>
 RealT<T> Cabs1W(T x) {
   return std::abs(std::real(x)) + std::abs(std::imag(x));
-}
-
-// A power of 2 that scales a right hand side so that the denominators of
-// the backward errors of xGERFS and xTRRFS fall below SAFE2 (where SAFE1 is
-// added).
-template <typename T>
-double NearUnderflow() {
-  return std::is_same_v<RealT<T>, float> ? std::ldexp(1.0, -110)
-                                         : std::ldexp(1.0, -982);
-}
-
-// The componentwise backward error of xGERFS and xTRRFS for the residual r
-// and the denominators denom = (abs(op(A))*abs(X) + abs(B))(i), with
-// SAFE1 added where denom(i) <= SAFE2.
-template <typename T>
-double BackwardError(const std::vector<double>& r,
-                     const std::vector<double>& denom) {
-  using R = RealT<T>;
-  const double nz = static_cast<double>(r.size() + 1);
-  const double safe1 = nz * std::numeric_limits<R>::min();
-  const double safe2 = safe1 / LapackEps<T>();
-  double s = 0;
-  for (size_t i = 0; i < r.size(); ++i) {
-    s = std::max(s, denom[i] > safe2 ? r[i] / denom[i]
-                                     : (r[i] + safe1) / (denom[i] + safe1));
-  }
-  return s;
-}
-
-// op(d) for op = 'N', 'T' or 'C'.
-template <typename T>
-Dense<T> Op(char op, const Dense<T>& d) {
-  if (op == 'N') return d;
-  Dense<T> t(d.cols, d.rows);
-  for (size_t j = 0; j < d.cols; ++j) {
-    for (size_t i = 0; i < d.rows; ++i) {
-      t(j, i) = op == 'C' ? Conj(d(i, j)) : d(i, j);
-    }
-  }
-  return t;
-}
-
-template <typename T>
-double NormInf(const Dense<T>& a) {
-  return Norm1(Op('T', a));
-}
-
-// The inverse of the n x n matrix d by Gauss-Jordan elimination with
-// partial pivoting, in the reference precision.
-template <typename T>
-Dense<T> Inverse(Dense<T> d) {
-  const size_t n = d.rows;
-  Dense<T> inv = Identity<T>(n);
-  for (size_t k = 0; k < n; ++k) {
-    size_t p = k;
-    for (size_t i = k + 1; i < n; ++i) {
-      if (std::abs(d(i, k)) > std::abs(d(p, k))) p = i;
-    }
-    for (size_t j = 0; j < n; ++j) {
-      std::swap(d(k, j), d(p, j));
-      std::swap(inv(k, j), inv(p, j));
-    }
-    const RefT<T> pivot = d(k, k);
-    for (size_t j = 0; j < n; ++j) {
-      d(k, j) /= pivot;
-      inv(k, j) /= pivot;
-    }
-    for (size_t i = 0; i < n; ++i) {
-      if (i == k) continue;
-      const RefT<T> f = d(i, k);
-      for (size_t j = 0; j < n; ++j) {
-        d(i, j) -= f * d(k, j);
-        inv(i, j) -= f * inv(k, j);
-      }
-    }
-  }
-  return inv;
 }
 
 // A random n x n matrix (leading dimension lda) with a dominant diagonal
@@ -891,31 +808,6 @@ TYPED_TEST(LinearTest, Errors) {
 
 // ---------------------------------------------------------------------------
 // LAPACKE
-
-#define LAPACKE_CALL(T, NAME, ...)                                 \
-  [&]() {                                                          \
-    if constexpr (std::is_same_v<T, float>) {                      \
-      return LAPACKE_s##NAME(__VA_ARGS__);                         \
-    } else if constexpr (std::is_same_v<T, double>) {              \
-      return LAPACKE_d##NAME(__VA_ARGS__);                         \
-    } else if constexpr (std::is_same_v<T, std::complex<float>>) { \
-      return LAPACKE_c##NAME(__VA_ARGS__);                         \
-    } else {                                                       \
-      return LAPACKE_z##NAME(__VA_ARGS__);                         \
-    }                                                              \
-  }()
-
-// The m x n column-major matrix col (leading dimension ldc) in row-major
-// layout (leading dimension ldr).
-template <typename T>
-std::vector<T> RowMajor(const std::vector<T>& col, size_t m, size_t n,
-                        size_t ldc, size_t ldr) {
-  std::vector<T> row(ldr * std::max<size_t>(m, 1), T(5));
-  for (size_t i = 0; i < m; ++i) {
-    for (size_t j = 0; j < n; ++j) row[i * ldr + j] = At(col, i, j, ldc);
-  }
-  return row;
-}
 
 // The row-major functions give the results of the column-major ones (the
 // same arithmetic on transposed copies).

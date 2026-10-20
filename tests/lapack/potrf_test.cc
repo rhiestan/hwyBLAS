@@ -10,6 +10,7 @@
 #include "hwyblas/lapack.h"
 #include "hwyblas/lapacke.h"
 #include "lapack/lapack_test_util.h"
+#include "lapack/linear_test_util.h"
 #include "test_util.h"
 
 namespace hwyblas_test {
@@ -32,49 +33,6 @@ hwyblas_int Potrf(bool recursive, char uplo, hwyblas_int n, std::vector<T>& a,
     HWYBLAS_CALL(T, potrf, &uplo, &n, P(a.data()), &lda, &info);
   }
   return info;
-}
-
-// The value stored outside the triangle uplo, which the routines must not
-// change.
-template <typename T>
-T Sentinel() {
-  return MakeScalar<T>(7.0, -3.0);
-}
-
-// A random symmetric (Hermitian) positive definite n x n matrix, stored in
-// the triangle uplo of a (leading dimension lda), with Sentinel() elsewhere:
-// B * B**H + n * I for random B, with a real diagonal.
-template <typename T>
-std::vector<T> PositiveDefinite(char uplo, size_t n, size_t lda,
-                                Random<T>& rng) {
-  const std::vector<T> b = rng.Vector(n * n);
-  Dense<T> full = Mul(ToDense(b, n, n, n), Adjoint(ToDense(b, n, n, n)));
-  std::vector<T> a(lda * n, Sentinel<T>());
-  for (size_t j = 0; j < n; ++j) {
-    for (size_t i = 0; i < n; ++i) {
-      const bool stored = (uplo == 'U') ? (i <= j) : (i >= j);
-      if (!stored) continue;
-      RefT<T> v = full(i, j);
-      if (i == j) v = std::real(v) + static_cast<double>(n);
-      At(a, i, j, lda) = static_cast<T>(v);
-    }
-  }
-  return a;
-}
-
-// The Hermitian matrix of the triangle uplo of a.
-template <typename T>
-Dense<T> HermitianOf(char uplo, const std::vector<T>& a, size_t n, size_t lda) {
-  Dense<T> d(n, n);
-  for (size_t j = 0; j < n; ++j) {
-    for (size_t i = 0; i < n; ++i) {
-      const bool stored = (uplo == 'U') ? (i <= j) : (i >= j);
-      const RefT<T> v = stored ? static_cast<RefT<T>>(At(a, i, j, lda))
-                               : Conj(static_cast<RefT<T>>(At(a, j, i, lda)));
-      d(i, j) = (i == j) ? RefT<T>(std::real(v)) : v;
-    }
-  }
-  return d;
 }
 
 // The test ratio of LAPACK's xPOT01: ||U**H * U - A||_1 / (n ||A||_1 eps)

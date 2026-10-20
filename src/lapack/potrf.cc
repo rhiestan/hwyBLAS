@@ -1,5 +1,6 @@
 // Cholesky factorization of a symmetric (Hermitian) positive definite
-// matrix: xPOTRF (blocked) and xPOTRF2 (recursive).
+// matrix: xPOTRF (blocked) and xPOTRF2 (recursive), and of a positive
+// semidefinite one with complete pivoting: xPSTRF (blocked) and xPSTF2.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -196,9 +197,455 @@ blasint Potrf(char uplo, blasint n, T* a, blasint lda) {
   return info;
 }
 
-#define HWYBLAS_LAPACK_INSTANTIATE(T)                     \
-  template blasint Potrf2<T>(char, blasint, T*, blasint); \
-  template blasint Potrf<T>(char, blasint, T*, blasint);
+// The pivot search of xPSTF2 and xPSTRF at the start: PVT = the index of the
+// largest diagonal element of A, AJJ = A(PVT, PVT). The real routines search
+// with a loop, the complex ones with MAXLOC of the real parts in WORK(1:N);
+// they differ only if a diagonal element is NaN.
+template <typename T>
+void PstrfFirstPivot(blasint n, const Matrix<T>& A,
+                     const Vector<RealT<T>>& WORK, blasint* pvt,
+                     RealT<T>* ajj) {
+  if constexpr (IsComplex<T>::value) {
+    for (blasint i = 1; i <= n; ++i) WORK(i) = std::real(A(i, i));
+    *pvt = Maxloc(n, WORK.ptr(1));
+    *ajj = std::real(A(*pvt, *pvt));
+  } else {
+    *pvt = 1;
+    *ajj = A(*pvt, *pvt);
+    for (blasint i = 2; i <= n; ++i) {
+      if (A(i, i) > *ajj) {
+        *pvt = i;
+        *ajj = A(*pvt, *pvt);
+      }
+    }
+  }
+}
+
+// xPSTF2: computes the Cholesky factorization with complete pivoting of a
+// real symmetric or complex Hermitian positive semidefinite matrix A of
+// order N:
+//
+//     P**T * A * P = U**H * U  (UPLO = 'U'),  or
+//     P**T * A * P = L * L**H  (UPLO = 'L'),
+//
+// where U is upper and L lower triangular, and P is stored in PIV: column
+// PIV(k) of A is column k of A * P. The algorithm stops when the largest
+// remaining diagonal element is not larger than TOL (if TOL < 0,
+// N * eps * max(A(k, k))); RANK returns the number of steps done, and the
+// trailing part of the triangle UPLO is left unfactored. This is the
+// unblocked version (Level 2 BLAS). WORK has 2*N elements.
+//
+// The real routine swaps the part of the pivot row and column between J and
+// PVT with xSWAP, the complex one with a loop that also conjugates; for
+// real T both give the same.
+//
+// Returns INFO: 0 on success, -i if argument i had an illegal value, or 1
+// if A is rank deficient (RANK < N) or not positive semidefinite (as far
+// as detected; also for a NaN).
+template <typename T>
+blasint Pstf2(char uplo, blasint n, T* a, blasint lda, blasint* piv,
+              blasint* rank, RealT<T> tol, RealT<T>* work) {
+  using R = RealT<T>;
+  const R one = R(1), zero = R(0);
+  const T cone = T(1);
+  const Matrix<T> A(a, lda);
+  const Vector<blasint> PIV(piv);
+  const Vector<R> WORK(work);
+
+  // Test the input parameters.
+  blasint info = 0;
+  const bool upper = Lsame(uplo, 'U');
+  if (!upper && !Lsame(uplo, 'L')) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -4;
+  }
+  if (info != 0) {
+    Xerbla<T>("PSTF2", -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0) return info;
+
+  // Initialize PIV.
+  for (blasint i = 1; i <= n; ++i) PIV(i) = i;
+
+  // Compute stopping value.
+  blasint pvt;
+  R ajj;
+  PstrfFirstPivot(n, A, WORK, &pvt, &ajj);
+  if (ajj <= zero || std::isnan(ajj)) {
+    *rank = 0;
+    info = 1;
+    return info;
+  }
+
+  // Compute stopping value if not supplied.
+  const R dstop = tol < zero ? n * Lamch<R>('E') * ajj : tol;
+
+  // Set first half of WORK to zero, holds dot products.
+  for (blasint i = 1; i <= n; ++i) WORK(i) = 0;
+
+  blasint j;
+  if (upper) {
+    // Compute the Cholesky factorization P**T * A * P = U**H * U.
+    for (j = 1; j <= n; ++j) {
+      // Find pivot, test for exit, else swap rows and columns. Update dot
+      // products, compute possible pivots which are stored in the second
+      // half of WORK.
+      for (blasint i = j; i <= n; ++i) {
+        if (j > 1) {
+          WORK(i) = WORK(i) + std::real(Conj(A(j - 1, i)) * A(j - 1, i));
+        }
+        WORK(n + i) = std::real(A(i, i)) - WORK(i);
+      }
+
+      if (j > 1) {
+        const blasint itemp = Maxloc(n - j + 1, WORK.ptr(n + j));
+        pvt = itemp + j - 1;
+        ajj = WORK(n + pvt);
+        if (ajj <= dstop || std::isnan(ajj)) {
+          A(j, j) = ajj;
+          goto L190;
+        }
+      }
+
+      if (j != pvt) {
+        // Pivot OK, so can now swap pivot rows and columns.
+        A(pvt, pvt) = A(j, j);
+        Swap(j - 1, A.ptr(1, j), 1, A.ptr(1, pvt), 1);
+        if (pvt < n) {
+          Swap(n - pvt, A.ptr(j, pvt + 1), lda, A.ptr(pvt, pvt + 1), lda);
+        }
+        for (blasint i = j + 1; i <= pvt - 1; ++i) {
+          const T ztemp = Conj(A(j, i));
+          A(j, i) = Conj(A(i, pvt));
+          A(i, pvt) = ztemp;
+        }
+        A(j, pvt) = Conj(A(j, pvt));
+
+        // Swap dot products and PIV.
+        const R dtemp = WORK(j);
+        WORK(j) = WORK(pvt);
+        WORK(pvt) = dtemp;
+        const blasint itemp = PIV(pvt);
+        PIV(pvt) = PIV(j);
+        PIV(j) = itemp;
+      }
+
+      ajj = std::sqrt(ajj);
+      A(j, j) = ajj;
+
+      // Compute elements J+1:N of row J.
+      if (j < n) {
+        Lacgv(j - 1, A.ptr(1, j), 1);
+        Gemv('T', j - 1, n - j, -cone, A.ptr(1, j + 1), lda, A.ptr(1, j), 1,
+             cone, A.ptr(j, j + 1), lda);
+        Lacgv(j - 1, A.ptr(1, j), 1);
+        Rscal(n - j, one / ajj, A.ptr(j, j + 1), lda);
+      }
+    }
+  } else {
+    // Compute the Cholesky factorization P**T * A * P = L * L**H.
+    for (j = 1; j <= n; ++j) {
+      // Find pivot, test for exit, else swap rows and columns. Update dot
+      // products, compute possible pivots which are stored in the second
+      // half of WORK.
+      for (blasint i = j; i <= n; ++i) {
+        if (j > 1) {
+          WORK(i) = WORK(i) + std::real(Conj(A(i, j - 1)) * A(i, j - 1));
+        }
+        WORK(n + i) = std::real(A(i, i)) - WORK(i);
+      }
+
+      if (j > 1) {
+        const blasint itemp = Maxloc(n - j + 1, WORK.ptr(n + j));
+        pvt = itemp + j - 1;
+        ajj = WORK(n + pvt);
+        if (ajj <= dstop || std::isnan(ajj)) {
+          A(j, j) = ajj;
+          goto L190;
+        }
+      }
+
+      if (j != pvt) {
+        // Pivot OK, so can now swap pivot rows and columns.
+        A(pvt, pvt) = A(j, j);
+        Swap(j - 1, A.ptr(j, 1), lda, A.ptr(pvt, 1), lda);
+        if (pvt < n) {
+          Swap(n - pvt, A.ptr(pvt + 1, j), 1, A.ptr(pvt + 1, pvt), 1);
+        }
+        for (blasint i = j + 1; i <= pvt - 1; ++i) {
+          const T ztemp = Conj(A(i, j));
+          A(i, j) = Conj(A(pvt, i));
+          A(pvt, i) = ztemp;
+        }
+        A(pvt, j) = Conj(A(pvt, j));
+
+        // Swap dot products and PIV.
+        const R dtemp = WORK(j);
+        WORK(j) = WORK(pvt);
+        WORK(pvt) = dtemp;
+        const blasint itemp = PIV(pvt);
+        PIV(pvt) = PIV(j);
+        PIV(j) = itemp;
+      }
+
+      ajj = std::sqrt(ajj);
+      A(j, j) = ajj;
+
+      // Compute elements J+1:N of column J.
+      if (j < n) {
+        Lacgv(j - 1, A.ptr(j, 1), lda);
+        Gemv('N', n - j, j - 1, -cone, A.ptr(j + 1, 1), lda, A.ptr(j, 1), lda,
+             cone, A.ptr(j + 1, j), 1);
+        Lacgv(j - 1, A.ptr(j, 1), lda);
+        Rscal(n - j, one / ajj, A.ptr(j + 1, j), 1);
+      }
+    }
+  }
+
+  // Ran to completion, A has full rank.
+  *rank = n;
+  return info;
+
+L190:
+  // Rank is number of steps completed. Set INFO = 1 to signal that the
+  // factorization cannot be used to solve a system.
+  *rank = j - 1;
+  info = 1;
+  return info;
+}
+
+// xPSTRF: computes the Cholesky factorization with complete pivoting of a
+// real symmetric or complex Hermitian positive semidefinite matrix A, like
+// xPSTF2 (see there for the arguments and INFO). This is the blocked
+// version (Level 3 BLAS): it updates the dot products and factors NB
+// columns at a time (NB = ILAENV's block size for xPOTRF), then updates
+// the trailing matrix with xSYRK / xHERK.
+template <typename T>
+blasint Pstrf(char uplo, blasint n, T* a, blasint lda, blasint* piv,
+              blasint* rank, RealT<T> tol, RealT<T>* work) {
+  using R = RealT<T>;
+  const R one = R(1), zero = R(0);
+  const T cone = T(1);
+  const Matrix<T> A(a, lda);
+  const Vector<blasint> PIV(piv);
+  const Vector<R> WORK(work);
+
+  // Test the input parameters.
+  blasint info = 0;
+  const bool upper = Lsame(uplo, 'U');
+  if (!upper && !Lsame(uplo, 'L')) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -4;
+  }
+  if (info != 0) {
+    Xerbla<T>("PSTRF", -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0) return info;
+
+  // Get block size.
+  const char opts[2] = {uplo, '\0'};
+  const blasint nb = Ilaenv<T>(1, "POTRF", opts, n, -1, -1, -1);
+  if (nb <= 1 || nb >= n) {
+    // Use unblocked code.
+    return Pstf2(uplo, n, A.ptr(1, 1), lda, piv, rank, tol, work);
+  }
+
+  // Initialize PIV.
+  for (blasint i = 1; i <= n; ++i) PIV(i) = i;
+
+  // Compute stopping value.
+  blasint pvt;
+  R ajj;
+  PstrfFirstPivot(n, A, WORK, &pvt, &ajj);
+  if (ajj <= zero || std::isnan(ajj)) {
+    *rank = 0;
+    info = 1;
+    return info;
+  }
+
+  // Compute stopping value if not supplied.
+  const R dstop = tol < zero ? n * Lamch<R>('E') * ajj : tol;
+
+  blasint j;
+  if (upper) {
+    // Compute the Cholesky factorization P**T * A * P = U**H * U.
+    for (blasint k = 1; k <= n; k += nb) {
+      // Account for last block not being NB wide.
+      const blasint jb = Min(nb, n - k + 1);
+
+      // Set relevant part of first half of WORK to zero, holds dot
+      // products.
+      for (blasint i = k; i <= n; ++i) WORK(i) = 0;
+
+      for (j = k; j <= k + jb - 1; ++j) {
+        // Find pivot, test for exit, else swap rows and columns. Update dot
+        // products, compute possible pivots which are stored in the second
+        // half of WORK.
+        for (blasint i = j; i <= n; ++i) {
+          if (j > k) {
+            WORK(i) = WORK(i) + std::real(Conj(A(j - 1, i)) * A(j - 1, i));
+          }
+          WORK(n + i) = std::real(A(i, i)) - WORK(i);
+        }
+
+        if (j > 1) {
+          const blasint itemp = Maxloc(n - j + 1, WORK.ptr(n + j));
+          pvt = itemp + j - 1;
+          ajj = WORK(n + pvt);
+          if (ajj <= dstop || std::isnan(ajj)) {
+            A(j, j) = ajj;
+            goto L220;
+          }
+        }
+
+        if (j != pvt) {
+          // Pivot OK, so can now swap pivot rows and columns.
+          A(pvt, pvt) = A(j, j);
+          Swap(j - 1, A.ptr(1, j), 1, A.ptr(1, pvt), 1);
+          if (pvt < n) {
+            Swap(n - pvt, A.ptr(j, pvt + 1), lda, A.ptr(pvt, pvt + 1), lda);
+          }
+          for (blasint i = j + 1; i <= pvt - 1; ++i) {
+            const T ztemp = Conj(A(j, i));
+            A(j, i) = Conj(A(i, pvt));
+            A(i, pvt) = ztemp;
+          }
+          A(j, pvt) = Conj(A(j, pvt));
+
+          // Swap dot products and PIV.
+          const R dtemp = WORK(j);
+          WORK(j) = WORK(pvt);
+          WORK(pvt) = dtemp;
+          const blasint itemp = PIV(pvt);
+          PIV(pvt) = PIV(j);
+          PIV(j) = itemp;
+        }
+
+        ajj = std::sqrt(ajj);
+        A(j, j) = ajj;
+
+        // Compute elements J+1:N of row J.
+        if (j < n) {
+          Lacgv(j - 1, A.ptr(1, j), 1);
+          Gemv('T', j - k, n - j, -cone, A.ptr(k, j + 1), lda, A.ptr(k, j), 1,
+               cone, A.ptr(j, j + 1), lda);
+          Lacgv(j - 1, A.ptr(1, j), 1);
+          Rscal(n - j, one / ajj, A.ptr(j, j + 1), lda);
+        }
+      }
+
+      // Update trailing matrix, J already incremented.
+      if (k + jb <= n) {
+        Herk('U', 'C', n - j + 1, jb, -one, A.ptr(k, j), lda, one, A.ptr(j, j),
+             lda);
+      }
+    }
+  } else {
+    // Compute the Cholesky factorization P**T * A * P = L * L**H.
+    for (blasint k = 1; k <= n; k += nb) {
+      // Account for last block not being NB wide.
+      const blasint jb = Min(nb, n - k + 1);
+
+      // Set relevant part of first half of WORK to zero, holds dot
+      // products.
+      for (blasint i = k; i <= n; ++i) WORK(i) = 0;
+
+      for (j = k; j <= k + jb - 1; ++j) {
+        // Find pivot, test for exit, else swap rows and columns. Update dot
+        // products, compute possible pivots which are stored in the second
+        // half of WORK.
+        for (blasint i = j; i <= n; ++i) {
+          if (j > k) {
+            WORK(i) = WORK(i) + std::real(Conj(A(i, j - 1)) * A(i, j - 1));
+          }
+          WORK(n + i) = std::real(A(i, i)) - WORK(i);
+        }
+
+        if (j > 1) {
+          const blasint itemp = Maxloc(n - j + 1, WORK.ptr(n + j));
+          pvt = itemp + j - 1;
+          ajj = WORK(n + pvt);
+          if (ajj <= dstop || std::isnan(ajj)) {
+            A(j, j) = ajj;
+            goto L220;
+          }
+        }
+
+        if (j != pvt) {
+          // Pivot OK, so can now swap pivot rows and columns.
+          A(pvt, pvt) = A(j, j);
+          Swap(j - 1, A.ptr(j, 1), lda, A.ptr(pvt, 1), lda);
+          if (pvt < n) {
+            Swap(n - pvt, A.ptr(pvt + 1, j), 1, A.ptr(pvt + 1, pvt), 1);
+          }
+          for (blasint i = j + 1; i <= pvt - 1; ++i) {
+            const T ztemp = Conj(A(i, j));
+            A(i, j) = Conj(A(pvt, i));
+            A(pvt, i) = ztemp;
+          }
+          A(pvt, j) = Conj(A(pvt, j));
+
+          // Swap dot products and PIV.
+          const R dtemp = WORK(j);
+          WORK(j) = WORK(pvt);
+          WORK(pvt) = dtemp;
+          const blasint itemp = PIV(pvt);
+          PIV(pvt) = PIV(j);
+          PIV(j) = itemp;
+        }
+
+        ajj = std::sqrt(ajj);
+        A(j, j) = ajj;
+
+        // Compute elements J+1:N of column J.
+        if (j < n) {
+          Lacgv(j - 1, A.ptr(j, 1), lda);
+          Gemv('N', n - j, j - k, -cone, A.ptr(j + 1, k), lda, A.ptr(j, k), lda,
+               cone, A.ptr(j + 1, j), 1);
+          Lacgv(j - 1, A.ptr(j, 1), lda);
+          Rscal(n - j, one / ajj, A.ptr(j + 1, j), 1);
+        }
+      }
+
+      // Update trailing matrix, J already incremented.
+      if (k + jb <= n) {
+        Herk('L', 'N', n - j + 1, jb, -one, A.ptr(j, k), lda, one, A.ptr(j, j),
+             lda);
+      }
+    }
+  }
+
+  // Ran to completion, A has full rank.
+  *rank = n;
+  return info;
+
+L220:
+  // Rank is the number of steps completed. Set INFO = 1 to signal that the
+  // factorization cannot be used to solve a system.
+  *rank = j - 1;
+  info = 1;
+  return info;
+}
+
+#define HWYBLAS_LAPACK_INSTANTIATE(T)                                       \
+  template blasint Potrf2<T>(char, blasint, T*, blasint);                   \
+  template blasint Potrf<T>(char, blasint, T*, blasint);                    \
+  template blasint Pstf2<T>(char, blasint, T*, blasint, blasint*, blasint*, \
+                            RealT<T>, RealT<T>*);                           \
+  template blasint Pstrf<T>(char, blasint, T*, blasint, blasint*, blasint*, \
+                            RealT<T>, RealT<T>*);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
@@ -211,16 +658,30 @@ using hwyblas::lapack::As;
 
 extern "C" {
 
-#define HWYBLAS_LAPACK_POTRF(prefix, T, R)                                 \
-  HWYBLAS_API void prefix##potrf_(const char* uplo, const hwyblas_int* n,  \
-                                  R* a, const hwyblas_int* lda,            \
-                                  hwyblas_int* info) {                     \
-    *info = hwyblas::lapack::Potrf(*uplo, *n, As<T>(a), *lda);             \
-  }                                                                        \
-  HWYBLAS_API void prefix##potrf2_(const char* uplo, const hwyblas_int* n, \
-                                   R* a, const hwyblas_int* lda,           \
-                                   hwyblas_int* info) {                    \
-    *info = hwyblas::lapack::Potrf2(*uplo, *n, As<T>(a), *lda);            \
+#define HWYBLAS_LAPACK_POTRF(prefix, T, R)                                     \
+  HWYBLAS_API void prefix##potrf_(const char* uplo, const hwyblas_int* n,      \
+                                  R* a, const hwyblas_int* lda,                \
+                                  hwyblas_int* info) {                         \
+    *info = hwyblas::lapack::Potrf(*uplo, *n, As<T>(a), *lda);                 \
+  }                                                                            \
+  HWYBLAS_API void prefix##potrf2_(const char* uplo, const hwyblas_int* n,     \
+                                   R* a, const hwyblas_int* lda,               \
+                                   hwyblas_int* info) {                        \
+    *info = hwyblas::lapack::Potrf2(*uplo, *n, As<T>(a), *lda);                \
+  }                                                                            \
+  HWYBLAS_API void prefix##pstf2_(const char* uplo, const hwyblas_int* n,      \
+                                  R* a, const hwyblas_int* lda,                \
+                                  hwyblas_int* piv, hwyblas_int* rank,         \
+                                  const R* tol, R* work, hwyblas_int* info) {  \
+    *info = hwyblas::lapack::Pstf2(*uplo, *n, As<T>(a), *lda, piv, rank, *tol, \
+                                   work);                                      \
+  }                                                                            \
+  HWYBLAS_API void prefix##pstrf_(const char* uplo, const hwyblas_int* n,      \
+                                  R* a, const hwyblas_int* lda,                \
+                                  hwyblas_int* piv, hwyblas_int* rank,         \
+                                  const R* tol, R* work, hwyblas_int* info) {  \
+    *info = hwyblas::lapack::Pstrf(*uplo, *n, As<T>(a), *lda, piv, rank, *tol, \
+                                   work);                                      \
   }
 
 HWYBLAS_LAPACK_POTRF(s, float, float)

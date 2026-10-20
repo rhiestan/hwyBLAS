@@ -47,7 +47,10 @@ The translator produces the conventions described in
   number of arguments and `Max<blasint>` for integer ones), `ABS`, `SQRT`,
   `SIGN`
   (`std::copysign`), `DBLE`/`REAL`, `CONJG`, `MOD`, `NINT`, `LSAME`, `**`
-  (`(x * x)` for `**2`, otherwise `std::pow`).
+  (`(x * x)` for `**2`, otherwise `std::pow`). `MAXLOC` (xPSTRF) is
+  `Maxloc` of `lapack_common.h`, with flang's NaN rule (the first largest
+  element, ignoring NaNs unless all are NaN); the translator does not know
+  it.
 - **Calls**: one template per real/complex pair, named after the complex
   routine (`DORGBR` and `ZUNGBR` both become `Ungbr`). A real routine called
   from a complex one gets `<R>`. `INFO` is not an argument: internal routines
@@ -67,7 +70,20 @@ The translator produces the conventions described in
   xGESVX, xTRCON, xTRRFS), one template takes `work`, `rwork` (complex T)
   and `iwork` (real T); its views have the complex routine's names and
   point into the real routine's WORK for real T, so that the statements
-  are the same.
+  are the same (also xPOCON, xPORFS, xPOSVX, xSYCON, xSYRFS, xSYSVX).
+- **Symmetric and Hermitian**: the real symmetric routines (`d`, `s`) are
+  the complex *symmetric* ones (`z`/`c` `SY`) with `ABS` for `CABS1`, so
+  `Sytrf`, `Sytrs`, `Sytri`, `Sycon` ... serve all four types and are
+  translated from `z`; the Hermitian routines (`HE`) are separate
+  templates for complex T only (`Hetrf`, `Hetrs`, ..., like `Lanhe`).
+  Where a symmetric and a Hermitian routine differ only in the routines
+  they call (xSYTRS2, xSYCON, xSYRFS, xSYSV, xSYSVX against xHETRS2 ...),
+  one implementation with a template parameter `kHerm` serves both. The
+  positive definite routines (`PO`) are Hermitian for complex T and need
+  no such split. The few places where the real routine computes
+  differently from the complex one are kept with `if constexpr` (xLAUU2's
+  diagonal element, xSYTRI's scaling of 2-by-2 blocks, the first pivot of
+  xPSTRF).
 
 ## Step 1: translate (`f2cc.py`)
 
@@ -219,15 +235,19 @@ and calls every driver (xGETRF, xPOTRF, xGEQRF, xGELQF, xGEQP3,
 xSYEV/xHEEV, xGESVD, xGESDD, xGEES, xGEEV, xGEEVX, xGEESX, with all job
 options; xTREVC3 and xTRSNA on the same Schur form; xGESV, xGESVX,
 xGETRS, xGETRI, xGECON, xGEEQU, xGERFS, xTRTRI, xTRTRS, xLATRS, xTRCON,
-xTRRFS, xLANTR) in both on the same matrices of orders 0 to 401. With the
+xTRRFS, xLANTR; xPOSV, xPOSVX, xPOTRS, xPOTRI, xLAUUM, xPOCON, xPOEQU,
+xPORFS, xPSTRF; xSYTRF, xSYSV, xSYSVX, xSYTRS, xSYTRS2, xSYTRI, xSYCON,
+xSYRFS, xSYCONV and the xHE* routines) in both on the same matrices of
+orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS
 and of the error estimates of xGERFS, which the unit tests cannot see).
 The exceptions are deviations that change rounding by design: the leaf
 kernels of xGETRF2 and xPOTRF2 (`src/lapack/factor_kernels.h`), whose
 factors the tool compares with a tolerance (their pivots and INFO
-exactly). The routines that take a factorization (or a Schur form, for
-xTREVC3 and xTRSNA) get the same one in both libraries; xGETRF and the
+exactly), as the results of the drivers that factor with them (xGESV,
+xGESVX, xPOSV, xPOSVX). The routines that take a factorization (or a
+Schur form, for xTREVC3 and xTRSNA) get the same one in both libraries; xGETRF and the
 drivers that factor with it (xGESV, xGESVX) only get matrices with clear
 pivots, since on graded matrices or ties the different rounding can
 change a pivot. The complex results differ in the last bits, because

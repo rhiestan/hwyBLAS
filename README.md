@@ -71,7 +71,11 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?gesv`, `?getrs`, `?getri` (linear systems and inverse with the LU factorization) | s d c z |
 | `?gesvx` (expert driver), `?gecon` (condition number), `?gerfs` (iterative refinement), `?geequ`, `?laqge` (equilibration) | s d c z |
 | `?trtrs`, `?latrs` (triangular systems), `?trtri`, `?trti2` (inverse), `?trcon`, `?trrfs`, `?lantr` | s d c z |
-| `?potrf`, `?potrf2` (Cholesky factorization) | s d c z |
+| `?potrf`, `?potrf2` (Cholesky factorization), `?pstrf`, `?pstf2` (with complete pivoting) | s d c z |
+| `?posv`, `?potrs`, `?potri`, `?lauum`, `?lauu2` (positive definite systems and inverse), `?posvx` (expert driver), `?pocon`, `?porfs`, `?poequ`, `?laqsy` | s d c z |
+| `?laqhe` | c z |
+| `?sysv`, `?sytrf`, `?lasyf`, `?sytf2` (symmetric indefinite systems, Bunch-Kaufman), `?sytrs`, `?sytrs2`, `?syconv`, `?sytri`, `?sysvx` (expert driver), `?sycon`, `?syrfs` | s d c z |
+| `?hesv`, `?hetrf`, `?lahef`, `?hetf2` (Hermitian indefinite systems), `?hetrs`, `?hetrs2`, `?hetri`, `?hesvx`, `?hecon`, `?herfs`, `?symv`, `?syr` (complex symmetric) | c z |
 | `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |
 | `?geqp3`, `?laqps`, `?laqp2` (QR factorization with column pivoting) | s d c z |
 | `?orgqr`, `?org2r`, `?orglq`, `?orgl2`, `?ormqr`, `?orm2r`, `?ormlq`, `?orml2` (Q of QR / LQ) | s d |
@@ -105,8 +109,8 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
 LAPACKE has the reference LAPACKE's functions for these routines (with
-documented fixes in `LAPACKE_?gesvx` and `LAPACKE_?geesx`, see
-`hwyblas/lapacke.h`).
+documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx` and
+`LAPACKE_?syconv`, see `hwyblas/lapacke.h`).
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in

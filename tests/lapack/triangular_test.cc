@@ -11,6 +11,7 @@
 #include "hwyblas/lapack.h"
 #include "hwyblas/lapacke.h"
 #include "lapack/lapack_test_util.h"
+#include "lapack/linear_test_util.h"
 #include "test_util.h"
 
 namespace hwyblas_test {
@@ -67,31 +68,6 @@ Dense<T> DenseTriangle(const std::vector<T>& a, char uplo, char diag, size_t n,
     }
   }
   return d;
-}
-
-// op(d) for op = 'N', 'T' or 'C'.
-template <typename T>
-Dense<T> Op(char op, const Dense<T>& d) {
-  if (op == 'N') return d;
-  Dense<T> t(d.cols, d.rows);
-  for (size_t j = 0; j < d.cols; ++j) {
-    for (size_t i = 0; i < d.rows; ++i) {
-      t(j, i) = op == 'C' ? Conj(d(i, j)) : d(i, j);
-    }
-  }
-  return t;
-}
-
-// The infinity norm (maximum row sum) of a dense matrix.
-template <typename T>
-double NormInf(const Dense<T>& a) {
-  double norm = 0;
-  for (size_t i = 0; i < a.rows; ++i) {
-    double sum = 0;
-    for (size_t j = 0; j < a.cols; ++j) sum += std::abs(a(i, j));
-    norm = std::max(norm, sum);
-  }
-  return norm;
 }
 
 // The inverse of the triangular matrix d (by substitution, in the
@@ -233,40 +209,6 @@ RealT<T> Lantr(char norm, char uplo, char diag, hwyblas_int m, hwyblas_int n,
 }
 
 std::vector<char> Diags() { return {'N', 'U'}; }
-
-// A power of 2 that scales a right hand side so that the denominators of
-// the backward errors of xGERFS and xTRRFS fall below SAFE2 (where SAFE1 is
-// added).
-template <typename T>
-double NearUnderflow() {
-  return std::is_same_v<RealT<T>, float> ? std::ldexp(1.0, -110)
-                                         : std::ldexp(1.0, -982);
-}
-
-// The componentwise backward error of xGERFS and xTRRFS for the residual r
-// and the denominators denom = (abs(op(A))*abs(X) + abs(B))(i), with
-// SAFE1 added where denom(i) <= SAFE2.
-template <typename T>
-double BackwardError(const std::vector<double>& r,
-                     const std::vector<double>& denom) {
-  using R = RealT<T>;
-  const double nz = static_cast<double>(r.size() + 1);
-  const double safe1 = nz * std::numeric_limits<R>::min();
-  const double safe2 = safe1 / LapackEps<T>();
-  double s = 0;
-  for (size_t i = 0; i < r.size(); ++i) {
-    s = std::max(s, denom[i] > safe2 ? r[i] / denom[i]
-                                     : (r[i] + safe1) / (denom[i] + safe1));
-  }
-  return s;
-}
-
-// |re| + |im| (|x| for real x), the absolute value of CABS1.
-template <typename X>
-double Cabs1Ref(X x) {
-  return std::abs(static_cast<double>(std::real(x))) +
-         std::abs(static_cast<double>(std::imag(x)));
-}
 
 // ---------------------------------------------------------------------------
 // Inverse
@@ -435,8 +377,9 @@ TYPED_TEST(TriangularTest, Latrs) {
           std::vector<T> b = rng.Vector(n);
           // Complex (if T is) to exercise the conjugation of the in-line
           // dot products for A**H.
-          const T huge = (IsComplex<T>::value ? MakeScalar<T>(0.6, 0.8) : T(1)) *
-                         (std::numeric_limits<R>::max() / 4);
+          const T huge =
+              (IsComplex<T>::value ? MakeScalar<T>(0.6, 0.8) : T(1)) *
+              (std::numeric_limits<R>::max() / 4);
           if (kind == kHugeColumn) {
             const hwyblas_int jc = uplo == 'U' ? n - 1 : 0;
             for (hwyblas_int i = 0; i < n; ++i) {
@@ -775,31 +718,6 @@ TYPED_TEST(TriangularTest, Errors) {
 
 // ---------------------------------------------------------------------------
 // LAPACKE
-
-#define LAPACKE_CALL(T, NAME, ...)                                 \
-  [&]() {                                                          \
-    if constexpr (std::is_same_v<T, float>) {                      \
-      return LAPACKE_s##NAME(__VA_ARGS__);                         \
-    } else if constexpr (std::is_same_v<T, double>) {              \
-      return LAPACKE_d##NAME(__VA_ARGS__);                         \
-    } else if constexpr (std::is_same_v<T, std::complex<float>>) { \
-      return LAPACKE_c##NAME(__VA_ARGS__);                         \
-    } else {                                                       \
-      return LAPACKE_z##NAME(__VA_ARGS__);                         \
-    }                                                              \
-  }()
-
-// The m x n column-major matrix col (leading dimension ldc) in row-major
-// layout (leading dimension ldr).
-template <typename T>
-std::vector<T> RowMajor(const std::vector<T>& col, size_t m, size_t n,
-                        size_t ldc, size_t ldr) {
-  std::vector<T> row(ldr * std::max<size_t>(m, 1), T(5));
-  for (size_t i = 0; i < m; ++i) {
-    for (size_t j = 0; j < n; ++j) row[i * ldr + j] = At(col, i, j, ldc);
-  }
-  return row;
-}
 
 // The row-major functions give the results of the column-major ones (the
 // same arithmetic on transposed copies; xLANTR computes the norm of the
