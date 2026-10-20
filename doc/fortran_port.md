@@ -58,7 +58,12 @@ The translator produces the conventions described in
   `Xerbla`, `Ilaenv` and `Lamch<R>`.
 - **Real and complex**: only one precision of each pair is translated (`d*`
   for real-only routines, `z*` when the complex one exists), and the result
-  is instantiated for all four types. Where the real and complex routines
+  is instantiated for all four types. The single precision routine is
+  compared with the translated one first: where it computes differently
+  (other tolerances in SLARRE, SLARRF and SSTEMR / CSTEMR, WORK(1) = 26
+  for N = 1 in SSYEVR, xLASQ2's IEEE flag), the difference is kept with
+  `if constexpr (std::is_same_v<R, float>)`. Only the comparison with the
+  reference LAPACK finds such a difference (all residual tests pass). Where the real and complex routines
   differ by more than conjugation, the difference is kept with
   `if constexpr`, or the two are ported as separate functions behind one
   template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`),
@@ -66,7 +71,13 @@ The translator produces the conventions described in
   and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES, xGEEV, xGEEVX,
   xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA; the complex Q
   of ZSTEDC, ZLAED0, ZLAED7 and ZLAED8, whose other xLAED* routines are
-  real). Where they differ
+  real). The MRRR and inverse iteration routines whose complex version
+  only stores the real eigenvectors in a complex Z (xSTEMR, xLARRV,
+  xLAR1V, xSTEIN) are one template for all four types: R is the real
+  type of T, and the few places where the complex routine works
+  differently are kept with `if constexpr` (ZLARRV keeps the child
+  representations in WORK before copying them into Z, ZSTEIN
+  reorthogonalizes with loops instead of xDOT and xAXPY). Where they differ
   only in their workspaces (the real routine keeps a real vector in a part
   of WORK and has IWORK, the complex one keeps it in RWORK: xGECON, xGERFS,
   xGESVX, xTRCON, xTRRFS), one template takes `work`, `rwork` (complex T)
@@ -74,7 +85,10 @@ The translator produces the conventions described in
   point into the real routine's WORK for real T, so that the statements
   are the same (also xPOCON, xPORFS, xPOSVX, xSYCON, xSYRFS, xSYSVX; and
   xSYEV, xSYEVD, xSYGV, xSYGVD with their xHE* routines, which take
-  `rwork` for complex T only).
+  `rwork` for complex T only). xSYEVR and xHEEVR lay out their
+  workspaces too differently for that and are two bodies behind one
+  template (`SyevrReal` / `HeevrComplex` behind `Heevr`), as xLARNV
+  (`LarnvReal` / `LarnvComplex`).
 - **Symmetric and Hermitian**: the real symmetric routines (`d`, `s`) are
   the complex *symmetric* ones (`z`/`c` `SY`) with `ABS` for `CABS1`, so
   `Sytrf`, `Sytrs`, `Sytri`, `Sycon` ... serve all four types and are
@@ -101,7 +115,8 @@ The script:
    block and the `..` separators; trailing `!` comments, as in xTREVC3,
    are dropped). Statements are upper-cased (Fortran is
    case-insensitive, and newer routines such as xLAQR0 are partly lower
-   case).
+   case). Fortran 90's relational operators (`<`, `==`, `/=`, as in
+   xLARUV) are understood as their `.LT.` forms.
 2. Collects the declarations: types, array ranks, `PARAMETER`s,
    `EXTERNAL`s and the dummy arguments.
 3. Emits the declarations, then translates statement by statement: a regex
@@ -165,8 +180,9 @@ applying the `|`-separated edits:
 
 It then applies the common clean-ups (`Sign(` → `std::copysign(`,
 `R(1.0)` → `R(1)`, complex constants `(R(1.0),R(0.0))` → `T(1)`, removing
-the `// End of ...` comment, `&*x` → `x`, and declaring `info` at its first
-assignment). Keeping the edits in the skeleton
+the `// End of ...` comment, `&*x` → `x`, declaring `info` at its first
+assignment unless the skeleton declares it, and `L10:;` for a label right
+before a closing brace). Keeping the edits in the skeleton
 means a fix to the translator only requires running both steps again.
 
 ## Step 3: finish by hand
@@ -201,14 +217,17 @@ attention:
   input), found by Eigen's test suite. Neither `std::max({...})`: MSVC's
   never returns if an element is NaN;
 - `DATA` tables become `static const` arrays with views, `EQUIVALENCE`d
-  arrays one array with two views (xLALN2);
+  arrays one array with two views (xLALN2); xLARUV's table of 128 x 4
+  multipliers keeps the rows of its `DATA` statements and is read
+  through a function `MM(i, j)`;
 - `INT(WORK(1))` of a complex workspace query needs `std::real`;
 - `INFO` / `IERR` values the Fortran sets but never reads (the compiler
   warns) are dropped, with a comment where it matters;
 - a scalar argument that the routine changes is a pointer, also where the
   Fortran documents it as input: RHO of xLAED1 and xLAED7 is changed by
   xLAED2 and xLAED8, and xLAED0 passes an element of E, which therefore
-  changes as in the Fortran.
+  changes as in the Fortran; xLARRV sets RTOL1 and RTOL2 when it computes
+  only some of the eigenvectors.
 
 Once a file has been finished by hand, it is edited directly and not
 assembled again.
@@ -247,7 +266,8 @@ xTRRFS, xLANTR; xPOSV, xPOSVX, xPOTRS, xPOTRI, xLAUUM, xPOCON, xPOEQU,
 xPORFS, xPSTRF; xSYTRF, xSYSV, xSYSVX, xSYTRS, xSYTRS2, xSYTRI, xSYCON,
 xSYRFS, xSYCONV and the xHE* routines; xSYEVD / xHEEVD, xSTEDC, xSTEVD,
 xORMTR / xUNMTR, xORMQL / xUNMQL, xSYGST / xHEGST, xSYGV / xHEGV and
-xSYGVD / xHEGVD) in both on the same matrices of
+xSYGVD / xHEGVD; xSYEVR / xHEEVR, xSTEVR, xSTEMR, xSTEBZ, xSTEIN and
+xLARNV) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS

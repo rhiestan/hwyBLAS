@@ -29,6 +29,47 @@ namespace hwyblas_test {
     }                                                              \
   } while (0)
 
+// Calls LAPACKE_s/d##rname (real T) or LAPACKE_c/z##cname (complex T).
+#define LAPACKE_CALL_RC(T, rname, cname, ...)                      \
+  [&]() {                                                          \
+    if constexpr (std::is_same_v<T, float>) {                      \
+      return LAPACKE_s##rname(__VA_ARGS__);                        \
+    } else if constexpr (std::is_same_v<T, double>) {              \
+      return LAPACKE_d##rname(__VA_ARGS__);                        \
+    } else if constexpr (std::is_same_v<T, std::complex<float>>) { \
+      return LAPACKE_c##cname(__VA_ARGS__);                        \
+    } else {                                                       \
+      return LAPACKE_z##cname(__VA_ARGS__);                        \
+    }                                                              \
+  }()
+
+// Calls LAPACKE_s/d##NAME for real T.
+#define LAPACKE_CALL_REAL(T, NAME, ...)       \
+  [&]() {                                     \
+    if constexpr (std::is_same_v<T, float>) { \
+      return LAPACKE_s##NAME(__VA_ARGS__);    \
+    } else {                                  \
+      return LAPACKE_d##NAME(__VA_ARGS__);    \
+    }                                         \
+  }()
+
+// The real part of a workspace query result.
+template <typename T>
+hwyblas_int QueryResult(const T& x) {
+  return static_cast<hwyblas_int>(std::real(x));
+}
+
+// The n x n matrix of the column-major col (leading dimension ld) in
+// row-major layout with the same leading dimension.
+template <typename T>
+std::vector<T> Transposed(const std::vector<T>& col, hwyblas_int ld) {
+  std::vector<T> row(col.size());
+  for (hwyblas_int j = 0; j < ld; ++j) {
+    for (hwyblas_int i = 0; i < ld; ++i) row[i * ld + j] = At(col, i, j, ld);
+  }
+  return row;
+}
+
 // A random symmetric (Hermitian) n x n matrix in the triangle uplo of a
 // (leading dimension lda), with NaN elsewhere and in the imaginary parts of
 // the diagonal.

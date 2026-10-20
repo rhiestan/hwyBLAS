@@ -39,7 +39,10 @@
 // bitwise.
 //
 // The eigenvectors and condition numbers of a Schur form (xTREVC3, xTRSNA)
-// get the same Schur form (hwyBLAS's xGEES) in both libraries.
+// get the same Schur form (hwyBLAS's xGEES) in both libraries. xSTEIN gets
+// the eigenvalues of each library's xSTEBZ (which are the same). xLARNV's
+// distributions 3 to 5 use LOG, COS and EXP, of the C runtime in hwyBLAS
+// and of flang's in the reference (the real results are the same).
 //
 // The comparison catches changes that keep the results valid, which the
 // residual tests cannot: a different shift strategy, deflation criterion,
@@ -2456,6 +2459,290 @@ void RunSyevd(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
   }
 }
 
+// The wanted eigenvalues of the M10b drivers: RANGE with VL, VU (VALUE) or
+// IL, IU.
+template <typename R>
+struct Wanted {
+  char range;
+  R vl, vu;
+  I il, iu;
+};
+
+// All; by index the first half and the last two thirds; by value an
+// interval in the middle of the Gershgorin bound g.
+template <typename R>
+std::vector<Wanted<R>> WantedSets(I n, R g) {
+  std::vector<Wanted<R>> s = {{'A', 0, 0, 1, 1}};
+  if (n == 0) return s;
+  s.push_back({'I', 0, 0, 1, std::max<I>(1, n / 2)});
+  s.push_back({'I', 0, 0, n / 3 + 1, n});
+  s.push_back({'V', R(-0.3) * g, R(0.4) * g, 1, 1});
+  return s;
+}
+
+// syevr and heevr. The first m columns of Z and of ISUPPZ are compared
+// (ISUPPZ is only set by xSTEMR, for all eigenvalues).
+template <typename T>
+Result Syevr(const BlasLibrary& lib, std::vector<T> a, I n, char jobz,
+             char uplo, const Wanted<Real<T>>& s, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(n, 1);
+  const R abstol = 0;
+  std::vector<R> w(lda);
+  std::vector<T> z(static_cast<size_t>(lda) * lda), work(std::max<I>(lwork, 1));
+  std::vector<I> isuppz(2 * lda);
+  const I lrwork = lwork == -1 ? -1 : LargeRwork(n);
+  const I liwork = lwork == -1 ? -1 : LargeIwork(n);
+  std::vector<R> rwork(std::max<I>(lrwork, 1));
+  std::vector<I> iwork(std::max<I>(liwork, 1));
+  I m = -1, info = 0;
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const char*, const I*, T*,
+                       const I*, const R*, const R*, const I*, const I*,
+                       const R*, I*, R*, T*, const I*, I*, T*, const I*, R*,
+                       const I*, I*, const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "heevr_").c_str())(
+        &jobz, &s.range, &uplo, &n, a.data(), &lda, &s.vl, &s.vu, &s.il, &s.iu,
+        &abstol, &m, w.data(), z.data(), &lda, isuppz.data(), work.data(),
+        &lwork, rwork.data(), &lrwork, iwork.data(), &liwork, &info, 1, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const char*, const I*, T*,
+                       const I*, const R*, const R*, const I*, const I*,
+                       const R*, I*, R*, T*, const I*, I*, T*, const I*, I*,
+                       const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "syevr_").c_str())(
+        &jobz, &s.range, &uplo, &n, a.data(), &lda, &s.vl, &s.vu, &s.il, &s.iu,
+        &abstol, &m, w.data(), z.data(), &lda, isuppz.data(), work.data(),
+        &lwork, iwork.data(), &liwork, &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  if (lwork == -1 || info != 0) return r;
+  Add(r, "w", Kind::kValues, w.data(), m);
+  if (jobz == 'V') {
+    Add(r, "z", Kind::kOther, z.data(), static_cast<size_t>(lda) * m);
+    if (s.range == 'A') Add(r, "isuppz", Kind::kInteger, isuppz.data(), 2 * m);
+  }
+  return r;
+}
+
+// stevr (stemr = false, real T) or stemr (with tryrac).
+template <typename T>
+Result Stemr(const BlasLibrary& lib, bool stemr, std::vector<Real<T>> d,
+             std::vector<Real<T>> e, I n, char jobz, const Wanted<Real<T>>& s,
+             I tryrac, I lwork) {
+  using R = Real<T>;
+  const I ldz = std::max<I>(n, 1);
+  e.resize(ldz);
+  const R abstol = 0;
+  std::vector<R> w(ldz), work(std::max<I>(lwork, 1));
+  std::vector<T> z(static_cast<size_t>(ldz) * ldz);
+  std::vector<I> isuppz(2 * ldz);
+  const I liwork = lwork == -1 ? -1 : LargeIwork(n);
+  std::vector<I> iwork(std::max<I>(liwork, 1));
+  I m = -1, info = 0;
+  if (stemr) {
+    using F =
+        void (*)(const char*, const char*, const I*, R*, R*, const R*, const R*,
+                 const I*, const I*, I*, R*, T*, const I*, const I*, I*, I*, R*,
+                 const I*, I*, const I*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "stemr_").c_str())(
+        &jobz, &s.range, &n, d.data(), e.data(), &s.vl, &s.vu, &s.il, &s.iu, &m,
+        w.data(), z.data(), &ldz, &n, isuppz.data(), &tryrac, work.data(),
+        &lwork, iwork.data(), &liwork, &info, 1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const I*, R*, R*, const R*, const R*,
+                 const I*, const I*, const R*, I*, R*, T*, const I*, I*, R*,
+                 const I*, I*, const I*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "stevr_").c_str())(
+        &jobz, &s.range, &n, d.data(), e.data(), &s.vl, &s.vu, &s.il, &s.iu,
+        &abstol, &m, w.data(), z.data(), &ldz, isuppz.data(), work.data(),
+        &lwork, iwork.data(), &liwork, &info, 1, 1);
+  }
+  Result r;
+  r.lwork = work[0];
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  if (lwork == -1 || info != 0) return r;
+  if (stemr) AddInt(r, "tryrac", tryrac);
+  Add(r, "w", Kind::kValues, w.data(), m);
+  if (jobz == 'V') {
+    Add(r, "z", Kind::kOther, z.data(), static_cast<size_t>(ldz) * m);
+    if (stemr || s.range == 'A') {
+      Add(r, "isuppz", Kind::kInteger, isuppz.data(), 2 * m);
+    }
+  }
+  return r;
+}
+
+// stebz (real; order 'B' or 'E') and, for order 'B', stein of T's
+// precision with its eigenvalues (from the reference stebz in both
+// libraries, so that stein gets the same input).
+template <typename T>
+Result Stebz(const BlasLibrary& lib, std::vector<Real<T>> d,
+             std::vector<Real<T>> e, I n, char order,
+             const Wanted<Real<T>>& s) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  e.resize(ld);
+  const R abstol = 0;
+  std::vector<R> w(ld), work(4 * ld);
+  std::vector<I> iblock(ld), isplit(ld), iwork(3 * ld);
+  I m = -1, nsplit = -1, info = 0;
+  using F = void (*)(const char*, const char*, const I*, const R*, const R*,
+                     const I*, const I*, const R*, const R*, const R*, I*, I*,
+                     R*, I*, I*, R*, I*, I*, size_t, size_t);
+  lib.Get<F>((std::string(kComplex<T> ? (std::is_same_v<R, float> ? "s" : "d")
+                                      : Prefix<T>()) +
+              "stebz_")
+                 .c_str())(&s.range, &order, &n, &s.vl, &s.vu, &s.il, &s.iu,
+                           &abstol, d.data(), e.data(), &m, &nsplit, w.data(),
+                           iblock.data(), isplit.data(), work.data(),
+                           iwork.data(), &info, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  AddInt(r, "nsplit", nsplit);
+  Add(r, "w", Kind::kValues, w.data(), std::max<I>(m, 0));
+  Add(r, "iblock", Kind::kInteger, iblock.data(), std::max<I>(m, 0));
+  Add(r, "isplit", Kind::kInteger, isplit.data(), std::max<I>(nsplit, 0));
+  if (order != 'B' || info != 0 || m <= 0) return r;
+  std::vector<T> z(static_cast<size_t>(ld) * m);
+  std::vector<R> swork(5 * ld);
+  std::vector<I> siwork(ld), ifail(m);
+  using G = void (*)(const I*, const R*, const R*, const I*, const R*, const I*,
+                     const I*, T*, const I*, R*, I*, I*, I*);
+  lib.Get<G>((std::string(Prefix<T>()) + "stein_").c_str())(
+      &n, d.data(), e.data(), &m, w.data(), iblock.data(), isplit.data(),
+      z.data(), &ld, swork.data(), siwork.data(), ifail.data(), &info);
+  AddInt(r, "stein info", info);
+  Add(r, "ifail", Kind::kInteger, ifail);
+  Add(r, "z", Kind::kOther, z);
+  return r;
+}
+
+// larnv: the random numbers and the new seed.
+template <typename T>
+Result Larnv(const BlasLibrary& lib, I idist, I n) {
+  std::vector<I> iseed = {11, 22, 33, 45};
+  std::vector<T> x(std::max<I>(n, 1));
+  using F = void (*)(const I*, I*, const I*, T*);
+  lib.Get<F>((std::string(Prefix<T>()) + "larnv_").c_str())(
+      &idist, iseed.data(), &n, x.data());
+  Result r;
+  Add(r, "iseed", Kind::kInteger, iseed);
+  // IDIST = 3 to 5 use LOG, COS, EXP of the C runtime and flang.
+  Add(r, "x", idist <= 2 ? Kind::kOther : Kind::kValues, x.data(), n);
+  return r;
+}
+
+// The MRRR, bisection and inverse iteration eigensolvers for matrices of
+// order n: xSYEVR / xHEEVR on a random matrix, xSTEVR, xSTEMR, xSTEBZ and
+// xSTEIN on tridiagonal matrices (random, split, graded, clustered (glued
+// Wilkinson), near the underflow threshold, scaled diagonally dominant),
+// for all ranges; and xLARNV.
+template <typename T>
+void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  using R = Real<T>;
+  char what[96];
+  const std::vector<T> a = Hermitian<T>(n);
+  // The Gershgorin bound of A.
+  R g = 0;
+  for (I i = 0; i < n; ++i) {
+    R s = 0;
+    for (I j = 0; j < n; ++j) s += std::abs(a[i + static_cast<size_t>(j) * n]);
+    g = std::max(g, s);
+  }
+  for (const Wanted<R>& s : WantedSets<R>(n, g)) {
+    for (const char uplo : {'U', 'L'}) {
+      for (const char jobz : {'V', 'N'}) {
+        snprintf(what, sizeof(what), "n=%d jobz=%c range=%c uplo=%c", int(n),
+                 jobz, s.range, uplo);
+        Case<T>(hwy, ref, kComplex<T> ? "heevr" : "syevr", what, n,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Syevr(lib, a, n, jobz, uplo, s, lw);
+                });
+      }
+    }
+  }
+
+  for (const int kind : {0, 1, 2, 3, 4, 5}) {
+    std::vector<R> d(std::max<I>(n, 1)), e(std::max<I>(n, 1));
+    for (I i = 0; i < n; ++i) {
+      d[i] = std::real(Random<T>());
+      e[i] = std::real(Random<T>());
+      if (kind == 1 && i % 7 == 6) e[i] = 0;
+      if (kind == 2) {
+        d[i] *= static_cast<R>(std::ldexp(1.0, -(i % 20)));
+        e[i] *= static_cast<R>(std::ldexp(1.0, -(i % 20)));
+      }
+      if (kind == 3) {
+        d[i] = static_cast<R>(std::abs(i % 11 - 5));
+        e[i] = i % 11 == 10 ? R(1e-6) : R(1);
+      }
+      if (kind == 4) {
+        const R tiny = std::sqrt(std::numeric_limits<R>::min()) / 4;
+        d[i] *= tiny;
+        e[i] *= tiny;
+      }
+      if (kind == 5) {
+        d[i] =
+            (R(1.5) + d[i] / 2) * static_cast<R>(std::ldexp(1.0, -3 * (i % 6)));
+      }
+    }
+    if (kind == 5) {
+      for (I i = 0; i + 1 < n; ++i) {
+        e[i] *= R(0.2) * std::sqrt(std::abs(d[i] * d[i + 1]));
+      }
+    }
+    R gt = 0;
+    for (I i = 0; i < n; ++i) {
+      gt = std::max(gt, std::abs(d[i]) + std::abs(e[i]) +
+                            (i > 0 ? std::abs(e[i - 1]) : R(0)));
+    }
+    for (const Wanted<R>& s : WantedSets<R>(n, gt)) {
+      for (const char jobz : {'V', 'N'}) {
+        for (const I tryrac : {1, 0}) {
+          snprintf(what, sizeof(what), "n=%d kind=%d jobz=%c range=%c rac=%d",
+                   int(n), kind, jobz, s.range, int(tryrac));
+          Case<T>(hwy, ref, "stemr", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Stemr<T>(lib, true, d, e, n, jobz, s, tryrac, lw);
+                  });
+        }
+        if (!kComplex<T>) {
+          snprintf(what, sizeof(what), "n=%d kind=%d jobz=%c range=%c", int(n),
+                   kind, jobz, s.range);
+          Case<T>(hwy, ref, "stevr", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Stemr<T>(lib, false, d, e, n, jobz, s, 0, lw);
+                  });
+        }
+      }
+      for (const char order : {'B', 'E'}) {
+        // xSTEBZ is real: alone only for real T.
+        if (kComplex<T> && order == 'E') continue;
+        snprintf(what, sizeof(what), "n=%d kind=%d order=%c range=%c", int(n),
+                 kind, order, s.range);
+        Case<T>(hwy, ref, order == 'B' ? "stein" : "stebz", what, n,
+                [&](const BlasLibrary& lib, I) {
+                  return Stebz<T>(lib, d, e, n, order, s);
+                });
+      }
+    }
+  }
+
+  for (const I idist : {1, 2, 3, 4, 5}) {
+    if (!kComplex<T> && idist > 3) continue;
+    snprintf(what, sizeof(what), "n=%d idist=%d", int(n), int(idist));
+    Case<T>(hwy, ref, "larnv", what, n,
+            [&](const BlasLibrary& lib, I) { return Larnv<T>(lib, idist, n); });
+  }
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -2534,6 +2821,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunLinear<T>(hwy, ref, n);
     RunSymmetric<T>(hwy, ref, n);
     RunSyevd<T>(hwy, ref, n);
+    RunSyevr<T>(hwy, ref, n);
   }
 }
 

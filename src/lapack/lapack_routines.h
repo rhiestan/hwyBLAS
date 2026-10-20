@@ -670,6 +670,113 @@ blasint Stevd(char jobz, blasint n, R* d, R* e, R* z, blasint ldz, R* work,
               blasint lwork, blasint* iwork, blasint liwork);
 
 // ---------------------------------------------------------------------------
+// Bisection, inverse iteration and MRRR symmetric eigensolvers (stebz.cc,
+// stemr.cc, syevr.cc)
+
+// Real R only.
+template <typename R>
+blasint Laebz(blasint ijob, blasint nitmax, blasint n, blasint mmax,
+              blasint minp, blasint nbmin, R abstol, R reltol, R pivmin, R* d,
+              R* e, R* e2, blasint* nval, R* ab, R* c, blasint* mout,
+              blasint* nab, R* work, blasint* iwork);
+template <typename R>
+blasint Stebz(char range, char order, blasint n, R vl, R vu, blasint il,
+              blasint iu, R abstol, R* d, R* e, blasint* m, blasint* nsplit,
+              R* w, blasint* iblock, blasint* isplit, R* work, blasint* iwork);
+template <typename R>
+blasint Lagtf(blasint n, R* a, R lambda, R* b, R* c, R tol, R* d, blasint* in);
+template <typename R>
+blasint Lagts(blasint job, blasint n, R* a, R* b, R* c, R* d, blasint* in, R* y,
+              R* tol);
+template <typename R>
+void Laruv(blasint* iseed, blasint n, R* x);
+
+template <typename T>
+void Larnv(blasint idist, blasint* iseed, blasint n, T* x);
+
+// The eigenvectors are real; for complex T they are stored in the complex
+// Z.
+template <typename T>
+blasint Stein(blasint n, RealT<T>* d, RealT<T>* e, blasint m, RealT<T>* w,
+              blasint* iblock, blasint* isplit, T* z, blasint ldz,
+              RealT<T>* work, blasint* iwork, blasint* ifail);
+
+// Real R only.
+template <typename R>
+blasint Laneg(blasint n, R* d, R* lld, R sigma, R pivmin, blasint r);
+template <typename R>
+blasint Larra(blasint n, R* d, R* e, R* e2, R spltol, R tnrm, blasint* nsplit,
+              blasint* isplit);
+template <typename R>
+blasint Larrb(blasint n, R* d, R* lld, blasint ifirst, blasint ilast, R rtol1,
+              R rtol2, blasint offset, R* w, R* wgap, R* werr, R* work,
+              blasint* iwork, R pivmin, R spdiam, blasint twist);
+template <typename R>
+blasint Larrc(char jobt, blasint n, R vl, R vu, R* d, R* e, R pivmin,
+              blasint* eigcnt, blasint* lcnt, blasint* rcnt);
+template <typename R>
+blasint Larrd(char range, char order, blasint n, R vl, R vu, blasint il,
+              blasint iu, R* gers, R reltol, R* d, R* e, R* e2, R pivmin,
+              blasint nsplit, blasint* isplit, blasint* m, R* w, R* werr, R* wl,
+              R* wu, blasint* iblock, blasint* indexw, R* work, blasint* iwork);
+template <typename R>
+blasint Larre(char range, blasint n, R* vl, R* vu, blasint il, blasint iu, R* d,
+              R* e, R* e2, R rtol1, R rtol2, R spltol, blasint* nsplit,
+              blasint* isplit, blasint* m, R* w, R* werr, R* wgap,
+              blasint* iblock, blasint* indexw, R* gers, R* pivmin, R* work,
+              blasint* iwork);
+template <typename R>
+blasint Larrf(blasint n, R* d, R* l, R* ld, blasint clstrt, blasint clend, R* w,
+              R* wgap, R* werr, R spdiam, R clgapl, R clgapr, R pivmin,
+              R* sigma, R* dplus, R* lplus, R* work);
+template <typename R>
+blasint Larrj(blasint n, R* d, R* e2, blasint ifirst, blasint ilast, R rtol,
+              blasint offset, R* w, R* werr, R* work, blasint* iwork, R pivmin,
+              R spdiam);
+template <typename R>
+blasint Larrk(blasint n, blasint iw, R gl, R gu, R* d, R* e2, R pivmin,
+              R reltol, R* w, R* werr);
+template <typename R>
+blasint Larrr(blasint n, R* d, R* e);
+
+// The eigenvectors are real; for complex T they are stored in the complex
+// Z.
+template <typename T>
+void Lar1v(blasint n, blasint b1, blasint bn, RealT<T> lambda, RealT<T>* d,
+           RealT<T>* l, RealT<T>* ld, RealT<T>* lld, RealT<T> pivmin,
+           RealT<T> gaptol, T* z, bool wantnc, blasint* negcnt, RealT<T>* ztz,
+           RealT<T>* mingma, blasint* r, blasint* isuppz, RealT<T>* nrminv,
+           RealT<T>* resid, RealT<T>* rqcorr, RealT<T>* work);
+template <typename T>
+blasint Larrv(blasint n, RealT<T> vl, RealT<T> vu, RealT<T>* d, RealT<T>* l,
+              RealT<T> pivmin, blasint* isplit, blasint m, blasint dol,
+              blasint dou, RealT<T> minrgp, RealT<T>* rtol1, RealT<T>* rtol2,
+              RealT<T>* w, RealT<T>* werr, RealT<T>* wgap, blasint* iblock,
+              blasint* indexw, RealT<T>* gers, T* z, blasint ldz,
+              blasint* isuppz, RealT<T>* work, blasint* iwork);
+template <typename T>
+blasint Stemr(char jobz, char range, blasint n, RealT<T>* d, RealT<T>* e,
+              RealT<T> vl, RealT<T> vu, blasint il, blasint iu, blasint* m,
+              RealT<T>* w, T* z, blasint ldz, blasint nzc, blasint* isuppz,
+              bool* tryrac, RealT<T>* work, blasint lwork, blasint* iwork,
+              blasint liwork);
+
+// RWORK and LRWORK are referenced for complex T only.
+template <typename T>
+blasint Heevr(char jobz, char range, char uplo, blasint n, T* a, blasint lda,
+              RealT<T> vl, RealT<T> vu, blasint il, blasint iu, RealT<T> abstol,
+              blasint* m, RealT<T>* w, T* z, blasint ldz, blasint* isuppz,
+              T* work, blasint lwork, RealT<T>* rwork, blasint lrwork,
+              blasint* iwork, blasint liwork);
+
+// Real R only.
+template <typename R>
+blasint Stevr(char jobz, char range, blasint n, R* d, R* e, R vl, R vu,
+              blasint il, blasint iu, R abstol, blasint* m, R* w, R* z,
+              blasint ldz, blasint* isuppz, R* work, blasint lwork,
+              blasint* iwork, blasint liwork);
+
+// ---------------------------------------------------------------------------
 // Bidiagonal reduction (bidiagonal.cc)
 
 template <typename T>

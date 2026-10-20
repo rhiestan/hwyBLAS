@@ -29,7 +29,8 @@ def body(spec):
     text = open(os.path.join(TR, name)).read()
     for rep in parts[1:]:
         if rep == 'VOID':
-            text = text.replace('return info;', 'return;').rstrip()
+            text = text.replace('return info;', 'return;')
+            text = re.sub(r'\s*// End of \w+\s*$', '', text)
             if text.endswith('return;'):
                 text = text[:-len('return;')].rstrip()
             continue
@@ -43,8 +44,11 @@ def body(spec):
         else:
             text = text.replace(old.replace('\\n', NL),
                                 new.replace('\\n', NL))
-    text = re.sub(r'^(\s*)info = 0;', r'\1blasint info = 0;', text, count=1,
-                  flags=re.M)
+    if not re.search(r'\bblasint info\b', text):
+        text = re.sub(r'^(\s*)info = 0;', r'\1blasint info = 0;', text,
+                      count=1, flags=re.M)
+    # A label right before a closing brace needs a statement.
+    text = re.sub(r'^(\s*L\d+):\n(\s*\})', r'\1:;\n\2', text, flags=re.M)
     out = []
     for line in text.split(NL):
         for pat, rep in COMMON:

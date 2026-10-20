@@ -19,41 +19,6 @@ namespace hwyblas {
 namespace lapacke {
 namespace {
 
-// The rest of a LAPACKE_xyyzzz function `name` for a routine with WORK,
-// IWORK and, for complex T, RWORK, whose sizes it returns in a workspace
-// query: work(work, lwork, rwork, lrwork, iwork, liwork) calls
-// LAPACKE_xyyzzz_work. Queries the sizes, allocates the arrays and calls
-// work (for real T with a null RWORK).
-template <typename T, typename Work>
-lapack_int WithWorkspaces(const std::string& name, const Work& work) {
-  using R = RealT<T>;
-  // Query optimal working array(s) size.
-  T work_query = T(0);
-  R rwork_query = R(0);
-  lapack_int iwork_query = 0;
-  lapack_int info =
-      work(&work_query, -1, &rwork_query, -1, &iwork_query, lapack_int{-1});
-  if (info != 0) return info;
-  const lapack_int liwork = iwork_query;
-  const lapack_int lrwork = static_cast<lapack_int>(rwork_query);
-  const lapack_int lwork = static_cast<lapack_int>(std::real(work_query));
-  // Allocate memory for work arrays and call middle-level interface.
-  return WithWorkArray<lapack_int>(name, liwork, [&](lapack_int* iwork) {
-    if constexpr (IsComplex<T>::value) {
-      return WithWorkArray<R>(name, lrwork, [&](R* rwork) {
-        return WithWorkArray<T>(name, lwork, [&](T* w) {
-          return work(w, lwork, rwork, lrwork, iwork, liwork);
-        });
-      });
-    } else {
-      return WithWorkArray<T>(name, lwork, [&](T* w) {
-        return work(w, lwork, static_cast<R*>(nullptr), lapack_int{0}, iwork,
-                    liwork);
-      });
-    }
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Standard problems
 

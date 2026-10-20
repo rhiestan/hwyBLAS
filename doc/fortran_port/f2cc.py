@@ -172,6 +172,28 @@ SIGS = {
     'HER2K': ('Her2k', 'vvvvvavavvav'),
     'HER2': ('Her2', 'vvvavavav'),
     'TRSV': ('Trsv', 'vvvvavav'),
+    'LAE2': ('Lae2', 'vvvpp'),
+    'LAEV2': ('Laev2', 'vvvpppp'),
+    'LAEBZ': ('Laebz', 'vvvvvvvvvaaaaaapaaai'),
+    'LAGTF': ('Lagtf', 'vavaavaai'),
+    'LAGTS': ('Lagts', 'vvaaaaaapi'),
+    'LANEG': ('Laneg', 'vaavvv'),
+    'LAR1V': ('Lar1v', 'vvvvaaaavvavppppapppa'),
+    'LARNV': ('Larnv', 'vava'),
+    'LARUV': ('Laruv', 'ava'),
+    'LARRA': ('Larra', 'vaaavvpai'),
+    'LARRB': ('Larrb', 'vaavvvvvaaaaavvvi'),
+    'LARRC': ('Larrc', 'vvvvaavpppi'),
+    'LARRD': ('Larrd', 'vvvvvvvavaaavvapaappaaaai'),
+    'LARRE': ('Larre', 'vvppvvaaavvvpapaaaaaapaai'),
+    'LARRF': ('Larrf', 'vaaavvaaavvvvpaaai'),
+    'LARRJ': ('Larrj', 'vaavvvvaaaavvi'),
+    'LARRK': ('Larrk', 'vvvvaavvppi'),
+    'LARRR': ('Larrr', 'vaai'),
+    'LARRV': ('Larrv', 'vvvaavavvvvppaaaaaaavaaai'),
+    'STEBZ': ('Stebz', 'vvvvvvvvaappaaaaai'),
+    'STEIN': ('Stein', 'vaavaaaavaaai'),
+    'STEMR': ('Stemr', 'vvvaavvvvpaavvapavavi'),
 }
 # Argument kinds of the complex routines whose arguments differ from the
 # real ones' (e.g. W for WR and WI).
@@ -204,7 +226,7 @@ REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'DZNRM2': 'NRM2', 'DZASUM': 'ASUM', 'IZAMAX': 'IAMAX',
              'IDAMAX': 'IAMAX', 'IZMAX1': 'IMAX1', 'DZSUM1': 'SUM1',
              'DGER': 'GERU', 'SGER': 'GERU', 'ORMTR': 'UNMTR',
-             'ORMQL': 'UNMQL', 'ORM2L': 'UNM2L'}
+             'ORMQL': 'UNMQL', 'ORM2L': 'UNM2L', 'SYTRD': 'HETRD'}
 FUNCS = {
     'MAX': 'Max', 'MIN': 'Min', 'ABS': 'std::abs',
     'SQRT': 'std::sqrt', 'SIGN': 'Sign', 'DBLE': 'std::real',
@@ -216,11 +238,13 @@ FUNCS = {
 }
 OPS = [('.EQ.', ' == '), ('.NE.', ' != '), ('.LT.', ' < '), ('.LE.', ' <= '),
        ('.GT.', ' > '), ('.GE.', ' >= '), ('.AND.', ' && '), ('.OR.', ' || '),
-       ('.NOT.', '!'), ('.TRUE.', 'true'), ('.FALSE.', 'false')]
+       ('.NOT.', '!'), ('.TRUE.', 'true'), ('.FALSE.', 'false'),
+       ('==', ' == '), ('/=', ' != '), ('<=', ' <= '), ('>=', ' >= '),
+       ('<', ' < '), ('>', ' > ')]
 
 TOKEN = re.compile(r"""
   (?P<num>(\d+\.(?![A-Z]+\.)\d*|\.\d+|\d+)([DE][-+]?\d+)?)
- |(?P<op>\.(EQ|NE|LT|LE|GT|GE|AND|OR|NOT|TRUE|FALSE)\.)
+ |(?P<op>\.(EQ|NE|LT|LE|GT|GE|AND|OR|NOT|TRUE|FALSE)\.|==|/=|<=|>=|<|>)
  |(?P<id>[A-Z][A-Z0-9_]*)
  |(?P<str>'[^']*')
  |(?P<pow>\*\*)

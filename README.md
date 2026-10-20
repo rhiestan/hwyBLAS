@@ -89,6 +89,10 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?heevd`, `?hegv`, `?hegvd`, `?hegst`, `?hegs2`, `?unmtr`, `?unmql`, `?unm2l` | c z |
 | `?stedc` (tridiagonal divide and conquer), `?laed0`, `?laed7`, `?laed8` | s d c z |
 | `?stevd`, `?laed1` - `?laed5`, `?laed9`, `?laeda` | s d |
+| `?syevr` (symmetric eigenproblem by MRRR, selected eigenvalues), `?stevr` | s d |
+| `?heevr` | c z |
+| `?stemr` (tridiagonal MRRR), `?larrv`, `?lar1v`, `?stein` (inverse iteration), `?larnv` (random numbers) | s d c z |
+| `?stebz` (tridiagonal bisection), `?laebz`, `?lagtf`, `?lagts`, `?larre`, `?larra`, `?larrb`, `?larrc`, `?larrd`, `?larrf`, `?larrj`, `?larrk`, `?larrr`, `?laneg`, `?laruv` | s d |
 | `?gesvd` (singular value decomposition), `?gebrd`, `?gebd2`, `?labrd` (bidiagonal reduction), `?bdsqr` (bidiagonal QR iteration) | s d c z |
 | `?orgbr`, `?ormbr` (Q and P of the bidiagonal reduction) | s d |
 | `?ungbr`, `?unmbr` | c z |

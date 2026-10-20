@@ -121,6 +121,7 @@ if(HWYBLAS_LAPACK)
     lapack/syev_test.cc
     lapack/sysv_test.cc
     lapack/syevd_test.cc
+    lapack/syevr_test.cc
     lapack/triangular_test.cc
   )
 endif()
