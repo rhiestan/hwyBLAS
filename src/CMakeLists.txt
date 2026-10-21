@@ -51,6 +51,7 @@ if(HWYBLAS_LAPACK)
     lapack/syev.cc
     lapack/syevd.cc
     lapack/syevr.cc
+    lapack/syevx.cc
     lapack/sygv.cc
     lapack/sysv.cc
     lapack/sytrf.cc

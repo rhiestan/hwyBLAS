@@ -84,8 +84,10 @@ The translator produces the conventions described in
   and `iwork` (real T); its views have the complex routine's names and
   point into the real routine's WORK for real T, so that the statements
   are the same (also xPOCON, xPORFS, xPOSVX, xSYCON, xSYRFS, xSYSVX; and
-  xSYEV, xSYEVD, xSYGV, xSYGVD with their xHE* routines, which take
-  `rwork` for complex T only). xSYEVR and xHEEVR lay out their
+  xSYEV, xSYEVD, xSYEVX, xSYGV, xSYGVD with their xHE* routines, which
+  take `rwork` for complex T only; xSYEVX keeps its tridiagonal matrix
+  and the workspace of xSTEBZ and xSTEIN in RWORK, or in WORK for real T,
+  where it starts the workspace of xORMTR at E instead). xSYEVR and xHEEVR lay out their
   workspaces too differently for that and are two bodies behind one
   template (`SyevrReal` / `HeevrComplex` behind `Heevr`), as xLARNV
   (`LarnvReal` / `LarnvComplex`).
@@ -266,8 +268,8 @@ xTRRFS, xLANTR; xPOSV, xPOSVX, xPOTRS, xPOTRI, xLAUUM, xPOCON, xPOEQU,
 xPORFS, xPSTRF; xSYTRF, xSYSV, xSYSVX, xSYTRS, xSYTRS2, xSYTRI, xSYCON,
 xSYRFS, xSYCONV and the xHE* routines; xSYEVD / xHEEVD, xSTEDC, xSTEVD,
 xORMTR / xUNMTR, xORMQL / xUNMQL, xSYGST / xHEGST, xSYGV / xHEGV and
-xSYGVD / xHEGVD; xSYEVR / xHEEVR, xSTEVR, xSTEMR, xSTEBZ, xSTEIN and
-xLARNV) in both on the same matrices of
+xSYGVD / xHEGVD; xSYEVR / xHEEVR, xSTEVR, xSYEVX / xHEEVX, xSTEVX,
+xSTEMR, xSTEBZ, xSTEIN and xLARNV) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS

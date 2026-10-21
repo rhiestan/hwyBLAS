@@ -671,7 +671,7 @@ blasint Stevd(char jobz, blasint n, R* d, R* e, R* z, blasint ldz, R* work,
 
 // ---------------------------------------------------------------------------
 // Bisection, inverse iteration and MRRR symmetric eigensolvers (stebz.cc,
-// stemr.cc, syevr.cc)
+// stemr.cc, syevr.cc, syevx.cc)
 
 // Real R only.
 template <typename R>
@@ -775,6 +775,19 @@ blasint Stevr(char jobz, char range, blasint n, R* d, R* e, R vl, R vu,
               blasint il, blasint iu, R abstol, blasint* m, R* w, R* z,
               blasint ldz, blasint* isuppz, R* work, blasint lwork,
               blasint* iwork, blasint liwork);
+
+// RWORK is referenced for complex T only.
+template <typename T>
+blasint Heevx(char jobz, char range, char uplo, blasint n, T* a, blasint lda,
+              RealT<T> vl, RealT<T> vu, blasint il, blasint iu, RealT<T> abstol,
+              blasint* m, RealT<T>* w, T* z, blasint ldz, T* work,
+              blasint lwork, RealT<T>* rwork, blasint* iwork, blasint* ifail);
+
+// Real R only.
+template <typename R>
+blasint Stevx(char jobz, char range, blasint n, R* d, R* e, R vl, R vu,
+              blasint il, blasint iu, R abstol, blasint* m, R* w, R* z,
+              blasint ldz, R* work, blasint* iwork, blasint* ifail);
 
 // ---------------------------------------------------------------------------
 // Bidiagonal reduction (bidiagonal.cc)

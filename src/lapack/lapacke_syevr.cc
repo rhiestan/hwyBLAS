@@ -1,6 +1,7 @@
 // LAPACKE functions of the MRRR, bisection and inverse iteration
-// symmetric (Hermitian) eigensolvers: xSYEVR / xHEEVR, xSTEVR, xSTEMR,
-// xSTEBZ, xSTEIN and xLARNV (see lapacke.cc and lapacke_util.h).
+// symmetric (Hermitian) eigensolvers: xSYEVR / xHEEVR, xSYEVX / xHEEVX,
+// xSTEVR, xSTEVX, xSTEMR, xSTEBZ, xSTEIN and xLARNV (see lapacke.cc and
+// lapacke_util.h).
 //
 // Derived from LAPACKE, Copyright (c) 2010, Intel Corp. (BSD license), and
 // LAPACK, see LICENSE-LAPACK.
@@ -83,6 +84,69 @@ lapack_int Heevr(int matrix_layout, char jobz, char range, char uplo,
       });
 }
 
+// xSYEVX / xHEEVX; rwork for complex T only. In row-major layout, the
+// triangle uplo of A is copied in and back, and Z (n x ncols_z) out for
+// jobz = 'V'.
+template <typename T>
+lapack_int HeevxWork(int matrix_layout, char jobz, char range, char uplo,
+                     lapack_int n, T* a, lapack_int lda, RealT<T> vl,
+                     RealT<T> vu, lapack_int il, lapack_int iu, RealT<T> abstol,
+                     lapack_int* m, RealT<T>* w, T* z, lapack_int ldz, T* work,
+                     lapack_int lwork, RealT<T>* rwork, lapack_int* iwork,
+                     lapack_int* ifail) {
+  const bool wantz = lapack::Lsame(jobz, 'V');
+  MatrixArg<T> z_arg{z, n, wantz ? ColumnsOfZ(range, n, il, iu) : 1, ldz, -16};
+  z_arg.in = false;
+  z_arg.out = wantz;
+  z_arg.used = wantz;
+  return CallWork<T, 2>(
+      matrix_layout, Name<T>(RealOrComplex<T>("syevx_work", "heevx_work")),
+      lwork == -1, {{Triangle<T>({a, n, n, lda, -7}, uplo), z_arg}},
+      [&](auto& p, auto& ld) {
+        return lapack::Heevx(jobz, range, uplo, n, p[0], ld[0], vl, vu, il, iu,
+                             abstol, m, w, p[1], ld[1], work, lwork, rwork,
+                             iwork, ifail);
+      });
+}
+
+template <typename T>
+lapack_int Heevx(int matrix_layout, char jobz, char range, char uplo,
+                 lapack_int n, T* a, lapack_int lda, RealT<T> vl, RealT<T> vu,
+                 lapack_int il, lapack_int iu, RealT<T> abstol, lapack_int* m,
+                 RealT<T>* w, T* z, lapack_int ldz, lapack_int* ifail) {
+  using R = RealT<T>;
+  const std::string name = Name<T>(RealOrComplex<T>("syevx", "heevx"));
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    if (TrNancheck(matrix_layout, uplo, 'N', n, a, lda)) return -6;
+    if (VectorNancheck(1, &abstol, 1)) return -12;
+    if (lapack::Lsame(range, 'V')) {
+      if (VectorNancheck(1, &vl, 1)) return -8;
+      if (VectorNancheck(1, &vu, 1)) return -9;
+    }
+  }
+  // IWORK (5*N) and, for complex T, RWORK (7*N) have fixed sizes; WORK is
+  // queried.
+  const auto call = [&](R* rwork) {
+    return WithWorkArray<lapack_int>(
+        name, std::max<lapack_int>(1, 5 * n), [&](lapack_int* iwork) {
+          return WithWorkspace<T>(name, [&](T* work, lapack_int lwork) {
+            return HeevxWork(matrix_layout, jobz, range, uplo, n, a, lda, vl,
+                             vu, il, iu, abstol, m, w, z, ldz, work, lwork,
+                             rwork, iwork, ifail);
+          });
+        });
+  };
+  if constexpr (IsComplex<T>::value) {
+    return WithWorkArray<R>(name, std::max<lapack_int>(1, 7 * n), call);
+  } else {
+    return call(static_cast<R*>(nullptr));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tridiagonal matrices
 
@@ -133,6 +197,55 @@ lapack_int Stevr(int matrix_layout, char jobz, char range, lapack_int n, R* d,
     return StevrWork(matrix_layout, jobz, range, n, d, e, vl, vu, il, iu,
                      abstol, m, w, z, ldz, isuppz, work, lwork, iwork, liwork);
   });
+}
+
+// xSTEVX (real R only). Z (n x ncols_z) is copied out for jobz = 'V'; its
+// leading dimension is checked against ncols_z also for jobz = 'N' (as the
+// reference).
+template <typename R>
+lapack_int StevxWork(int matrix_layout, char jobz, char range, lapack_int n,
+                     R* d, R* e, R vl, R vu, lapack_int il, lapack_int iu,
+                     R abstol, lapack_int* m, R* w, R* z, lapack_int ldz,
+                     R* work, lapack_int* iwork, lapack_int* ifail) {
+  const bool wantz = lapack::Lsame(jobz, 'V');
+  MatrixArg<R> arg{z, n, ColumnsOfZ(range, n, il, iu), ldz, -15};
+  arg.in = false;
+  arg.out = wantz;
+  arg.used = wantz;
+  return CallWork<R, 1>(matrix_layout, Name<R>("stevx_work"), false, {{arg}},
+                        [&](auto& p, auto& ld) {
+                          return lapack::Stevx(jobz, range, n, d, e, vl, vu, il,
+                                               iu, abstol, m, w, p[0], ld[0],
+                                               work, iwork, ifail);
+                        });
+}
+
+template <typename R>
+lapack_int Stevx(int matrix_layout, char jobz, char range, lapack_int n, R* d,
+                 R* e, R vl, R vu, lapack_int il, lapack_int iu, R abstol,
+                 lapack_int* m, R* w, R* z, lapack_int ldz, lapack_int* ifail) {
+  const std::string name = Name<R>("stevx");
+  if (!ValidLayout(matrix_layout)) {
+    Xerbla(name, -1);
+    return -1;
+  }
+  if (NanCheck()) {
+    if (VectorNancheck(1, &abstol, 1)) return -11;
+    if (VectorNancheck(n, d, 1)) return -5;
+    if (VectorNancheck(n - 1, e, 1)) return -6;
+    if (lapack::Lsame(range, 'V')) {
+      if (VectorNancheck(1, &vl, 1)) return -7;
+      if (VectorNancheck(1, &vu, 1)) return -8;
+    }
+  }
+  return WithWorkArray<lapack_int>(
+      name, std::max<lapack_int>(1, 5 * n), [&](lapack_int* iwork) {
+        return WithWorkArray<R>(
+            name, std::max<lapack_int>(1, 5 * n), [&](R* work) {
+              return StevxWork(matrix_layout, jobz, range, n, d, e, vl, vu, il,
+                               iu, abstol, m, w, z, ldz, work, iwork, ifail);
+            });
+      });
 }
 
 // xSTEMR. Z (n x n) is copied out for jobz = 'V'; in row-major layout ldz
@@ -369,6 +482,36 @@ HWYBLAS_LAPACKE_SYEVR(z, c64, double)
                               abstol, m, w, z, ldz, isuppz, work, lwork,       \
                               iwork, liwork);                                  \
   }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##syevx(                                   \
+      int layout, char jobz, char range, char uplo, lapack_int n, R* a,        \
+      lapack_int lda, R vl, R vu, lapack_int il, lapack_int iu, R abstol,      \
+      lapack_int* m, R* w, R* z, lapack_int ldz, lapack_int* ifail) {          \
+    return lapacke::Heevx(layout, jobz, range, uplo, n, a, lda, vl, vu, il,    \
+                          iu, abstol, m, w, z, ldz, ifail);                    \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##syevx_work(                              \
+      int layout, char jobz, char range, char uplo, lapack_int n, R* a,        \
+      lapack_int lda, R vl, R vu, lapack_int il, lapack_int iu, R abstol,      \
+      lapack_int* m, R* w, R* z, lapack_int ldz, R* work, lapack_int lwork,    \
+      lapack_int* iwork, lapack_int* ifail) {                                  \
+    return lapacke::HeevxWork(layout, jobz, range, uplo, n, a, lda, vl, vu,    \
+                              il, iu, abstol, m, w, z, ldz, work, lwork,       \
+                              static_cast<R*>(nullptr), iwork, ifail);         \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##stevx(                                   \
+      int layout, char jobz, char range, lapack_int n, R* d, R* e, R vl, R vu, \
+      lapack_int il, lapack_int iu, R abstol, lapack_int* m, R* w, R* z,       \
+      lapack_int ldz, lapack_int* ifail) {                                     \
+    return lapacke::Stevx(layout, jobz, range, n, d, e, vl, vu, il, iu,        \
+                          abstol, m, w, z, ldz, ifail);                        \
+  }                                                                            \
+  HWYBLAS_API lapack_int LAPACKE_##p##stevx_work(                              \
+      int layout, char jobz, char range, lapack_int n, R* d, R* e, R vl, R vu, \
+      lapack_int il, lapack_int iu, R abstol, lapack_int* m, R* w, R* z,       \
+      lapack_int ldz, R* work, lapack_int* iwork, lapack_int* ifail) {         \
+    return lapacke::StevxWork(layout, jobz, range, n, d, e, vl, vu, il, iu,    \
+                              abstol, m, w, z, ldz, work, iwork, ifail);       \
+  }                                                                            \
   HWYBLAS_API lapack_int LAPACKE_##p##stebz(                                   \
       char range, char order, lapack_int n, R vl, R vu, lapack_int il,         \
       lapack_int iu, R abstol, const R* d, const R* e, lapack_int* m,          \
@@ -407,6 +550,22 @@ HWYBLAS_LAPACKE_SYEVR_REAL(d, double)
     return lapacke::HeevrWork(layout, jobz, range, uplo, n, a, lda, vl, vu,   \
                               il, iu, abstol, m, w, z, ldz, isuppz, work,     \
                               lwork, rwork, lrwork, iwork, liwork);           \
+  }                                                                           \
+  HWYBLAS_API lapack_int LAPACKE_##p##heevx(                                  \
+      int layout, char jobz, char range, char uplo, lapack_int n, T* a,       \
+      lapack_int lda, R vl, R vu, lapack_int il, lapack_int iu, R abstol,     \
+      lapack_int* m, R* w, T* z, lapack_int ldz, lapack_int* ifail) {         \
+    return lapacke::Heevx(layout, jobz, range, uplo, n, a, lda, vl, vu, il,   \
+                          iu, abstol, m, w, z, ldz, ifail);                   \
+  }                                                                           \
+  HWYBLAS_API lapack_int LAPACKE_##p##heevx_work(                             \
+      int layout, char jobz, char range, char uplo, lapack_int n, T* a,       \
+      lapack_int lda, R vl, R vu, lapack_int il, lapack_int iu, R abstol,     \
+      lapack_int* m, R* w, T* z, lapack_int ldz, T* work, lapack_int lwork,   \
+      R* rwork, lapack_int* iwork, lapack_int* ifail) {                       \
+    return lapacke::HeevxWork(layout, jobz, range, uplo, n, a, lda, vl, vu,   \
+                              il, iu, abstol, m, w, z, ldz, work, lwork,      \
+                              rwork, iwork, ifail);                           \
   }
 
 HWYBLAS_LAPACKE_HEEVR(c, c32, float)

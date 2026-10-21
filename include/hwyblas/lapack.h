@@ -2347,6 +2347,68 @@ HWYBLAS_API void dstevr_(const char* jobz, const char* range,
                          hwyblas_int* iwork, const hwyblas_int* liwork,
                          hwyblas_int* info);
 
+/* Selected eigenvalues (w, ascending; m of them) and, for jobz = 'V',
+ * eigenvectors (z) of the symmetric (Hermitian) n x n matrix A (triangle
+ * uplo; destroyed), as ?syevr, by ?sytrd / ?hetrd, then ?sterf or
+ * ?steqr for all eigenvalues if abstol <= 0, ?stebz and ?stein
+ * (bisection, inverse iteration) for a subset or if those fail, and
+ * ?ormtr / ?unmtr. ifail: the eigenvectors that failed to converge
+ * (info > 0: their number). n > 1: lwork >= 8n (real) or 2n (complex)
+ * (-1: query), rwork 7n, iwork 5n. */
+HWYBLAS_API void ssyevx_(const char* jobz, const char* range, const char* uplo,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         const float* vl, const float* vu,
+                         const hwyblas_int* il, const hwyblas_int* iu,
+                         const float* abstol, hwyblas_int* m, float* w,
+                         float* z, const hwyblas_int* ldz, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* iwork,
+                         hwyblas_int* ifail, hwyblas_int* info);
+HWYBLAS_API void dsyevx_(const char* jobz, const char* range, const char* uplo,
+                         const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, const double* vl,
+                         const double* vu, const hwyblas_int* il,
+                         const hwyblas_int* iu, const double* abstol,
+                         hwyblas_int* m, double* w, double* z,
+                         const hwyblas_int* ldz, double* work,
+                         const hwyblas_int* lwork, hwyblas_int* iwork,
+                         hwyblas_int* ifail, hwyblas_int* info);
+HWYBLAS_API void cheevx_(const char* jobz, const char* range, const char* uplo,
+                         const hwyblas_int* n, float* a, const hwyblas_int* lda,
+                         const float* vl, const float* vu,
+                         const hwyblas_int* il, const hwyblas_int* iu,
+                         const float* abstol, hwyblas_int* m, float* w,
+                         float* z, const hwyblas_int* ldz, float* work,
+                         const hwyblas_int* lwork, float* rwork,
+                         hwyblas_int* iwork, hwyblas_int* ifail,
+                         hwyblas_int* info);
+HWYBLAS_API void zheevx_(
+    const char* jobz, const char* range, const char* uplo, const hwyblas_int* n,
+    double* a, const hwyblas_int* lda, const double* vl, const double* vu,
+    const hwyblas_int* il, const hwyblas_int* iu, const double* abstol,
+    hwyblas_int* m, double* w, double* z, const hwyblas_int* ldz, double* work,
+    const hwyblas_int* lwork, double* rwork, hwyblas_int* iwork,
+    hwyblas_int* ifail, hwyblas_int* info);
+
+/* Selected eigenvalues and, for jobz = 'V', eigenvectors of the
+ * symmetric tridiagonal matrix (d, e): as ?syevx (?steqr for all
+ * eigenvectors if abstol <= 0). work 5n, iwork 5n. */
+HWYBLAS_API void sstevx_(const char* jobz, const char* range,
+                         const hwyblas_int* n, float* d, float* e,
+                         const float* vl, const float* vu,
+                         const hwyblas_int* il, const hwyblas_int* iu,
+                         const float* abstol, hwyblas_int* m, float* w,
+                         float* z, const hwyblas_int* ldz, float* work,
+                         hwyblas_int* iwork, hwyblas_int* ifail,
+                         hwyblas_int* info);
+HWYBLAS_API void dstevx_(const char* jobz, const char* range,
+                         const hwyblas_int* n, double* d, double* e,
+                         const double* vl, const double* vu,
+                         const hwyblas_int* il, const hwyblas_int* iu,
+                         const double* abstol, hwyblas_int* m, double* w,
+                         double* z, const hwyblas_int* ldz, double* work,
+                         hwyblas_int* iwork, hwyblas_int* ifail,
+                         hwyblas_int* info);
+
 /* Selected eigenvalues (w, ascending) and, for jobz = 'V', eigenvectors
  * (z, nzc columns; nzc = -1: query for their number, in z[0]) of the
  * symmetric tridiagonal matrix (d, e; destroyed) by MRRR. tryrac: on entry

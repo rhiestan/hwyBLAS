@@ -1,7 +1,8 @@
 // Tests of the MRRR, bisection and inverse iteration symmetric (Hermitian)
 // eigensolvers: xSTEMR and its xLARR* routines (xLANEG, xLARRC), xSTEBZ
-// (xLAEBZ), xSTEIN (xLAGTF, xLAGTS), xSYEVR / xHEEVR, xSTEVR, the random
-// number generators xLARUV and xLARNV, and LAPACKE.
+// (xLAEBZ), xSTEIN (xLAGTF, xLAGTS), xSYEVR / xHEEVR, xSTEVR, xSYEVX /
+// xHEEVX, xSTEVX, the random number generators xLARUV and xLARNV, and
+// LAPACKE.
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -769,6 +770,341 @@ TYPED_TEST(SyevrRealTest, Stevr) {
 }
 
 // ---------------------------------------------------------------------------
+// Bisection and inverse iteration drivers
+
+// xSYEVX / xHEEVX with the minimal workspaces (minimal) or that of a
+// workspace query, which WORK(1) must give again on exit; a is a copy.
+// IFAIL is set to -77 first.
+template <typename T>
+hwyblas_int Heevx(char jobz, const Subset<RealT<T>>& s, char uplo,
+                  hwyblas_int n, std::vector<T> a, hwyblas_int lda,
+                  RealT<T> abstol, hwyblas_int* m, std::vector<RealT<T>>& w,
+                  std::vector<T>& z, hwyblas_int ldz,
+                  std::vector<hwyblas_int>& ifail, bool minimal) {
+  using R = RealT<T>;
+  w.assign(std::max<hwyblas_int>(1, n), NAN);
+  ifail.assign(std::max<hwyblas_int>(1, n), -77);
+  std::vector<R> rwork(std::max<hwyblas_int>(1, 7 * n), NAN);
+  std::vector<hwyblas_int> iwork(std::max<hwyblas_int>(1, 5 * n), -77);
+  hwyblas_int lwork, info = -99;
+  if (minimal) {
+    lwork = n <= 1 ? 1 : (IsComplex<T>::value ? 2 * n : 8 * n);
+  } else {
+    T wq = T(0);
+    const hwyblas_int m1 = -1;
+    if constexpr (IsComplex<T>::value) {
+      HWYBLAS_CALL_COMPLEX(T, heevx, &jobz, &s.range, &uplo, &n, P(a.data()),
+                           &lda, &s.vl, &s.vu, &s.il, &s.iu, &abstol, m,
+                           w.data(), P(z.data()), &ldz, P(&wq), &m1,
+                           rwork.data(), iwork.data(), ifail.data(), &info);
+    } else {
+      HWYBLAS_CALL_REAL(T, syevx, &jobz, &s.range, &uplo, &n, a.data(), &lda,
+                        &s.vl, &s.vu, &s.il, &s.iu, &abstol, m, w.data(),
+                        z.data(), &ldz, &wq, &m1, iwork.data(), ifail.data(),
+                        &info);
+    }
+    if (info != 0) return info;
+    lwork = QueryResult(wq);
+  }
+  std::vector<T> work(lwork, NaN<T>());
+  if constexpr (IsComplex<T>::value) {
+    HWYBLAS_CALL_COMPLEX(T, heevx, &jobz, &s.range, &uplo, &n, P(a.data()),
+                         &lda, &s.vl, &s.vu, &s.il, &s.iu, &abstol, m, w.data(),
+                         P(z.data()), &ldz, P(work.data()), &lwork,
+                         rwork.data(), iwork.data(), ifail.data(), &info);
+  } else {
+    HWYBLAS_CALL_REAL(T, syevx, &jobz, &s.range, &uplo, &n, a.data(), &lda,
+                      &s.vl, &s.vu, &s.il, &s.iu, &abstol, m, w.data(),
+                      z.data(), &ldz, work.data(), &lwork, iwork.data(),
+                      ifail.data(), &info);
+  }
+  if (!minimal && info == 0) EXPECT_EQ(QueryResult(work[0]), lwork);
+  return info;
+}
+
+// The first m elements of IFAIL are zero (no eigenvector failed).
+void ExpectNoFailures(const std::vector<hwyblas_int>& ifail, hwyblas_int m) {
+  for (hwyblas_int k = 0; k < m; ++k) EXPECT_EQ(ifail[k], 0) << k;
+}
+
+// xSYEVX / xHEEVX: for all, index and value ranges, the wanted eigenvalues
+// (as from xSYEV / xHEEV) and orthonormal eigenvectors with small
+// residuals, also for matrices that the driver scales (norm near the
+// underflow or overflow threshold), with blocked and unblocked reductions,
+// through xSTERF / xSTEQR (all eigenvalues, ABSTOL = 0) and xSTEBZ and
+// xSTEIN (a subset, or ABSTOL > 0), and with minimal workspaces; also for
+// block diagonal matrices, whose tridiagonal form splits (xSTEBZ orders the
+// eigenvalues by block, the driver sorts them). The imaginary parts of the
+// diagonal (NaN) are not referenced.
+TYPED_TEST(SyevrTest, Heevx) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  ForEachTarget([] {
+    Random<T> rng(353);
+    const double rmin = std::sqrt(static_cast<double>(
+        std::numeric_limits<R>::min() / std::numeric_limits<R>::epsilon()));
+    for (const hwyblas_int nb : {0, 3}) {
+      const ScopedConfig config(nb, nb + 2, true);
+      for (const char uplo : {'U', 'L'}) {
+        for (const hwyblas_int n : {1, 2, 5, 17, 40}) {
+          for (const double scale : {1.0, rmin * 1e-3, 1 / (rmin * 1e-3)}) {
+            for (const bool blocks : {false, true}) {
+              if (blocks && (n < 5 || scale != 1.0)) continue;
+              const hwyblas_int lda = n + 1;
+              std::vector<T> a = RandomHermitian(uplo, n, lda, rng);
+              if (blocks) {
+                // Two diagonal blocks of orders h and n-h, the second shifted
+                // into the middle of the first's spectrum.
+                const hwyblas_int h = n / 2;
+                for (hwyblas_int j = 0; j < n; ++j) {
+                  for (hwyblas_int i = 0; i < n; ++i) {
+                    if ((i < h) != (j < h)) a[i + j * lda] = T(0);
+                  }
+                }
+                for (hwyblas_int i = h; i < n; ++i) a[i + i * lda] += T(R(0.1));
+              }
+              const Dense<T> ad = HermitianDense(uplo, a, n, lda);
+              for (T& x : a) x = x * static_cast<R>(scale);
+              const std::vector<R> ref = ReferenceEigenvalues(uplo, n, a, lda);
+              const double tol = kLapackThreshold * n * Eps<T>() *
+                                 static_cast<double>(MaxAbs(ref));
+              for (const Subset<R>& s : Subsets(ref)) {
+                for (const char jobz : {'V', 'N'}) {
+                  for (const R abstol :
+                       {R(0), 2 * std::numeric_limits<R>::min()}) {
+                    const bool minimal = (n + (jobz == 'V')) % 2 == 0;
+                    SCOPED_TRACE(::testing::Message()
+                                 << "nb=" << nb << " uplo=" << uplo << " n="
+                                 << n << " scale=" << scale << " " << Trace(s)
+                                 << " jobz=" << jobz << " abstol=" << abstol
+                                 << " minimal=" << minimal);
+                    const hwyblas_int ldz = n + 2;
+                    std::vector<T> z(ldz * n, NaN<T>());
+                    std::vector<R> w;
+                    std::vector<hwyblas_int> ifail;
+                    hwyblas_int m = -1;
+                    ASSERT_EQ(Heevx(jobz, s, uplo, n, a, lda, abstol, &m, w, z,
+                                    ldz, ifail, minimal),
+                              0);
+                    ExpectEigenvalues(w, m, ref, s, tol);
+                    if (jobz == 'V') {
+                      if (n > 1) ExpectNoFailures(ifail, m);
+                      ExpectEigenvectors(ad, z, n, m, ldz, w, scale,
+                                         kLapackThreshold);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// xSTEVX: as xSYEVX for tridiagonal matrices (all eigenvectors by xSTEQR),
+// also for those that it scales and those whose eigenvalues are graded or
+// clustered, with the documented workspaces (5*N).
+TYPED_TEST(SyevrRealTest, Stevx) {
+  using R = TypeParam;
+  Random<R> rng(359);
+  for (const int kind : {0, 1, 2, 3, 4, 5, 6}) {
+    for (const hwyblas_int n : {0, 1, 2, 9, 40}) {
+      std::vector<R> d0, e0;
+      MrrrTridiagonal(kind, n, rng, d0, e0);
+      const std::vector<R> ref = SterfEigenvalues(d0, e0);
+      const R anorm = std::max(MaxAbs(d0, e0), std::numeric_limits<R>::min());
+      std::vector<R> ds = d0, es = e0;
+      for (auto& x : ds) x /= anorm;
+      for (auto& x : es) x /= anorm;
+      const Dense<R> t = Tridiagonal<R>(ds, es);
+      const double tol =
+          kLapackThreshold * n * Eps<R>() * static_cast<double>(anorm);
+      for (const Subset<R>& s : Subsets(ref)) {
+        for (const char jobz : {'V', 'N'}) {
+          for (const R abstol : {R(0), 2 * std::numeric_limits<R>::min()}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "kind=" << kind << " n=" << n << " " << Trace(s)
+                         << " jobz=" << jobz << " abstol=" << abstol);
+            std::vector<R> d = d0, e = e0;
+            e.resize(std::max<hwyblas_int>(1, n));
+            const hwyblas_int ldz = std::max<hwyblas_int>(1, n);
+            std::vector<R> z(ldz * std::max<hwyblas_int>(1, n), NAN);
+            std::vector<R> w(std::max<hwyblas_int>(1, n), NAN);
+            std::vector<R> work(std::max<hwyblas_int>(1, 5 * n), NAN);
+            std::vector<hwyblas_int> iwork(std::max<hwyblas_int>(1, 5 * n),
+                                           -77),
+                ifail(std::max<hwyblas_int>(1, n), -77);
+            hwyblas_int m = -1, info = -99;
+            HWYBLAS_CALL_REAL(R, stevx, &jobz, &s.range, &n, d.data(), e.data(),
+                              &s.vl, &s.vu, &s.il, &s.iu, &abstol, &m, w.data(),
+                              z.data(), &ldz, work.data(), iwork.data(),
+                              ifail.data(), &info);
+            ASSERT_EQ(info, 0);
+            ExpectEigenvalues(w, m, ref, s, tol);
+            if (jobz == 'V') {
+              if (n > 1) ExpectNoFailures(ifail, m);
+              ExpectEigenvectors(t, z, n, m, ldz, w, anorm, kLapackThreshold);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// For N = 1, xSYEVX / xHEEVX and xSTEVX return the eigenvalue for RANGE =
+// 'V' only if it lies in the half-open interval (VL, VU].
+TYPED_TEST(SyevrTest, HeevxOrder1ValueRange) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  const hwyblas_int n = 1;
+  const R a11 = 2;
+  struct Interval {
+    R vl, vu;
+    hwyblas_int count;
+  };
+  for (const auto& [vl, vu, count] :
+       {Interval{R(1), R(2), 1}, Interval{R(2), R(3), 0},
+        Interval{R(0), R(1), 0}}) {
+    SCOPED_TRACE(::testing::Message() << vl << " " << vu);
+    const Subset<R> s = {'V', vl, vu, 0, 0, 0, count};
+    std::vector<T> z(1, NaN<T>());
+    std::vector<R> w;
+    std::vector<hwyblas_int> ifail;
+    hwyblas_int m = -1;
+    ASSERT_EQ(Heevx('V', s, 'U', n, std::vector<T>{T(a11)}, n, R(0), &m, w, z,
+                    n, ifail, false),
+              0);
+    ASSERT_EQ(m, count);
+    if (count == 1) EXPECT_EQ(w[0], a11);
+    EXPECT_EQ(z[0], T(1));
+    if constexpr (!IsComplex<T>::value) {
+      std::vector<R> d = {a11}, e = {R(0)}, work(5), zz(1, NAN);
+      std::vector<hwyblas_int> iwork(5), fail(1);
+      const char jobz = 'V', range = 'V';
+      const R abstol = 0;
+      hwyblas_int info = -99;
+      m = -1;
+      HWYBLAS_CALL_REAL(R, stevx, &jobz, &range, &n, d.data(), e.data(), &vl,
+                        &vu, &n, &n, &abstol, &m, w.data(), zz.data(), &n,
+                        work.data(), iwork.data(), fail.data(), &info);
+      ASSERT_EQ(info, 0);
+      ASSERT_EQ(m, count);
+      if (count == 1) EXPECT_EQ(w[0], a11);
+      EXPECT_EQ(zz[0], R(1));
+    }
+  }
+}
+
+// The workspace queries of xSYEVX / xHEEVX (max(8*N, (NB+3)*N) real,
+// (NB+1)*N complex; 1 for N <= 1) and their and xSTEVX's argument checks.
+TYPED_TEST(SyevrTest, HeevxWorkspaceQueriesAndErrors) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  constexpr bool kComplex = IsComplex<T>::value;
+  const hwyblas_int n = 40;
+  std::vector<T> a(n * n), z(n * n);
+  std::vector<R> w(n), d(n, 1), e(n, 0), rwork(7 * n);
+  std::vector<hwyblas_int> iwork(5 * static_cast<size_t>(n)), ifail(n);
+  const hwyblas_int m1 = -1, one = 1;
+  const R vl = 0, vu = 2, abstol = 0;
+  hwyblas_int m = -1;
+  const auto heevx = [&](char jobz, char range, char uplo, hwyblas_int nn,
+                         hwyblas_int lda, R lo, R hi, hwyblas_int il,
+                         hwyblas_int iu, hwyblas_int ldz, T* work,
+                         hwyblas_int lwork) {
+    hwyblas_int inf = -99;
+    if constexpr (IsComplex<T>::value) {
+      HWYBLAS_CALL_COMPLEX(T, heevx, &jobz, &range, &uplo, &nn, P(a.data()),
+                           &lda, &lo, &hi, &il, &iu, &abstol, &m, w.data(),
+                           P(z.data()), &ldz, P(work), &lwork, rwork.data(),
+                           iwork.data(), ifail.data(), &inf);
+    } else {
+      HWYBLAS_CALL_REAL(T, syevx, &jobz, &range, &uplo, &nn, a.data(), &lda,
+                        &lo, &hi, &il, &iu, &abstol, &m, w.data(), z.data(),
+                        &ldz, work, &lwork, iwork.data(), ifail.data(), &inf);
+    }
+    return inf;
+  };
+  for (const hwyblas_int nb : {30, 1}) {
+    const ScopedBlockSize block_size(nb);
+    for (const hwyblas_int nn : {0, 1, 2, n}) {
+      SCOPED_TRACE(::testing::Message() << "nb=" << nb << " n=" << nn);
+      T wq = T(0);
+      EXPECT_EQ(heevx('V', 'A', 'L', nn, n, vl, vu, one, one, n, &wq, m1), 0);
+      const hwyblas_int expected = nn <= 1    ? 1
+                                   : kComplex ? (nb + 1) * nn
+                                              : std::max((nb + 3) * nn, 8 * nn);
+      EXPECT_EQ(QueryResult(wq), expected);
+    }
+  }
+
+  // Invalid arguments.
+  ErrorCapture errors;
+  const hwyblas_int k = 4, big = 999;
+  std::vector<T> work(1024);
+  const auto call = [&](char jobz, char range, char uplo, hwyblas_int nn,
+                        hwyblas_int lda, R lo, R hi, hwyblas_int il,
+                        hwyblas_int iu, hwyblas_int ldz, hwyblas_int lwork) {
+    return heevx(jobz, range, uplo, nn, lda, lo, hi, il, iu, ldz, work.data(),
+                 lwork);
+  };
+  EXPECT_EQ(call('X', 'A', 'L', k, k, 0, 1, 1, 1, k, big), -1);
+  EXPECT_EQ(call('V', 'X', 'L', k, k, 0, 1, 1, 1, k, big), -2);
+  EXPECT_EQ(call('V', 'A', 'X', k, k, 0, 1, 1, 1, k, big), -3);
+  EXPECT_EQ(call('V', 'A', 'L', -1, k, 0, 1, 1, 1, k, big), -4);
+  EXPECT_EQ(call('V', 'A', 'L', k, k - 1, 0, 1, 1, 1, k, big), -6);
+  EXPECT_EQ(call('V', 'V', 'L', k, k, 1, 1, 1, 1, k, big), -8);
+  EXPECT_EQ(call('V', 'I', 'L', k, k, 0, 1, 0, 1, k, big), -9);
+  EXPECT_EQ(call('V', 'I', 'L', k, k, 0, 1, 2, 1, k, big), -10);
+  EXPECT_EQ(call('V', 'I', 'L', k, k, 0, 1, 1, k + 1, k, big), -10);
+  EXPECT_EQ(call('V', 'A', 'L', k, k, 0, 1, 1, 1, k - 1, big), -15);
+  EXPECT_EQ(call('N', 'A', 'L', k, k, 0, 1, 1, 1, 0, big), -15);
+  EXPECT_EQ(
+      call('V', 'A', 'L', k, k, 0, 1, 1, 1, k, (kComplex ? 2 : 8) * k - 1),
+      -17);
+  // Valid: N = 0 with any VL, VU; LDZ = 1 for JOBZ = 'N'; minimal LWORK.
+  EXPECT_EQ(call('V', 'V', 'L', 0, 1, 1, 1, 1, 1, 1, 1), 0);
+  EXPECT_EQ(call('N', 'A', 'L', k, k, 0, 1, 1, 1, 1, (kComplex ? 2 : 8) * k),
+            0);
+  const std::string ev = Name<T>(kComplex ? "HEEVX" : "SYEVX");
+  std::vector<std::string> expected;
+  for (const char* pos :
+       {"1", "2", "3", "4", "6", "8", "9", "10", "10", "15", "15", "17"}) {
+    expected.push_back(ev + ":" + pos);
+  }
+  EXPECT_EQ(errors.Take(), expected);
+
+  if constexpr (!kComplex) {
+    const auto stevx = [&](char jobz, char range, hwyblas_int nn, R lo, R hi,
+                           hwyblas_int il, hwyblas_int iu, hwyblas_int ldz) {
+      hwyblas_int inf = -99;
+      std::vector<R> rw(5 * k);
+      HWYBLAS_CALL_REAL(T, stevx, &jobz, &range, &nn, d.data(), e.data(), &lo,
+                        &hi, &il, &iu, &abstol, &m, w.data(), z.data(), &ldz,
+                        rw.data(), iwork.data(), ifail.data(), &inf);
+      return inf;
+    };
+    EXPECT_EQ(stevx('X', 'A', k, 0, 1, 1, 1, k), -1);
+    EXPECT_EQ(stevx('V', 'X', k, 0, 1, 1, 1, k), -2);
+    EXPECT_EQ(stevx('V', 'A', -1, 0, 1, 1, 1, k), -3);
+    EXPECT_EQ(stevx('V', 'V', k, 1, 1, 1, 1, k), -7);
+    EXPECT_EQ(stevx('V', 'I', k, 0, 1, 0, 1, k), -8);
+    EXPECT_EQ(stevx('V', 'I', k, 0, 1, 2, 1, k), -9);
+    EXPECT_EQ(stevx('V', 'A', k, 0, 1, 1, 1, k - 1), -14);
+    EXPECT_EQ(stevx('N', 'A', k, 0, 1, 1, 1, 0), -14);
+    EXPECT_EQ(stevx('N', 'A', k, 0, 1, 1, 1, 1), 0);
+    const std::string vx = Name<T>("STEVX");
+    EXPECT_EQ(errors.Take(),
+              (std::vector<std::string>{vx + ":1", vx + ":2", vx + ":3",
+                                        vx + ":7", vx + ":8", vx + ":9",
+                                        vx + ":14", vx + ":14"}));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Random numbers
 
 // x * y mod 2**48 for x, y < 2**48.
@@ -1199,6 +1535,39 @@ TYPED_TEST(SyevrTest, LapackeLayouts) {
             }
           }
         }
+        // ?syevx / ?heevx.
+        ac = a;
+        ar = Transposed(a, ld);
+        std::vector<lapack_int> fc(n, -1), fr(n, -1);
+        const lapack_int xc =
+            LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_COL_MAJOR, jobz, s.range,
+                            uplo, n, ac.data(), ld, s.vl, s.vu, s.il, s.iu,
+                            R(0), &mc, wc.data(), zc.data(), ld, fc.data());
+        const lapack_int xr =
+            LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_ROW_MAJOR, jobz, s.range,
+                            uplo, n, ar.data(), ld, s.vl, s.vu, s.il, s.iu,
+                            R(0), &mr, wr.data(), zr.data(), ld, fr.data());
+        ASSERT_EQ(xc, 0);
+        ASSERT_EQ(xr, 0);
+        ASSERT_EQ(mc, s.count);
+        ASSERT_EQ(mr, mc);
+        EXPECT_EQ(wr, wc);
+        if (jobz == 'V') {
+          EXPECT_EQ(fr, fc);
+          for (lapack_int i = 0; i < n; ++i) {
+            for (lapack_int j = 0; j < mc; ++j) {
+              ASSERT_EQ(zr[i * ld + j], At(zc, i, j, ld)) << i << ", " << j;
+            }
+          }
+        }
+        // The reduced matrix in the triangle uplo of A (copied back).
+        for (lapack_int i = 0; i < n; ++i) {
+          for (lapack_int j = 0; j < n; ++j) {
+            if (uplo == 'U' ? i <= j : i >= j) {
+              ASSERT_EQ(ar[i * ld + j], At(ac, i, j, ld)) << i << ", " << j;
+            }
+          }
+        }
       }
     }
   }
@@ -1263,6 +1632,33 @@ TYPED_TEST(SyevrTest, LapackeLayouts) {
         ASSERT_EQ(mr, mc);
         EXPECT_EQ(wr, wc);
         if (jobz == 'V') {
+          for (lapack_int i = 0; i < n; ++i) {
+            for (lapack_int j = 0; j < mc; ++j) {
+              ASSERT_EQ(zr[i * ld + j], At(zc, i, j, ld)) << i << ", " << j;
+            }
+          }
+        }
+        // ?stevx.
+        dc = d0;
+        ec = e0;
+        dr = d0;
+        er = e0;
+        std::vector<lapack_int> fc(n, -1), fr(n, -1);
+        const lapack_int xc =
+            LAPACKE_CALL_REAL(T, stevx, LAPACK_COL_MAJOR, jobz, s.range, n,
+                              dc.data(), ec.data(), s.vl, s.vu, s.il, s.iu,
+                              R(0), &mc, wc.data(), zc.data(), ld, fc.data());
+        const lapack_int xr =
+            LAPACKE_CALL_REAL(T, stevx, LAPACK_ROW_MAJOR, jobz, s.range, n,
+                              dr.data(), er.data(), s.vl, s.vu, s.il, s.iu,
+                              R(0), &mr, wr.data(), zr.data(), ld, fr.data());
+        ASSERT_EQ(xc, 0);
+        ASSERT_EQ(xr, 0);
+        ASSERT_EQ(mc, s.count);
+        ASSERT_EQ(mr, mc);
+        EXPECT_EQ(wr, wc);
+        if (jobz == 'V') {
+          EXPECT_EQ(fr, fc);
           for (lapack_int i = 0; i < n; ++i) {
             for (lapack_int j = 0; j < mc; ++j) {
               ASSERT_EQ(zr[i * ld + j], At(zc, i, j, ld)) << i << ", " << j;
@@ -1399,7 +1795,80 @@ TYPED_TEST(SyevrTest, LapackeErrors) {
               -15);
     expected += "Wrong parameter 15 in " + LapackeName<T>("stevr_work") + "\n";
   }
+  // ?syevx / ?heevx and ?stevx (as ?syevr and ?stevr).
+  const char* evx = kComplex ? "heevx" : "syevx";
+  const char* evx_work = kComplex ? "heevx_work" : "syevx_work";
+  EXPECT_EQ(LAPACKE_CALL_RC(T, syevx, heevx, 0, 'V', 'A', 'U', n, a.data(), n,
+                            zero, zero, 1, 1, zero, &m, w.data(), z.data(), n,
+                            ifail.data()),
+            -1);
+  EXPECT_EQ(LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_ROW_MAJOR, 'V', 'A', 'U', n,
+                            a.data(), n - 1, zero, zero, 1, 1, zero, &m,
+                            w.data(), z.data(), n, ifail.data()),
+            -7);
+  EXPECT_EQ(LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_ROW_MAJOR, 'V', 'I', 'U', n,
+                            a.data(), n, zero, zero, 1, 3, zero, &m, w.data(),
+                            z.data(), 2, ifail.data()),
+            -16);
+  EXPECT_EQ(LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_ROW_MAJOR, 'V', 'I', 'U', n,
+                            a.data(), n, zero, zero, 1, 3, zero, &m, w.data(),
+                            z.data(), 3, ifail.data()),
+            0);
+  // LDZ = 1 is enough for JOBZ = 'N'.
+  EXPECT_EQ(LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_ROW_MAJOR, 'N', 'A', 'U', n,
+                            a.data(), n, zero, zero, 1, 1, zero, &m, w.data(),
+                            z.data(), 1, ifail.data()),
+            0);
+  expected += "Wrong parameter 1 in " + LapackeName<T>(evx) +
+              "\nWrong parameter 7 in " + LapackeName<T>(evx_work) +
+              "\nWrong parameter 16 in " + LapackeName<T>(evx_work) + "\n";
+  if constexpr (!kComplex) {
+    EXPECT_EQ(LAPACKE_CALL_REAL(T, stevx, LAPACK_ROW_MAJOR, 'N', 'A', n,
+                                d.data(), e.data(), zero, zero, 1, 1, zero, &m,
+                                w.data(), z.data(), n - 1, ifail.data()),
+              -15);
+    EXPECT_EQ(LAPACKE_CALL_REAL(T, stevx, 0, 'N', 'A', n, d.data(), e.data(),
+                                zero, zero, 1, 1, zero, &m, w.data(), z.data(),
+                                n, ifail.data()),
+              -1);
+    expected += "Wrong parameter 15 in " + LapackeName<T>("stevx_work") +
+                "\nWrong parameter 1 in " + LapackeName<T>("stevx") + "\n";
+  }
   EXPECT_EQ(::testing::internal::GetCapturedStdout(), expected);
+
+  // A workspace query of ?syevx_work / ?heevx_work in row-major layout
+  // gives that of the Fortran routine.
+  {
+    T lapacke_query = T(0), fortran_query = T(0);
+    std::vector<R> rwork(7 * n);
+    std::vector<lapack_int> iwork(5 * static_cast<size_t>(n));
+    const lapack_int m1 = -1, ldz = n, il = 1, iu = 1;
+    lapack_int info = -99;
+    const char jobz = 'V', range = 'A', uplo = 'U';
+    if constexpr (kComplex) {
+      EXPECT_EQ(
+          LAPACKE_CALL_RC(T, syevx_work, heevx_work, LAPACK_ROW_MAJOR, jobz,
+                          range, uplo, n, a.data(), n, zero, zero, il, iu, zero,
+                          &m, w.data(), z.data(), n, &lapacke_query, m1,
+                          rwork.data(), iwork.data(), ifail.data()),
+          0);
+      HWYBLAS_CALL_COMPLEX(T, heevx, &jobz, &range, &uplo, &n, P(a.data()), &n,
+                           &zero, &zero, &il, &iu, &zero, &m, w.data(),
+                           P(z.data()), &ldz, P(&fortran_query), &m1,
+                           rwork.data(), iwork.data(), ifail.data(), &info);
+    } else {
+      EXPECT_EQ(LAPACKE_CALL_RC(T, syevx_work, heevx_work, LAPACK_ROW_MAJOR,
+                                jobz, range, uplo, n, a.data(), n, zero, zero,
+                                il, iu, zero, &m, w.data(), z.data(), n,
+                                &lapacke_query, m1, iwork.data(), ifail.data()),
+                0);
+      HWYBLAS_CALL_REAL(T, syevx, &jobz, &range, &uplo, &n, a.data(), &n, &zero,
+                        &zero, &il, &iu, &zero, &m, w.data(), z.data(), &ldz,
+                        &fortran_query, &m1, iwork.data(), ifail.data(), &info);
+    }
+    EXPECT_EQ(info, 0);
+    EXPECT_EQ(QueryResult(lapacke_query), QueryResult(fortran_query));
+  }
 
   // NaN checks.
   const auto syevr = [&](char range, R vl, R vu, R abstol) {
@@ -1407,14 +1876,25 @@ TYPED_TEST(SyevrTest, LapackeErrors) {
                            n, a.data(), n, vl, vu, 1, 1, abstol, &m, w.data(),
                            z.data(), n, isuppz.data());
   };
+  const auto syevx = [&](char range, R vl, R vu, R abstol) {
+    return LAPACKE_CALL_RC(T, syevx, heevx, LAPACK_COL_MAJOR, 'N', range, 'U',
+                           n, a.data(), n, vl, vu, 1, 1, abstol, &m, w.data(),
+                           z.data(), n, ifail.data());
+  };
   EXPECT_EQ(syevr('A', nan, nan, zero), 0);
   EXPECT_EQ(syevr('V', nan, R(1), zero), -8);
   EXPECT_EQ(syevr('V', zero, nan, zero), -9);
   EXPECT_EQ(syevr('A', zero, zero, nan), -12);
+  EXPECT_EQ(syevx('A', nan, nan, zero), 0);
+  EXPECT_EQ(syevx('V', nan, R(1), zero), -8);
+  EXPECT_EQ(syevx('V', zero, nan, zero), -9);
+  EXPECT_EQ(syevx('A', zero, zero, nan), -12);
   a[1] = NaN<T>();  // (1, 0): lower triangle
   EXPECT_EQ(syevr('A', zero, zero, zero), 0);
+  EXPECT_EQ(syevx('A', zero, zero, zero), 0);
   a[n] = NaN<T>();  // (0, 1): upper triangle
   EXPECT_EQ(syevr('A', zero, zero, zero), -6);
+  EXPECT_EQ(syevx('A', zero, zero, zero), -6);
   const auto stemr = [&](R vl, R vu) {
     return LAPACKE_CALL(T, stemr, LAPACK_COL_MAJOR, 'N', 'A', n, d.data(),
                         e.data(), vl, vu, 1, 1, &m, w.data(), z.data(), n, n,
@@ -1454,20 +1934,31 @@ TYPED_TEST(SyevrTest, LapackeErrors) {
                                d.data(), e.data(), &m, &nsplit, w.data(),
                                blocks.data(), splits.data());
     };
+    const auto stevx = [&](char range, R vl, R vu, R abstol) {
+      return LAPACKE_CALL_REAL(T, stevx, LAPACK_COL_MAJOR, 'N', range, n,
+                               d.data(), e.data(), vl, vu, 1, 1, abstol, &m,
+                               w.data(), z.data(), n, ifail.data());
+    };
     EXPECT_EQ(stevr('A', nan, nan, zero), 0);
     EXPECT_EQ(stevr('V', nan, R(1), zero), -7);
     EXPECT_EQ(stevr('V', zero, nan, zero), -8);
     EXPECT_EQ(stevr('A', zero, zero, nan), -11);
+    EXPECT_EQ(stevx('A', nan, nan, zero), 0);
+    EXPECT_EQ(stevx('V', nan, R(1), zero), -7);
+    EXPECT_EQ(stevx('V', zero, nan, zero), -8);
+    EXPECT_EQ(stevx('A', zero, zero, nan), -11);
     EXPECT_EQ(stebz('A', nan, nan, zero), 0);
     EXPECT_EQ(stebz('V', nan, R(1), zero), -4);
     EXPECT_EQ(stebz('V', zero, nan, zero), -5);
     EXPECT_EQ(stebz('A', zero, zero, nan), -8);
     d[0] = NAN;
     EXPECT_EQ(stevr('A', zero, zero, zero), -5);
+    EXPECT_EQ(stevx('A', zero, zero, zero), -5);
     EXPECT_EQ(stebz('A', zero, zero, zero), -9);
     d[0] = 1;
     e[0] = NAN;
     EXPECT_EQ(stevr('A', zero, zero, zero), -6);
+    EXPECT_EQ(stevx('A', zero, zero, zero), -6);
     EXPECT_EQ(stebz('A', zero, zero, zero), -10);
   }
 }

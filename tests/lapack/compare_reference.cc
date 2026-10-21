@@ -2578,6 +2578,89 @@ Result Stemr(const BlasLibrary& lib, bool stemr, std::vector<Real<T>> d,
   return r;
 }
 
+// The scaling thresholds of the eigenvalue drivers: RMIN = sqrt(SMLNUM)
+// (upper = false) or RMAX = min(sqrt(BIGNUM), 1 / sqrt(sqrt(SAFMIN))).
+template <typename R>
+R ScaleThreshold(bool upper) {
+  const R safmin = std::numeric_limits<R>::min();
+  const R smlnum = safmin / std::numeric_limits<R>::epsilon();
+  if (!upper) return std::sqrt(smlnum);
+  return std::min(std::sqrt(1 / smlnum), 1 / std::sqrt(std::sqrt(safmin)));
+}
+
+// syevx and heevx with ABSTOL. The first m columns of Z and IFAIL are
+// compared.
+template <typename T>
+Result Syevx(const BlasLibrary& lib, std::vector<T> a, I n, char jobz,
+             char uplo, const Wanted<Real<T>>& s, Real<T> abstol, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(n, 1);
+  std::vector<R> w(lda), rwork(7 * lda);
+  std::vector<T> z(static_cast<size_t>(lda) * lda), work(std::max<I>(lwork, 1));
+  std::vector<I> iwork(5 * lda), ifail(lda);
+  I m = -1, info = 0;
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const char*, const char*, const I*, T*,
+                       const I*, const R*, const R*, const I*, const I*,
+                       const R*, I*, R*, T*, const I*, T*, const I*, R*, I*, I*,
+                       I*, size_t, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "heevx_").c_str())(
+        &jobz, &s.range, &uplo, &n, a.data(), &lda, &s.vl, &s.vu, &s.il, &s.iu,
+        &abstol, &m, w.data(), z.data(), &lda, work.data(), &lwork,
+        rwork.data(), iwork.data(), ifail.data(), &info, 1, 1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, T*, const I*,
+                 const R*, const R*, const I*, const I*, const R*, I*, R*, T*,
+                 const I*, T*, const I*, I*, I*, I*, size_t, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "syevx_").c_str())(
+        &jobz, &s.range, &uplo, &n, a.data(), &lda, &s.vl, &s.vu, &s.il, &s.iu,
+        &abstol, &m, w.data(), z.data(), &lda, work.data(), &lwork,
+        iwork.data(), ifail.data(), &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  if (lwork == -1 || info != 0) return r;
+  Add(r, "w", Kind::kValues, w.data(), m);
+  if (jobz == 'V') {
+    Add(r, "z", Kind::kOther, z.data(), static_cast<size_t>(lda) * m);
+    Add(r, "ifail", Kind::kInteger, ifail.data(), m);
+  }
+  return r;
+}
+
+// stevx (real T) with ABSTOL; D and E are compared too (scaled on exit).
+template <typename T>
+Result Stevx(const BlasLibrary& lib, std::vector<T> d, std::vector<T> e, I n,
+             char jobz, const Wanted<T>& s, T abstol) {
+  const I ldz = std::max<I>(n, 1);
+  e.resize(ldz);
+  std::vector<T> w(ldz), work(5 * ldz), z(static_cast<size_t>(ldz) * ldz);
+  std::vector<I> iwork(5 * ldz), ifail(ldz);
+  I m = -1, info = 0;
+  using F = void (*)(const char*, const char*, const I*, T*, T*, const T*,
+                     const T*, const I*, const I*, const T*, I*, T*, T*,
+                     const I*, T*, I*, I*, I*, size_t, size_t);
+  lib.Get<F>((std::string(Prefix<T>()) + "stevx_").c_str())(
+      &jobz, &s.range, &n, d.data(), e.data(), &s.vl, &s.vu, &s.il, &s.iu,
+      &abstol, &m, w.data(), z.data(), &ldz, work.data(), iwork.data(),
+      ifail.data(), &info, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  if (info != 0) return r;
+  Add(r, "w", Kind::kValues, w.data(), m);
+  Add(r, "d", Kind::kOther, d.data(), n);
+  Add(r, "e", Kind::kOther, e.data(), std::max<I>(n - 1, 0));
+  if (jobz == 'V') {
+    Add(r, "z", Kind::kOther, z.data(), static_cast<size_t>(ldz) * m);
+    Add(r, "ifail", Kind::kInteger, ifail.data(), m);
+  }
+  return r;
+}
+
 // stebz (real; order 'B' or 'E') and, for order 'B', stein of T's
 // precision with its eigenvalues (from the reference stebz in both
 // libraries, so that stein gets the same input).
@@ -2640,10 +2723,14 @@ Result Larnv(const BlasLibrary& lib, I idist, I n) {
 }
 
 // The MRRR, bisection and inverse iteration eigensolvers for matrices of
-// order n: xSYEVR / xHEEVR on a random matrix, xSTEVR, xSTEMR, xSTEBZ and
-// xSTEIN on tridiagonal matrices (random, split, graded, clustered (glued
-// Wilkinson), near the underflow threshold, scaled diagonally dominant),
-// for all ranges; and xLARNV.
+// order n: xSYEVR / xHEEVR on a random matrix, xSYEVX / xHEEVX also on
+// matrices that it scales (norm near the underflow and overflow
+// thresholds, and just beyond its scaling thresholds), xSTEVR, xSTEVX, xSTEMR,
+// xSTEBZ and xSTEIN on tridiagonal matrices (random, split, graded, clustered
+// (glued Wilkinson), near the underflow threshold, scaled diagonally dominant,
+// with norms just beyond the scaling thresholds), for all ranges, and xSYEVX /
+// xHEEVX and xSTEVX with ABSTOL = 0 (xSTERF or xSTEQR for all eigenvalues) and
+// > 0 (xSTEBZ and xSTEIN); and xLARNV.
 template <typename T>
 void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
   using R = Real<T>;
@@ -2668,8 +2755,36 @@ void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
       }
     }
   }
+  // Far beyond and just beyond the drivers' scaling thresholds RMIN and
+  // RMAX (of the largest element; by factors that are not powers of 2,
+  // where the scaling would be exact).
+  const R tiny = std::sqrt(std::numeric_limits<R>::min());
+  R amax = 0;
+  for (const T& x : a) amax = std::max(amax, std::abs(x));
+  const R near_rmin =
+      ScaleThreshold<R>(false) * R(0.3) / (amax > 0 ? amax : R(1));
+  const R near_rmax = ScaleThreshold<R>(true) * 3 / (amax > 0 ? amax : R(1));
+  for (const R scale : {R(1), tiny / 4, 1 / tiny, near_rmin, near_rmax}) {
+    std::vector<T> as = a;
+    for (T& x : as) x *= scale;
+    for (const Wanted<R>& s : WantedSets<R>(n, g * scale)) {
+      for (const char uplo : {'U', 'L'}) {
+        for (const char jobz : {'V', 'N'}) {
+          for (const R abstol : {R(0), 2 * std::numeric_limits<R>::min()}) {
+            snprintf(what, sizeof(what),
+                     "n=%d scale=%g jobz=%c range=%c uplo=%c abstol=%g", int(n),
+                     double(scale), jobz, s.range, uplo, double(abstol));
+            Case<T>(hwy, ref, kComplex<T> ? "heevx" : "syevx", what, n,
+                    [&](const BlasLibrary& lib, I lw) {
+                      return Syevx(lib, as, n, jobz, uplo, s, abstol, lw);
+                    });
+          }
+        }
+      }
+    }
+  }
 
-  for (const int kind : {0, 1, 2, 3, 4, 5}) {
+  for (const int kind : {0, 1, 2, 3, 4, 5, 6, 7}) {
     std::vector<R> d(std::max<I>(n, 1)), e(std::max<I>(n, 1));
     for (I i = 0; i < n; ++i) {
       d[i] = std::real(Random<T>());
@@ -2698,6 +2813,21 @@ void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
         e[i] *= R(0.2) * std::sqrt(std::abs(d[i] * d[i + 1]));
       }
     }
+    if (kind >= 6) {
+      // Norm just below RMIN (6) or above RMAX (7) of xSTEVR / xSTEVX.
+      R tmax = 0;
+      for (I i = 0; i < n; ++i) {
+        tmax = std::max(tmax, std::abs(d[i]));
+        if (i + 1 < n) tmax = std::max(tmax, std::abs(e[i]));
+      }
+      const R target = kind == 6 ? ScaleThreshold<R>(false) * R(0.3)
+                                 : ScaleThreshold<R>(true) * 3;
+      const R f = tmax > 0 ? target / tmax : R(1);
+      for (I i = 0; i < n; ++i) {
+        d[i] *= f;
+        e[i] *= f;
+      }
+    }
     R gt = 0;
     for (I i = 0; i < n; ++i) {
       gt = std::max(gt, std::abs(d[i]) + std::abs(e[i]) +
@@ -2713,13 +2843,21 @@ void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
                     return Stemr<T>(lib, true, d, e, n, jobz, s, tryrac, lw);
                   });
         }
-        if (!kComplex<T>) {
+        if constexpr (!kComplex<T>) {
           snprintf(what, sizeof(what), "n=%d kind=%d jobz=%c range=%c", int(n),
                    kind, jobz, s.range);
           Case<T>(hwy, ref, "stevr", what, n,
                   [&](const BlasLibrary& lib, I lw) {
                     return Stemr<T>(lib, false, d, e, n, jobz, s, 0, lw);
                   });
+          for (const R abstol : {R(0), 2 * std::numeric_limits<R>::min()}) {
+            snprintf(what, sizeof(what),
+                     "n=%d kind=%d jobz=%c range=%c abstol=%g", int(n), kind,
+                     jobz, s.range, double(abstol));
+            Case<T>(hwy, ref, "stevx", what, n, [&](const BlasLibrary& lib, I) {
+              return Stevx<T>(lib, d, e, n, jobz, s, abstol);
+            });
+          }
         }
       }
       for (const char order : {'B', 'E'}) {
