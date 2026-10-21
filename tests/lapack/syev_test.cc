@@ -123,6 +123,7 @@ TYPED_TEST(SyevTest, Steqr) {
       R anorm = 0;
       for (R x : d0) anorm = std::max(anorm, std::abs(x));
       for (R x : e0) anorm = std::max(anorm, std::abs(x));
+      if (anorm == 0) anorm = 1;  // the zero matrix (Wilkinson, n = 1)
       for (auto& x : ds) x /= anorm;
       for (auto& x : es) x /= anorm;
       const Dense<T> t = Tridiagonal<T>(ds, es);
@@ -557,10 +558,9 @@ TYPED_TEST(SyevTest, LasrLeftIsRightOfTranspose) {
 // over all rows (side 'R') or columns of A, with each operation in a
 // statement of its own.
 template <typename T>
-void ReferenceLasrVariable(char side, char direct, hwyblas_int m,
-                           hwyblas_int n, const RealT<T>* c,
-                           const RealT<T>* s, std::vector<T>& a,
-                           hwyblas_int lda) {
+void ReferenceLasrVariable(char side, char direct, hwyblas_int m, hwyblas_int n,
+                           const RealT<T>* c, const RealT<T>* s,
+                           std::vector<T>& a, hwyblas_int lda) {
   using R = RealT<T>;
   const bool left = side == 'L';
   const hwyblas_int z = left ? m : n;
@@ -592,7 +592,8 @@ TYPED_TEST(SyevTest, LasrVariableIsExact) {
   ForEachTarget([] {
     Random<T> rng(115);
     Random<R> rrng(117);
-    const hwyblas_int sizes[] = {1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 16, 17, 33, 70};
+    const hwyblas_int sizes[] = {1, 2,  3,  4,  5,  7,  8,
+                                 9, 12, 13, 16, 17, 33, 70};
     for (const char side : {'L', 'R'}) {
       for (const char direct : {'F', 'B'}) {
         for (const hwyblas_int m : sizes) {

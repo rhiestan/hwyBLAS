@@ -409,7 +409,7 @@ blasint Hesvx(char fact, char uplo, blasint n, blasint nrhs, const T* a,
               RealT<T>* berr, T* work, blasint lwork, RealT<T>* rwork);
 
 // ---------------------------------------------------------------------------
-// QR and LQ factorizations (geqrf.cc)
+// QR, LQ and RQ factorizations (geqrf.cc)
 
 template <typename T>
 blasint Geqr2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
@@ -423,6 +423,13 @@ blasint Gelq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
 
 template <typename T>
 blasint Gelqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
+              blasint lwork);
+
+template <typename T>
+blasint Gerq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
+
+template <typename T>
+blasint Gerqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
               blasint lwork);
 
 // ---------------------------------------------------------------------------
@@ -444,7 +451,7 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
               T* work, blasint lwork, RealT<T>* rwork);
 
 // ---------------------------------------------------------------------------
-// Orthogonal / unitary matrices from QR and LQ factorizations (ungqr.cc)
+// Orthogonal / unitary matrices from QR, LQ and RQ factorizations (ungqr.cc)
 
 template <typename T>
 blasint Ung2r(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
@@ -479,8 +486,45 @@ blasint Unml2(char side, char trans, blasint m, blasint n, blasint k, T* a,
 
 // A is changed (conjugated) for complex T, but restored on exit.
 template <typename T>
+blasint Unmr2(char side, char trans, blasint m, blasint n, blasint k, T* a,
+              blasint lda, const T* tau, T* c, blasint ldc, T* work);
+
+template <typename T>
+blasint Unmrq(char side, char trans, blasint m, blasint n, blasint k, T* a,
+              blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork);
+
+template <typename T>
 blasint Unmlq(char side, char trans, blasint m, blasint n, blasint k, T* a,
               blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork);
+
+// ---------------------------------------------------------------------------
+// RZ factorization of a trapezoidal matrix and its Z (tzrzf.cc). The complex
+// xLARZB, xLARZT and xUNMRZ conjugate V (rows of A) while they run.
+
+template <typename T>
+void Larz(char side, blasint m, blasint n, blasint l, const T* v, blasint incv,
+          T tau, T* c, blasint ldc, T* work);
+template <typename T>
+void Larzb(char side, char trans, char direct, char storev, blasint m,
+           blasint n, blasint k, blasint l, T* v, blasint ldv, T* t,
+           blasint ldt, T* c, blasint ldc, T* work, blasint ldwork);
+template <typename T>
+void Larzt(char direct, char storev, blasint n, blasint k, T* v, blasint ldv,
+           const T* tau, T* t, blasint ldt);
+template <typename T>
+void Latrz(blasint m, blasint n, blasint l, T* a, blasint lda, T* tau, T* work);
+template <typename T>
+blasint Tzrzf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
+              blasint lwork);
+template <typename T>
+blasint Unmr3(char side, char trans, blasint m, blasint n, blasint k, blasint l,
+              const T* a, blasint lda, const T* tau, T* c, blasint ldc,
+              T* work);
+template <typename T>
+blasint Unmrz(char side, char trans, blasint m, blasint n, blasint k, blasint l,
+              const T* a, blasint lda, const T* tau, T* c, blasint ldc, T* work,
               blasint lwork);
 
 // ---------------------------------------------------------------------------
@@ -788,6 +832,66 @@ template <typename R>
 blasint Stevx(char jobz, char range, blasint n, R* d, R* e, R vl, R vu,
               blasint il, blasint iu, R abstol, blasint* m, R* w, R* z,
               blasint ldz, R* work, blasint* iwork, blasint* ifail);
+
+// ---------------------------------------------------------------------------
+// Linear least squares (gels.cc, gelsd.cc). RWORK is referenced for complex
+// T only.
+
+template <typename T>
+void Laic1(blasint job, blasint j, const T* x, RealT<T> sest, const T* w,
+           T gamma, RealT<T>* sestpr, T* s, T* c);
+template <typename T>
+blasint Gels(char trans, blasint m, blasint n, blasint nrhs, T* a, blasint lda,
+             T* b, blasint ldb, T* work, blasint lwork);
+template <typename T>
+blasint Gelss(blasint m, blasint n, blasint nrhs, T* a, blasint lda, T* b,
+              blasint ldb, RealT<T>* s, RealT<T> rcond, blasint* rank, T* work,
+              blasint lwork, RealT<T>* rwork);
+template <typename T>
+blasint Gelsy(blasint m, blasint n, blasint nrhs, T* a, blasint lda, T* b,
+              blasint ldb, blasint* jpvt, RealT<T> rcond, blasint* rank,
+              T* work, blasint lwork, RealT<T>* rwork);
+
+// The singular vectors are real; for complex T, B and BX (and WORK of
+// xLALSD) are complex, the workspace of xLALS0 and xLALSA is real.
+template <typename T>
+blasint Lals0(blasint icompq, blasint nl, blasint nr, blasint sqre,
+              blasint nrhs, T* b, blasint ldb, T* bx, blasint ldbx,
+              blasint* perm, blasint givptr, blasint* givcol, blasint ldgcol,
+              RealT<T>* givnum, blasint ldgnum, RealT<T>* poles, RealT<T>* difl,
+              RealT<T>* difr, RealT<T>* z, blasint k, RealT<T> c, RealT<T> s,
+              RealT<T>* work);
+template <typename T>
+blasint Lalsa(blasint icompq, blasint smlsiz, blasint n, blasint nrhs, T* b,
+              blasint ldb, T* bx, blasint ldbx, RealT<T>* u, blasint ldu,
+              RealT<T>* vt, blasint* k, RealT<T>* difl, RealT<T>* difr,
+              RealT<T>* z, RealT<T>* poles, blasint* givptr, blasint* givcol,
+              blasint ldgcol, blasint* perm, RealT<T>* givnum, RealT<T>* c,
+              RealT<T>* s, RealT<T>* work, blasint* iwork);
+template <typename T>
+blasint Lalsd(char uplo, blasint smlsiz, blasint n, blasint nrhs, RealT<T>* d,
+              RealT<T>* e, T* b, blasint ldb, RealT<T> rcond, blasint* rank,
+              T* work, RealT<T>* rwork, blasint* iwork);
+template <typename T>
+blasint Gelsd(blasint m, blasint n, blasint nrhs, T* a, blasint lda, T* b,
+              blasint ldb, RealT<T>* s, RealT<T> rcond, blasint* rank, T* work,
+              blasint lwork, RealT<T>* rwork, blasint* iwork);
+
+// ---------------------------------------------------------------------------
+// Generalized linear least squares (gglse.cc)
+
+template <typename T>
+blasint Ggqrf(blasint n, blasint m, blasint p, T* a, blasint lda, T* taua, T* b,
+              blasint ldb, T* taub, T* work, blasint lwork);
+template <typename T>
+blasint Ggrqf(blasint m, blasint p, blasint n, T* a, blasint lda, T* taua, T* b,
+              blasint ldb, T* taub, T* work, blasint lwork);
+template <typename T>
+blasint Gglse(blasint m, blasint n, blasint p, T* a, blasint lda, T* b,
+              blasint ldb, T* c, T* d, T* x, T* work, blasint lwork);
+template <typename T>
+blasint Ggglm(blasint n, blasint m, blasint p, T* a, blasint lda, T* b,
+              blasint ldb, T* d, T* x, T* y, T* work, blasint lwork);
 
 // ---------------------------------------------------------------------------
 // Bidiagonal reduction (bidiagonal.cc)

@@ -194,6 +194,27 @@ SIGS = {
     'STEBZ': ('Stebz', 'vvvvvvvvaappaaaaai'),
     'STEIN': ('Stein', 'vaavaaaavaaai'),
     'STEMR': ('Stemr', 'vvvaavvvvpaavvapavavi'),
+    'LARF1L': ('Larf1l', 'vvvavvava'),
+    'GERQ2': ('Gerq2', 'vvavaai'),
+    'GERQF': ('Gerqf', 'vvavaavi'),
+    'UNMLQ': ('Unmlq', 'vvvvvavaavavi'),
+    'UNMR2': ('Unmr2', 'vvvvvavaavai'),
+    'UNMRQ': ('Unmrq', 'vvvvvavaavavi'),
+    'UNMR3': ('Unmr3', 'vvvvvvavaavai'),
+    'UNMRZ': ('Unmrz', 'vvvvvvavaavavi'),
+    'LARZ': ('Larz', 'vvvvavvava'),
+    'LARZB': ('Larzb', 'vvvvvvvvavavavav'),
+    'LARZT': ('Larzt', 'vvvvavaav'),
+    'LATRZ': ('Latrz', 'vvvavaa'),
+    'TZRZF': ('Tzrzf', 'vvavaavi'),
+    'LAIC1': ('Laic1', 'vvavavppp'),
+    'LALS0': ('Lals0', 'vvvvvavavavavavaaaavvvai'),
+    'LALSA': ('Lalsa', 'vvvvavavavaaaaaaaavaaaaaai'),
+    'LALSD': ('Lalsd', 'vvvvaaavvpaai'),
+    'GGQRF': ('Ggqrf', 'vvvavaavaavi'),
+    'GGRQF': ('Ggrqf', 'vvvavaavaavi'),
+    'TRTRS': ('Trtrs', 'vvvvvavavi'),
+    'GEQP3': ('Geqp3', 'vvavaaavi'),
 }
 # Argument kinds of the complex routines whose arguments differ from the
 # real ones' (e.g. W for WR and WI).
@@ -218,6 +239,8 @@ SIGS_COMPLEX = {
     'LAED8': 'pvvavaavaaavaaaaapaai',
     'HEEV': 'vvvavaavai',
     'HEEVD': 'vvvavaavavavavi',
+    'LALSD': 'vvvvaaavvpaaai',
+    'GEQP3': 'vvavaaavai',
 }
 REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'ORMBR': 'UNMBR', 'ORMQR': 'UNMQR', 'ORMLQ': 'UNMLQ',
@@ -226,7 +249,9 @@ REAL2CPLX = {'ORGQR': 'UNGQR', 'ORGLQ': 'UNGLQ', 'ORGBR': 'UNGBR',
              'DZNRM2': 'NRM2', 'DZASUM': 'ASUM', 'IZAMAX': 'IAMAX',
              'IDAMAX': 'IAMAX', 'IZMAX1': 'IMAX1', 'DZSUM1': 'SUM1',
              'DGER': 'GERU', 'SGER': 'GERU', 'ORMTR': 'UNMTR',
-             'ORMQL': 'UNMQL', 'ORM2L': 'UNM2L', 'SYTRD': 'HETRD'}
+             'ORMQL': 'UNMQL', 'ORM2L': 'UNM2L', 'SYTRD': 'HETRD',
+             'ORMR2': 'UNMR2', 'ORMRQ': 'UNMRQ', 'ORMR3': 'UNMR3',
+             'ORMRZ': 'UNMRZ'}
 FUNCS = {
     'MAX': 'Max', 'MIN': 'Min', 'ABS': 'std::abs',
     'SQRT': 'std::sqrt', 'SIGN': 'Sign', 'DBLE': 'std::real',

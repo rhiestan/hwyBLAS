@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <cmath>
 #include <complex>
 #include <string>
 #include <type_traits>
@@ -144,13 +145,16 @@ std::string LapackeName(const char* rest) {
   return "LAPACKE_" + name;
 }
 
-// The 1-norm (maximum column sum) of a dense matrix.
+// The 1-norm (maximum column sum) of a dense matrix; NaN if an element is
+// NaN (std::max would drop it, and a NaN result would pass the ratio
+// checks).
 template <typename T>
 double Norm1(const Dense<T>& a) {
   double norm = 0;
   for (size_t j = 0; j < a.cols; ++j) {
     double sum = 0;
     for (size_t i = 0; i < a.rows; ++i) sum += std::abs(a(i, j));
+    if (std::isnan(sum)) return sum;
     norm = std::max(norm, sum);
   }
   return norm;
@@ -163,6 +167,7 @@ double Norm1(const std::vector<T>& x, size_t m, size_t n, size_t ld) {
   for (size_t j = 0; j < n; ++j) {
     double sum = 0;
     for (size_t i = 0; i < m; ++i) sum += Abs(At(x, i, j, ld));
+    if (std::isnan(sum)) return sum;
     norm = std::max(norm, sum);
   }
   return norm;

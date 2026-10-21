@@ -2881,6 +2881,430 @@ void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Least squares (M11)
+
+// An m x n matrix of rank min(r, m, n): the product of random m x r and r x n
+// matrices.
+template <typename T>
+std::vector<T> LowRank(I m, I n, I r) {
+  const std::vector<T> x = TestMatrix<T>(0, m, r);
+  const std::vector<T> y = TestMatrix<T>(0, r, n);
+  std::vector<T> a(static_cast<size_t>(m) * n, T(0));
+  for (I j = 0; j < n; ++j) {
+    for (I l = 0; l < r; ++l) {
+      for (I i = 0; i < m; ++i) {
+        a[i + static_cast<size_t>(j) * m] += x[i + static_cast<size_t>(l) * m] *
+                                             y[l + static_cast<size_t>(j) * r];
+      }
+    }
+  }
+  return a;
+}
+
+// The right-hand sides of a least squares problem with A m x n: max(m, n)
+// rows (LDB), nrhs columns.
+template <typename T>
+std::vector<T> RightHandSides(I m, I n, I nrhs) {
+  return TestMatrix<T>(0, std::max<I>({m, n, 1}), nrhs);
+}
+
+// gels with TRANS = 'N' or 'T' / 'C'.
+template <typename T>
+Result Gels(const BlasLibrary& lib, char trans, std::vector<T> a, I m, I n,
+            std::vector<T> b, I nrhs, I lwork) {
+  const I lda = std::max<I>(m, 1);
+  const I ldb = std::max<I>({m, n, 1});
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  using F = void (*)(const char*, const I*, const I*, const I*, T*, const I*,
+                     T*, const I*, T*, const I*, I*, size_t);
+  lib.Get<F>((std::string(Prefix<T>()) + "gels_").c_str())(
+      &trans, &m, &n, &nrhs, a.data(), &lda, b.data(), &ldb, work.data(),
+      &lwork, &info, 1);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) return r;
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// gelss (dc = false) or gelsd (dc = true) with RCOND.
+template <typename T>
+Result GelssD(const BlasLibrary& lib, bool dc, std::vector<T> a, I m, I n,
+              std::vector<T> b, I nrhs, Real<T> rcond, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(m, 1);
+  const I ldb = std::max<I>({m, n, 1});
+  const I mn = std::max<I>(std::min(m, n), 1);
+  std::vector<R> s(mn);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<R> rwork(128 * static_cast<size_t>(std::max(m, n)) + 2048);
+  std::vector<I> iwork(64 * static_cast<size_t>(mn) + 64);
+  I rank = -1, info = 0;
+  const std::string name =
+      std::string(Prefix<T>()) + (dc ? "gelsd_" : "gelss_");
+  if constexpr (kComplex<T>) {
+    if (dc) {
+      using F = void (*)(const I*, const I*, const I*, T*, const I*, T*,
+                         const I*, R*, const R*, I*, T*, const I*, R*, I*, I*);
+      lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                               s.data(), &rcond, &rank, work.data(), &lwork,
+                               rwork.data(), iwork.data(), &info);
+    } else {
+      using F = void (*)(const I*, const I*, const I*, T*, const I*, T*,
+                         const I*, R*, const R*, I*, T*, const I*, R*, I*);
+      lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                               s.data(), &rcond, &rank, work.data(), &lwork,
+                               rwork.data(), &info);
+    }
+  } else {
+    if (dc) {
+      using F = void (*)(const I*, const I*, const I*, T*, const I*, T*,
+                         const I*, R*, const R*, I*, T*, const I*, I*, I*);
+      lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                               s.data(), &rcond, &rank, work.data(), &lwork,
+                               iwork.data(), &info);
+    } else {
+      using F = void (*)(const I*, const I*, const I*, T*, const I*, T*,
+                         const I*, R*, const R*, I*, T*, const I*, I*);
+      lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                               s.data(), &rcond, &rank, work.data(), &lwork,
+                               &info);
+    }
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) {
+    if (dc) AddInt(r, "liwork", iwork[0]);
+    if (dc && kComplex<T>) Add(r, "lrwork", Kind::kInteger, rwork.data(), 1);
+    return r;
+  }
+  AddInt(r, "rank", rank);
+  Add(r, "s", Kind::kValues, s);
+  Add(r, "b", Kind::kOther, b);
+  if (!dc) Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// gelsy with RCOND; every third column is moved to the front.
+template <typename T>
+Result Gelsy(const BlasLibrary& lib, std::vector<T> a, I m, I n,
+             std::vector<T> b, I nrhs, Real<T> rcond, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(m, 1);
+  const I ldb = std::max<I>({m, n, 1});
+  std::vector<I> jpvt(std::max<I>(n, 1));
+  for (I j = 0; j < n; ++j) jpvt[j] = j % 3 == 1 ? 1 : 0;
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<R> rwork(2 * std::max<I>(n, 1));
+  I rank = -1, info = 0;
+  const std::string name = std::string(Prefix<T>()) + "gelsy_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                       I*, const R*, I*, T*, const I*, R*, I*);
+    lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                             jpvt.data(), &rcond, &rank, work.data(), &lwork,
+                             rwork.data(), &info);
+  } else {
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                       I*, const R*, I*, T*, const I*, I*);
+    lib.Get<F>(name.c_str())(&m, &n, &nrhs, a.data(), &lda, b.data(), &ldb,
+                             jpvt.data(), &rcond, &rank, work.data(), &lwork,
+                             &info);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) return r;
+  AddInt(r, "rank", rank);
+  Add(r, "jpvt", Kind::kInteger, jpvt);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// gerq2 (unblocked; WORK has M elements).
+template <typename T>
+Result Gerq2(const BlasLibrary& lib, std::vector<T> a, I m, I n) {
+  using F = void (*)(const I*, const I*, T*, const I*, T*, T*, I*);
+  const I lda = std::max<I>(m, 1);
+  std::vector<T> tau(std::max<I>(std::min(m, n), 1));
+  std::vector<T> work(std::max<I>(m, 1));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gerq2_").c_str())(
+      &m, &n, a.data(), &lda, tau.data(), work.data(), &info);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "tau", Kind::kOther, tau);
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// gglse (A m x n, B p x n) or ggglm (A n x m, B n x p); `rows` and `cols`
+// are those of A, bcols the columns of B (or its rows for gglse).
+template <typename T>
+Result Gglse(const BlasLibrary& lib, bool glm, std::vector<T> a, I m, I n, I p,
+             std::vector<T> b, std::vector<T> c, std::vector<T> d, I lwork) {
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                     T*, T*, T*, T*, const I*, I*);
+  Result r;
+  if (glm) {
+    // GGGLM( N = m, M = n, P = p ): A is m x n, B m x p, D(m), X(n), Y(p).
+    const I lda = std::max<I>(m, 1), ldb = std::max<I>(m, 1);
+    std::vector<T> x(std::max<I>(n, 1)), y(std::max<I>(p, 1));
+    lib.Get<F>((std::string(Prefix<T>()) + "ggglm_").c_str())(
+        &m, &n, &p, a.data(), &lda, b.data(), &ldb, d.data(), x.data(),
+        y.data(), work.data(), &lwork, &info);
+    r.lwork = std::real(work[0]);
+    AddInt(r, "info", info);
+    if (lwork == -1) return r;
+    Add(r, "x", Kind::kOther, x);
+    Add(r, "y", Kind::kOther, y);
+  } else {
+    // GGLSE( M = m, N = n, P = p ): A is m x n, B p x n, C(m), D(p), X(n).
+    const I lda = std::max<I>(m, 1), ldb = std::max<I>(p, 1);
+    std::vector<T> x(std::max<I>(n, 1));
+    lib.Get<F>((std::string(Prefix<T>()) + "gglse_").c_str())(
+        &m, &n, &p, a.data(), &lda, b.data(), &ldb, c.data(), d.data(),
+        x.data(), work.data(), &lwork, &info);
+    r.lwork = std::real(work[0]);
+    AddInt(r, "info", info);
+    if (lwork == -1) return r;
+    Add(r, "x", Kind::kOther, x);
+    Add(r, "c", Kind::kOther, c);
+  }
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// ggqrf (rq = false; A n x m, B n x p) or ggrqf (rq = true; A m x n, B p x
+// n), with the dimensions in the routine's order (d1, d2, d3).
+template <typename T>
+Result Ggqrf(const BlasLibrary& lib, bool rq, std::vector<T> a, I d1, I d2,
+             I d3, std::vector<T> b, I lwork) {
+  // ggqrf( N, M, P ): lda, ldb >= N. ggrqf( M, P, N ): lda >= M, ldb >= P.
+  const I lda = std::max<I>(d1, 1), ldb = std::max<I>(rq ? d2 : d1, 1);
+  std::vector<T> taua(std::max<I>({d1, d2, d3, 1})), taub(taua.size());
+  std::vector<T> work(std::max<I>(lwork, 1));
+  I info = 0;
+  using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, T*,
+                     const I*, T*, T*, const I*, I*);
+  lib.Get<F>((std::string(Prefix<T>()) + (rq ? "ggrqf_" : "ggqrf_")).c_str())(
+      &d1, &d2, &d3, a.data(), &lda, taua.data(), b.data(), &ldb, taub.data(),
+      work.data(), &lwork, &info);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) return r;
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "taua", Kind::kOther, taua);
+  Add(r, "b", Kind::kOther, b);
+  Add(r, "taub", Kind::kOther, taub);
+  return r;
+}
+
+// The orthogonal factor of an RQ (rz = false; ormrq / unmrq, A k x nq with
+// TAU from gerqf) or RZ factorization (rz = true; ormrz / unmrz, A k x nq
+// from tzrzf, l = nq - k) applied to the m x n matrix C.
+template <typename T>
+Result Ormrq(const BlasLibrary& lib, bool rz, const std::vector<T>& a,
+             const std::vector<T>& tau, I k, I nq, std::vector<T> c, I m, I n,
+             char side, char trans, I lwork) {
+  const I lda = std::max<I>(k, 1), ldc = std::max<I>(m, 1);
+  const I l = nq - k;
+  // As LAPACK, the query gives 1 for an empty C, but LWORK >= max(1, N) or
+  // max(1, M) is required.
+  if (lwork != -1) lwork = std::max<I>({lwork, m, n, 1});
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<T> af = a;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) +
+                           (kComplex<T> ? "unm" : "orm") + (rz ? "rz_" : "rq_");
+  if (rz) {
+    using F = void (*)(const char*, const char*, const I*, const I*, const I*,
+                       const I*, const T*, const I*, const T*, T*, const I*, T*,
+                       const I*, I*, size_t, size_t);
+    lib.Get<F>(name.c_str())(&side, &trans, &m, &n, &k, &l, af.data(), &lda,
+                             tau.data(), c.data(), &ldc, work.data(), &lwork,
+                             &info, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const I*, const I*, const I*,
+                       const T*, const I*, const T*, T*, const I*, T*, const I*,
+                       I*, size_t, size_t);
+    lib.Get<F>(name.c_str())(&side, &trans, &m, &n, &k, af.data(), &lda,
+                             tau.data(), c.data(), &ldc, work.data(), &lwork,
+                             &info, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) return r;
+  Add(r, "c", Kind::kOther, c);
+  Add(r, "a", Kind::kOther, af);  // restored by the complex routines
+  return r;
+}
+
+// The least squares drivers for problems of order s: square, tall and wide
+// matrices (random, graded, small integers, rank deficient), one and three
+// right-hand sides, and RCOND below the machine precision and 1e-3
+// (xGELSS, xGELSD, xGELSY); the generalized problems (xGGLSE, xGGGLM); and
+// the factorizations they use: xGERQF (and xGERQ2), xORMRQ / xUNMRQ,
+// xTZRZF, xORMRZ / xUNMRZ, xGGQRF, xGGRQF. The routines that take a
+// factorization get hwyBLAS's in both libraries.
+template <typename T>
+void RunGels(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
+  using R = Real<T>;
+  char what[96];
+  const char ctrans = kComplex<T> ? 'C' : 'T';
+  const I shapes[][2] = {{s, s}, {2 * s + 1, s}, {s, 2 * s + 1}};
+  for (const auto& shape : shapes) {
+    const I m = shape[0], n = shape[1];
+    const I mn = std::max(m, n);
+    for (const int kind : {0, 2, 4, 5}) {
+      const std::vector<T> a =
+          kind == 5 ? LowRank<T>(m, n, std::max<I>(std::min(m, n) / 2, 1))
+                    : TestMatrix<T>(kind, m, n);
+      for (const I nrhs : {1, 3}) {
+        const std::vector<T> b = RightHandSides<T>(m, n, nrhs);
+        // xGELS needs full rank.
+        if (kind != 5) {
+          for (const char trans : {'N', ctrans}) {
+            snprintf(what, sizeof(what), "m=%d n=%d kind=%d nrhs=%d trans=%c",
+                     int(m), int(n), kind, int(nrhs), trans);
+            Case<T>(hwy, ref, "gels", what, mn,
+                    [&](const BlasLibrary& lib, I lw) {
+                      return Gels(lib, trans, a, m, n, b, nrhs, lw);
+                    });
+          }
+        }
+        for (const R rcond : {R(-1), R(1e-3)}) {
+          snprintf(what, sizeof(what), "m=%d n=%d kind=%d nrhs=%d rcond=%g",
+                   int(m), int(n), kind, int(nrhs), double(rcond));
+          Case<T>(hwy, ref, "gelss", what, mn,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return GelssD(lib, false, a, m, n, b, nrhs, rcond, lw);
+                  });
+          Case<T>(hwy, ref, "gelsd", what, mn,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return GelssD(lib, true, a, m, n, b, nrhs, rcond, lw);
+                  });
+          Case<T>(hwy, ref, "gelsy", what, mn,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Gelsy(lib, a, m, n, b, nrhs, rcond, lw);
+                  });
+        }
+      }
+      if (kind == 5) continue;
+
+      // RQ factorization and its Q, applied from both sides.
+      snprintf(what, sizeof(what), "m=%d n=%d kind=%d", int(m), int(n), kind);
+      Case<T>(hwy, ref, "gerqf", what, mn, [&](const BlasLibrary& lib, I lw) {
+        return Geqrf(lib, "gerqf_", a, m, n, lw);
+      });
+      Case<T>(hwy, ref, "gerq2", what, mn,
+              [&](const BlasLibrary& lib, I) { return Gerq2(lib, a, m, n); });
+    }
+  }
+
+  // The factors of RQ (A k x nq, k <= nq) and RZ (A k x nq upper
+  // trapezoidal) factorizations, applied to C.
+  for (const I k : {s, s / 2}) {
+    const I nq = s + (s + 1) / 2;
+    if (k > nq) continue;
+    std::vector<T> a = TestMatrix<T>(0, k, nq);
+    std::vector<T> tau(std::max<I>(k, 1));
+    {
+      using F =
+          void (*)(const I*, const I*, T*, const I*, T*, T*, const I*, I*);
+      const I lda = std::max<I>(k, 1), lwork = 64 * std::max<I>(nq, 1);
+      std::vector<T> work(lwork);
+      I info = 0;
+      hwy.Get<F>((std::string(Prefix<T>()) + "gerqf_").c_str())(
+          &k, &nq, a.data(), &lda, tau.data(), work.data(), &lwork, &info);
+    }
+    // A k x nq upper trapezoidal matrix.
+    std::vector<T> z = TestMatrix<T>(0, k, nq);
+    for (I j = 0; j < nq; ++j) {
+      for (I i = j + 1; i < k; ++i) z[i + static_cast<size_t>(j) * k] = T(0);
+    }
+    snprintf(what, sizeof(what), "m=%d n=%d", int(k), int(nq));
+    Case<T>(hwy, ref, "tzrzf", what, nq, [&](const BlasLibrary& lib, I lw) {
+      return Geqrf(lib, "tzrzf_", z, k, nq, lw);
+    });
+    std::vector<T> ztau(std::max<I>(k, 1));
+    {
+      using F =
+          void (*)(const I*, const I*, T*, const I*, T*, T*, const I*, I*);
+      const I lda = std::max<I>(k, 1), lwork = 64 * std::max<I>(nq, 1);
+      std::vector<T> work(lwork);
+      I info = 0;
+      hwy.Get<F>((std::string(Prefix<T>()) + "tzrzf_").c_str())(
+          &k, &nq, z.data(), &lda, ztau.data(), work.data(), &lwork, &info);
+    }
+    const I nc = 3;
+    for (const char side : {'L', 'R'}) {
+      for (const char trans : {'N', ctrans}) {
+        const I cm = side == 'L' ? nq : nc, cn = side == 'L' ? nc : nq;
+        const std::vector<T> c = TestMatrix<T>(0, cm, cn);
+        snprintf(what, sizeof(what), "k=%d nq=%d side=%c trans=%c", int(k),
+                 int(nq), side, trans);
+        Case<T>(hwy, ref, kComplex<T> ? "unmrq" : "ormrq", what, nq,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Ormrq(lib, false, a, tau, k, nq, c, cm, cn, side,
+                               trans, lw);
+                });
+        Case<T>(hwy, ref, kComplex<T> ? "unmrz" : "ormrz", what, nq,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Ormrq(lib, true, z, ztau, k, nq, c, cm, cn, side,
+                               trans, lw);
+                });
+      }
+    }
+  }
+
+  // Generalized problems: GGLSE with A m x n, B p x n (p <= n <= m + p),
+  // GGGLM with A n x m, B n x p (m <= n <= m + p), and the generalized QR
+  // and RQ factorizations.
+  const I sizes[][3] = {{s + 2, s, s / 2}, {s / 2, s, s - s / 3}, {s, s, s}};
+  for (const auto& d : sizes) {
+    const I m = d[0], n = d[1], p = d[2];
+    if (p <= n && n <= m + p) {
+      const std::vector<T> a = TestMatrix<T>(0, m, n);
+      const std::vector<T> b = TestMatrix<T>(0, p, n);
+      const std::vector<T> c = TestMatrix<T>(0, std::max<I>(m, 1), 1);
+      const std::vector<T> dd = TestMatrix<T>(0, std::max<I>(p, 1), 1);
+      snprintf(what, sizeof(what), "m=%d n=%d p=%d", int(m), int(n), int(p));
+      Case<T>(hwy, ref, "gglse", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Gglse(lib, false, a, m, n, p, b, c, dd, lw);
+      });
+      Case<T>(hwy, ref, "ggrqf", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Ggqrf(lib, true, a, m, p, n, b, lw);
+      });
+    }
+    // GGGLM( N, M, P ) with N = n, M = m', P = p': here m' = n - p / 2.
+    const I gn = n, gm = std::max<I>(n - p / 2, 0), gp = p;
+    if (gm <= gn && gn <= gm + gp) {
+      const std::vector<T> a = TestMatrix<T>(0, gn, gm);
+      const std::vector<T> b = TestMatrix<T>(0, gn, gp);
+      const std::vector<T> dd = TestMatrix<T>(0, std::max<I>(gn, 1), 1);
+      snprintf(what, sizeof(what), "n=%d m=%d p=%d", int(gn), int(gm), int(gp));
+      Case<T>(hwy, ref, "ggglm", what, gn, [&](const BlasLibrary& lib, I lw) {
+        return Gglse(lib, true, a, gn, gm, gp, b, std::vector<T>(), dd, lw);
+      });
+      Case<T>(hwy, ref, "ggqrf", what, gn, [&](const BlasLibrary& lib, I lw) {
+        return Ggqrf(lib, false, a, gn, gm, gp, b, lw);
+      });
+    }
+  }
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -2960,6 +3384,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunSymmetric<T>(hwy, ref, n);
     RunSyevd<T>(hwy, ref, n);
     RunSyevr<T>(hwy, ref, n);
+    RunGels<T>(hwy, ref, n);
   }
 }
 

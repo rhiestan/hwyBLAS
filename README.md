@@ -77,6 +77,11 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?sysv`, `?sytrf`, `?lasyf`, `?sytf2` (symmetric indefinite systems, Bunch-Kaufman), `?sytrs`, `?sytrs2`, `?syconv`, `?sytri`, `?sysvx` (expert driver), `?sycon`, `?syrfs` | s d c z |
 | `?hesv`, `?hetrf`, `?lahef`, `?hetf2` (Hermitian indefinite systems), `?hetrs`, `?hetrs2`, `?hetri`, `?hesvx`, `?hecon`, `?herfs`, `?symv`, `?syr` (complex symmetric) | c z |
 | `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |
+| `?gerqf`, `?gerq2` (RQ factorization), `?tzrzf`, `?latrz`, `?larz`, `?larzt`, `?larzb` (RZ factorization of a trapezoidal matrix) | s d c z |
+| `?ormrq`, `?ormr2`, `?ormrz`, `?ormr3` (Q of RQ, Z of RZ) | s d |
+| `?unmrq`, `?unmr2`, `?unmrz`, `?unmr3` | c z |
+| `?gels` (least squares by QR / LQ), `?gelss` (by the SVD), `?gelsd` (by the SVD with divide and conquer), `?lalsd`, `?lalsa`, `?lals0`, `?gelsy` (by complete orthogonal factorization), `?laic1` | s d c z |
+| `?gglse` (equality-constrained least squares), `?ggglm` (Gauss-Markov linear model), `?ggqrf`, `?ggrqf` (generalized QR and RQ factorizations) | s d c z |
 | `?geqp3`, `?laqps`, `?laqp2` (QR factorization with column pivoting) | s d c z |
 | `?orgqr`, `?org2r`, `?orglq`, `?orgl2`, `?ormqr`, `?orm2r`, `?ormlq`, `?orml2` (Q of QR / LQ) | s d |
 | `?ungqr`, `?ung2r`, `?unglq`, `?ungl2`, `?unmqr`, `?unm2r`, `?unmlq`, `?unml2` | c z |
@@ -119,8 +124,9 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
 LAPACKE has the reference LAPACKE's functions for these routines (with
-documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx` and
-`LAPACKE_?syconv`, see `hwyblas/lapacke.h`).
+documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx`, `LAPACKE_?syconv`
+and `LAPACKE_?ormrq` / `?unmrq` / `?ormrz` / `?unmrz`, see
+`hwyblas/lapacke.h`).
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
 (`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in

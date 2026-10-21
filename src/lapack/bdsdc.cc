@@ -23,18 +23,6 @@
 
 namespace hwyblas {
 namespace lapack {
-namespace {
-
-// xLAMC3(A, B) = A + B. In Fortran a function call, so that "optimizing
-// compilers" cannot reassociate (x + y) + z: C++ evaluates x + y + z as
-// (x + y) + z, and the build allows no reassociation.
-template <typename R>
-R Lamc3(R a, R b) {
-  return a + b;
-}
-
-}  // namespace
-
 // xLAMRG: the permutation INDEX that merges the two sorted lists
 // A(1:N1) and A(N1+1:N1+N2) into one list in ascending order:
 // A(INDEX(1)) <= ... <= A(INDEX(N1+N2)). DTRD1 (DTRD2) is 1 if the first

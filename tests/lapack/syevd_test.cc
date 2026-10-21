@@ -115,6 +115,7 @@ TYPED_TEST(SyevdTest, Stedc) {
         R anorm = 0;
         for (R x : d0) anorm = std::max(anorm, std::abs(x));
         for (R x : e0) anorm = std::max(anorm, std::abs(x));
+        if (anorm == 0) anorm = 1;  // the zero matrix (Wilkinson, n = 1)
         std::vector<R> ds = d0, es = e0;
         for (auto& x : ds) x /= anorm;
         for (auto& x : es) x /= anorm;
@@ -298,6 +299,7 @@ TYPED_TEST(SyevdRealTest, Stevd) {
           R anorm = 0;
           for (R x : d0) anorm = std::max(anorm, std::abs(x));
           for (R x : e0) anorm = std::max(anorm, std::abs(x));
+          if (anorm == 0) anorm = 1;  // the zero matrix (Wilkinson, n = 1)
           std::vector<R> ds = d0, es = e0;
           for (auto& x : ds) x /= anorm;
           for (auto& x : es) x /= anorm;

@@ -61,8 +61,12 @@ The translator produces the conventions described in
   is instantiated for all four types. The single precision routine is
   compared with the translated one first: where it computes differently
   (other tolerances in SLARRE, SLARRF and SSTEMR / CSTEMR, WORK(1) = 26
-  for N = 1 in SSYEVR, xLASQ2's IEEE flag), the difference is kept with
-  `if constexpr (std::is_same_v<R, float>)`. Only the comparison with the
+  for N = 1 in SSYEVR, xLASQ2's IEEE flag, the workspace sizes of SGELSS
+  and SGELSD), the difference is kept with
+  `if constexpr (std::is_same_v<R, float>)`. Sometimes the double
+  routine is the odd one: DORMR2 still applies its reflectors with DLARF
+  (setting the unit element in A), where SORMR2, CUNMR2 and ZUNMR2 use
+  xLARF1L, which can round differently. Only the comparison with the
   reference LAPACK finds such a difference (all residual tests pass). Where the real and complex routines
   differ by more than conjugation, the difference is kept with
   `if constexpr`, or the two are ported as separate functions behind one
@@ -90,7 +94,11 @@ The translator produces the conventions described in
   where it starts the workspace of xORMTR at E instead). xSYEVR and xHEEVR lay out their
   workspaces too differently for that and are two bodies behind one
   template (`SyevrReal` / `HeevrComplex` behind `Heevr`), as xLARNV
-  (`LarnvReal` / `LarnvComplex`).
+  (`LarnvReal` / `LarnvComplex`), xGELSS and xGELSD (whose complex
+  routines keep the bidiagonal matrix in RWORK), xLAIC1 (whose complex
+  routine has its own arithmetic) and xLALSD, xLALSA and xLALS0 (whose
+  complex routines apply the real singular vectors to the real and
+  imaginary parts of B separately).
 - **Symmetric and Hermitian**: the real symmetric routines (`d`, `s`) are
   the complex *symmetric* ones (`z`/`c` `SY`) with `ABS` for `CABS1`, so
   `Sytrf`, `Sytrs`, `Sytri`, `Sycon` ... serve all four types and are
@@ -225,6 +233,11 @@ attention:
 - `INT(WORK(1))` of a complex workspace query needs `std::real`;
 - `INFO` / `IERR` values the Fortran sets but never reads (the compiler
   warns) are dropped, with a comment where it matters;
+- the documented minimal workspace can be larger than the one the code
+  checks: DGELSY accepts LWORK = MN + max(2*MN, N+1, MN+NRHS) but needs
+  the documented max(MN+3*N+1, 2*MN+NRHS) for DGEQP3. The port checks
+  what the code checks (and fails in xGEQP3, as LAPACK); the tests use
+  the documented sizes;
 - a scalar argument that the routine changes is a pointer, also where the
   Fortran documents it as input: RHO of xLAED1 and xLAED7 is changed by
   xLAED2 and xLAED8, and xLAED0 passes an element of E, which therefore
@@ -269,7 +282,9 @@ xPORFS, xPSTRF; xSYTRF, xSYSV, xSYSVX, xSYTRS, xSYTRS2, xSYTRI, xSYCON,
 xSYRFS, xSYCONV and the xHE* routines; xSYEVD / xHEEVD, xSTEDC, xSTEVD,
 xORMTR / xUNMTR, xORMQL / xUNMQL, xSYGST / xHEGST, xSYGV / xHEGV and
 xSYGVD / xHEGVD; xSYEVR / xHEEVR, xSTEVR, xSYEVX / xHEEVX, xSTEVX,
-xSTEMR, xSTEBZ, xSTEIN and xLARNV) in both on the same matrices of
+xSTEMR, xSTEBZ, xSTEIN and xLARNV; xGELS, xGELSS, xGELSD, xGELSY,
+xGGLSE, xGGGLM, xGGQRF, xGGRQF, xGERQF, xGERQ2, xTZRZF, xORMRQ / xUNMRQ
+and xORMRZ / xUNMRZ) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS

@@ -141,6 +141,14 @@ constexpr T Min(T a, T b, Rest... rest) {
   }
 }
 
+// xLAMC3(A, B) = A + B. In Fortran a function call, so that "optimizing
+// compilers" cannot reassociate (x + y) + z: C++ evaluates x + y + z as
+// (x + y) + z, and the build allows no reassociation.
+template <typename R>
+R Lamc3(R a, R b) {
+  return a + b;
+}
+
 // NINT(x): x rounded to the nearest integer, halfway cases away from zero.
 template <typename R>
 blasint Nint(R x) {

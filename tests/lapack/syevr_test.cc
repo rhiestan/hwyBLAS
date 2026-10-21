@@ -278,7 +278,8 @@ TYPED_TEST(SyevrTest, Stemr) {
       MrrrTridiagonal(kind, n, rng, d0, e0);
       const std::vector<R> ref = SterfEigenvalues(d0, e0);
       // Dense T in scaled form (the residual ratios are scale invariant).
-      const R anorm = MaxAbs(d0, e0);
+      // (Not zero: the Wilkinson matrix of order 1 is zero.)
+      const R anorm = std::max(MaxAbs(d0, e0), std::numeric_limits<R>::min());
       std::vector<R> ds = d0, es = e0;
       for (auto& x : ds) x /= anorm;
       for (auto& x : es) x /= anorm;
@@ -403,7 +404,8 @@ TYPED_TEST(SyevrTest, StebzStein) {
         TestTridiagonal(kind, n, rng, d, e);
         e.resize(std::max<hwyblas_int>(1, n));
         const std::vector<R> ref = SterfEigenvalues(d, e);
-        const R anorm = MaxAbs(d, e);
+        // (Not zero: the Wilkinson matrix of order 1 is zero.)
+        const R anorm = std::max(MaxAbs(d, e), std::numeric_limits<R>::min());
         std::vector<R> ds = d, es = e;
         for (auto& x : ds) x /= anorm;
         for (auto& x : es) x /= anorm;

@@ -108,6 +108,7 @@ if(HWYBLAS_LAPACK)
     lapack/auxiliary_test.cc
     lapack/gees_test.cc
     lapack/geev_test.cc
+    lapack/gels_test.cc
     lapack/geqp3_test.cc
     lapack/gesdd_test.cc
     lapack/gesvd_test.cc

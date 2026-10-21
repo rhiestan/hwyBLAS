@@ -1,7 +1,8 @@
-// The orthogonal (unitary) matrix Q of a QR or LQ factorization: generating
-// it (xORGQR / xUNGQR, xORGLQ / xUNGLQ, and their unblocked versions
-// xORG2R / xUNG2R, xORGL2 / xUNGL2) and multiplying with it (xORMQR /
-// xUNMQR, xORMLQ / xUNMLQ, unblocked xORM2R / xUNM2R, xORML2 / xUNML2).
+// The orthogonal (unitary) matrix Q of a QR, LQ or RQ factorization:
+// generating it (xORGQR / xUNGQR, xORGLQ / xUNGLQ, and their unblocked
+// versions xORG2R / xUNG2R, xORGL2 / xUNGL2) and multiplying with it
+// (xORMQR / xUNMQR, xORMLQ / xUNMLQ, xORMRQ / xUNMRQ, unblocked xORM2R /
+// xUNM2R, xORML2 / xUNML2, xORMR2 / xUNMR2).
 //
 // Each template is the real routine for real T and the complex one for
 // complex T; they differ only in conjugations and in TRANS = 'T' (real) or
@@ -12,6 +13,7 @@
 // University of California Berkeley, and The University of Colorado Denver.
 // Modified BSD license, see LICENSE-LAPACK.
 #include <algorithm>
+#include <type_traits>
 
 #include "hwyblas/lapack.h"
 #include "src/lapack/blas.h"
@@ -22,7 +24,8 @@ namespace hwyblas {
 namespace lapack {
 namespace {
 
-// xORMQR / xUNMQR and xORMLQ / xUNMLQ: the maximum block size, and the
+// xORMQR / xUNMQR, xORMLQ / xUNMLQ and xORMRQ / xUNMRQ: the maximum block
+// size, and the
 // leading dimension and size of the triangular factor at the end of WORK.
 constexpr blasint kNbMax = 64;
 constexpr blasint kLdt = kNbMax + 1;
@@ -797,6 +800,237 @@ blasint Unmlq(char side, char trans, blasint m, blasint n, blasint k, T* a,
   return info;
 }
 
+// xORMR2 / xUNMR2: overwrites the M-by-N matrix C with Q * C, Q**H * C,
+// C * Q or C * Q**H (see xORM2R / xUNM2R), where
+// Q = H(1)**H H(2)**H . . . H(k)**H is the product of K elementary
+// reflectors as returned by xGERQF: A(LDA, M) (SIDE = 'L') or A(LDA, N)
+// (SIDE = 'R'), with LDA >= max(1, K), and TAU(K). Unblocked. DORMR2 (but
+// not SORMR2) applies H(i) with xLARF after setting the unit element of
+// its vector in A, the other three with xLARF1L, which takes it as 1; the
+// two can round differently, so the double routine keeps xLARF.
+template <typename T>
+blasint Unmr2(char side, char trans, blasint m, blasint n, blasint k, T* a,
+              blasint lda, const T* tau, T* c, blasint ldc, T* work) {
+  const Matrix<T> A(a, lda);
+  const Vector<const T> TAU(tau);
+  blasint i, i1, i2, i3, nq;
+  // MI and NI are set in the loop where they are not set here.
+  blasint mi = 0, ni = 0;
+  bool left, notran;
+  T taui;
+
+  // Test the input arguments
+  blasint info = 0;
+  left = Lsame(side, 'L');
+  notran = Lsame(trans, 'N');
+
+  // NQ is the order of Q
+  if (left) {
+    nq = m;
+  } else {
+    nq = n;
+  }
+  if (!left && !Lsame(side, 'R')) {
+    info = -1;
+  } else if (!notran && !Lsame(trans, ConjTrans<T>())) {
+    info = -2;
+  } else if (m < 0) {
+    info = -3;
+  } else if (n < 0) {
+    info = -4;
+  } else if (k < 0 || k > nq) {
+    info = -5;
+  } else if (lda < Max<blasint>(1, k)) {
+    info = -7;
+  } else if (ldc < Max<blasint>(1, m)) {
+    info = -10;
+  }
+  if (info != 0) {
+    Xerbla<T>(RealOrComplex<T>("ORMR2", "UNMR2"), -info);
+    return info;
+  }
+
+  // Quick return if possible
+  if (m == 0 || n == 0 || k == 0) return info;
+
+  if ((left && !notran) || (!left && notran)) {
+    i1 = 1;
+    i2 = k;
+    i3 = 1;
+  } else {
+    i1 = k;
+    i2 = 1;
+    i3 = -1;
+  }
+
+  if (left) {
+    ni = n;
+  } else {
+    mi = m;
+  }
+
+  for (i = i1; i3 > 0 ? i <= i2 : i >= i2; i += i3) {
+    if (left) {
+      // H(i) or H(i)**H is applied to C(1:m-k+i,1:n)
+      mi = m - k + i;
+    } else {
+      // H(i) or H(i)**H is applied to C(1:m,1:n-k+i)
+      ni = n - k + i;
+    }
+
+    // Apply H(i) or H(i)**H
+    if (notran) {
+      taui = Conj(TAU(i));
+    } else {
+      taui = TAU(i);
+    }
+    if constexpr (std::is_same_v<T, double>) {
+      const T aii = A(i, nq - k + i);
+      A(i, nq - k + i) = T(1);
+      Larf(side, mi, ni, A.ptr(i, 1), lda, taui, c, ldc, work);
+      A(i, nq - k + i) = aii;
+    } else {
+      Lacgv(nq - k + i - 1, A.ptr(i, 1), lda);
+      Larf1l(side, mi, ni, A.ptr(i, 1), lda, taui, c, ldc, work);
+      Lacgv(nq - k + i - 1, A.ptr(i, 1), lda);
+    }
+  }
+  return info;
+}
+
+// xORMRQ / xUNMRQ: overwrites C like xORMR2 / xUNMR2 (see there), with the
+// blocked algorithm (see xORMQR / xUNMQR).
+template <typename T>
+blasint Unmrq(char side, char trans, blasint m, blasint n, blasint k, T* a,
+              blasint lda, const T* tau, T* c, blasint ldc, T* work,
+              blasint lwork) {
+  const Vector<const T> TAU(tau);
+  const Matrix<T> A(a, lda);
+  const Vector<T> WORK(work);
+  const char* name = RealOrComplex<T>("ORMRQ", "UNMRQ");
+  const char opts[3] = {side, trans, '\0'};
+  blasint i, i1, i2, i3, ib, iwt, ldwork, lwkopt, nbmin, nq, nw;
+  // NB is set where M > 0 and N > 0 (the only case that reads it); MI and
+  // NI in the loop where they are not set here.
+  blasint nb = 0, mi = 0, ni = 0;
+  bool left, lquery, notran;
+  char transt;
+
+  // Test the input arguments
+  blasint info = 0;
+  left = Lsame(side, 'L');
+  notran = Lsame(trans, 'N');
+  lquery = (lwork == -1);
+
+  // NQ is the order of Q and NW is the minimum dimension of WORK
+  if (left) {
+    nq = m;
+    nw = Max<blasint>(1, n);
+  } else {
+    nq = n;
+    nw = Max<blasint>(1, m);
+  }
+  if (!left && !Lsame(side, 'R')) {
+    info = -1;
+  } else if (!notran && !Lsame(trans, ConjTrans<T>())) {
+    info = -2;
+  } else if (m < 0) {
+    info = -3;
+  } else if (n < 0) {
+    info = -4;
+  } else if (k < 0 || k > nq) {
+    info = -5;
+  } else if (lda < Max<blasint>(1, k)) {
+    info = -7;
+  } else if (ldc < Max<blasint>(1, m)) {
+    info = -10;
+  } else if (lwork < nw && !lquery) {
+    info = -12;
+  }
+
+  lwkopt = 1;
+  if (info == 0) {
+    // Compute the workspace requirements
+    if (m == 0 || n == 0) {
+      lwkopt = 1;
+    } else {
+      nb = Min(kNbMax, Ilaenv<T>(1, name, opts, m, n, k, -1));
+      lwkopt = nw * nb + kTsize;
+    }
+    WORK(1) = WorkSize<T>(lwkopt);
+  }
+
+  if (info != 0) {
+    Xerbla<T>(name, -info);
+    return info;
+  } else if (lquery) {
+    return info;
+  }
+
+  // Quick return if possible
+  if (m == 0 || n == 0) return info;
+
+  nbmin = 2;
+  ldwork = nw;
+  if (nb > 1 && nb < k) {
+    if (lwork < lwkopt) {
+      nb = (lwork - kTsize) / ldwork;
+      nbmin = Max<blasint>(2, Ilaenv<T>(2, name, opts, m, n, k, -1));
+    }
+  }
+
+  if (nb < nbmin || nb >= k) {
+    // Use unblocked code
+    Unmr2(side, trans, m, n, k, a, lda, tau, c, ldc, work);
+  } else {
+    // Use blocked code
+    iwt = 1 + nw * nb;
+    if ((left && !notran) || (!left && notran)) {
+      i1 = 1;
+      i2 = k;
+      i3 = nb;
+    } else {
+      i1 = ((k - 1) / nb) * nb + 1;
+      i2 = 1;
+      i3 = -nb;
+    }
+
+    if (left) {
+      ni = n;
+    } else {
+      mi = m;
+    }
+
+    if (notran) {
+      transt = ConjTrans<T>();
+    } else {
+      transt = 'N';
+    }
+
+    for (i = i1; i3 > 0 ? i <= i2 : i >= i2; i += i3) {
+      ib = Min(nb, k - i + 1);
+
+      // Form the triangular factor of the block reflector
+      // H = H(i+ib-1) . . . H(i+1) H(i)
+      Larft('B', 'R', nq - k + i + ib - 1, ib, A.ptr(i, 1), lda, TAU.ptr(i),
+            WORK.ptr(iwt), kLdt);
+      if (left) {
+        // H or H**H is applied to C(1:m-k+i+ib-1,1:n)
+        mi = m - k + i + ib - 1;
+      } else {
+        // H or H**H is applied to C(1:m,1:n-k+i+ib-1)
+        ni = n - k + i + ib - 1;
+      }
+
+      // Apply H or H**H
+      Larfb(side, transt, 'B', 'R', mi, ni, ib, A.ptr(i, 1), lda, WORK.ptr(iwt),
+            kLdt, c, ldc, work, ldwork);
+    }
+  }
+  WORK(1) = WorkSize<T>(lwkopt);
+  return info;
+}
+
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                         \
   template blasint Ung2r<T>(blasint, blasint, blasint, T*, blasint, const T*, \
                             T*);                                              \
@@ -813,6 +1047,10 @@ blasint Unmlq(char side, char trans, blasint m, blasint n, blasint k, T* a,
   template blasint Unml2<T>(char, char, blasint, blasint, blasint, T*,        \
                             blasint, const T*, T*, blasint, T*);              \
   template blasint Unmlq<T>(char, char, blasint, blasint, blasint, T*,        \
+                            blasint, const T*, T*, blasint, T*, blasint);     \
+  template blasint Unmr2<T>(char, char, blasint, blasint, blasint, T*,        \
+                            blasint, const T*, T*, blasint, T*);              \
+  template blasint Unmrq<T>(char, char, blasint, blasint, blasint, T*,        \
                             blasint, const T*, T*, blasint, T*, blasint);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
@@ -826,9 +1064,9 @@ using hwyblas::lapack::As;
 
 namespace {
 
-// A of xUNML2 and xUNMLQ is const in the interface (as in the reference's
-// lapack.h), but the complex routines conjugate rows of it while they run;
-// they restore them on exit.
+// A of xUNML2, xUNMLQ, xUNMR2 and xUNMRQ is const in the interface (as in the
+// reference's lapack.h), but the complex routines conjugate rows of it while
+// they run; they restore them on exit.
 template <typename T, typename R>
 T* Mutable(const R* a) {
   return const_cast<T*>(As<const T>(a));
@@ -900,6 +1138,24 @@ extern "C" {
       const hwyblas_int* lda, const R* tau, R* c, const hwyblas_int* ldc,      \
       R* work, const hwyblas_int* lwork, hwyblas_int* info) {                  \
     *info = hwyblas::lapack::Unmlq(*side, *trans, *m, *n, *k, Mutable<T>(a),   \
+                                   *lda, As<const T>(tau), As<T>(c), *ldc,     \
+                                   As<T>(work), *lwork);                       \
+  }                                                                            \
+  HWYBLAS_API void prefix##mul##r2_(                                           \
+      const char* side, const char* trans, const hwyblas_int* m,               \
+      const hwyblas_int* n, const hwyblas_int* k, const R* a,                  \
+      const hwyblas_int* lda, const R* tau, R* c, const hwyblas_int* ldc,      \
+      R* work, hwyblas_int* info) {                                            \
+    *info =                                                                    \
+        hwyblas::lapack::Unmr2(*side, *trans, *m, *n, *k, Mutable<T>(a), *lda, \
+                               As<const T>(tau), As<T>(c), *ldc, As<T>(work)); \
+  }                                                                            \
+  HWYBLAS_API void prefix##mul##rq_(                                           \
+      const char* side, const char* trans, const hwyblas_int* m,               \
+      const hwyblas_int* n, const hwyblas_int* k, const R* a,                  \
+      const hwyblas_int* lda, const R* tau, R* c, const hwyblas_int* ldc,      \
+      R* work, const hwyblas_int* lwork, hwyblas_int* info) {                  \
+    *info = hwyblas::lapack::Unmrq(*side, *trans, *m, *n, *k, Mutable<T>(a),   \
                                    *lda, As<const T>(tau), As<T>(c), *ldc,     \
                                    As<T>(work), *lwork);                       \
   }
