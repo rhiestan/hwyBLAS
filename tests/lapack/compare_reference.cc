@@ -3337,14 +3337,14 @@ constexpr Kind BandPivots() {
 template <typename T>
 Result Gbtrf(const BlasLibrary& lib, bool unblocked, std::vector<T> ab, I m,
              I n, I kl, I ku) {
-  using F = void (*)(const I*, const I*, const I*, const I*, T*, const I*, I*,
-                     I*);
+  using F =
+      void (*)(const I*, const I*, const I*, const I*, T*, const I*, I*, I*);
   const I ldab = 2 * kl + ku + 1;
   std::vector<I> ipiv(std::max<I>(std::min(m, n), 1));
   I info = 0;
-  lib.Get<F>((std::string(Prefix<T>()) + (unblocked ? "gbtf2_" : "gbtrf_"))
-                 .c_str())(&m, &n, &kl, &ku, ab.data(), &ldab, ipiv.data(),
-                           &info);
+  lib.Get<F>(
+      (std::string(Prefix<T>()) + (unblocked ? "gbtf2_" : "gbtrf_")).c_str())(
+      &m, &n, &kl, &ku, ab.data(), &ldab, ipiv.data(), &info);
   Result r;
   AddInt(r, "info", info);
   Add(r, "ipiv", BandPivots<T>(), ipiv);
@@ -3401,17 +3401,17 @@ Result Gbcon(const BlasLibrary& lib, char norm, const std::vector<T>& lu,
                        const I*, const I*, const R*, R*, T*, R*, I*, size_t);
     std::vector<T> work(2 * ld);
     std::vector<R> rwork(ld);
-    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab,
-                             ipiv.data(), &anorm, &rcond, work.data(),
-                             rwork.data(), &info, 1);
+    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab, ipiv.data(),
+                             &anorm, &rcond, work.data(), rwork.data(), &info,
+                             1);
   } else {
     using F = void (*)(const char*, const I*, const I*, const I*, const T*,
                        const I*, const I*, const R*, R*, T*, I*, I*, size_t);
     std::vector<T> work(3 * ld);
     std::vector<I> iwork(ld);
-    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab,
-                             ipiv.data(), &anorm, &rcond, work.data(),
-                             iwork.data(), &info, 1);
+    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab, ipiv.data(),
+                             &anorm, &rcond, work.data(), iwork.data(), &info,
+                             1);
   }
   Result r;
   AddInt(r, "info", info);
@@ -3443,8 +3443,8 @@ Result Latbs(const BlasLibrary& lib, char uplo, char trans, char diag,
   // decisions). The complex X is not, nor SCALE of the lower triangular
   // A**T and A**H solves: C/ZLATBS in the reference drop an element of A
   // there in scaled solves (see LatbsComplex in src/lapack/gbsv.cc).
-  Add(r, "scale",
-      uplo == 'L' && trans != 'N' ? Kind::kOther : Kind::kValues, &scale, 1);
+  Add(r, "scale", uplo == 'L' && trans != 'N' ? Kind::kOther : Kind::kValues,
+      &scale, 1);
   Add(r, "x", Kind::kOther, x);
   Add(r, "cnorm", Kind::kValues, cnorm);
   return r;
@@ -3462,12 +3462,12 @@ Result Pbtrf(const BlasLibrary& lib, const char* name, char uplo,
     using F = void (*)(const char*, const I*, T*, const I*, I*, size_t);
     lib.Get<F>(f.c_str())(&uplo, &n, ab.data(), &ldab, &info, 1);
   } else if (b.empty()) {
-    using F = void (*)(const char*, const I*, const I*, T*, const I*, I*,
-                       size_t);
+    using F =
+        void (*)(const char*, const I*, const I*, T*, const I*, I*, size_t);
     lib.Get<F>(f.c_str())(&uplo, &n, &kd, ab.data(), &ldab, &info, 1);
   } else {
-    using F = void (*)(const char*, const I*, const I*, const I*, T*,
-                       const I*, T*, const I*, I*, size_t);
+    using F = void (*)(const char*, const I*, const I*, const I*, T*, const I*,
+                       T*, const I*, I*, size_t);
     lib.Get<F>(f.c_str())(&uplo, &n, &kd, &nrhs, ab.data(), &ldab, b.data(),
                           &ldb, &info, 1);
   }
@@ -3516,8 +3516,7 @@ Result Gttrf(const BlasLibrary& lib, Tri<T> t, I n, std::vector<T> b = {},
   } else {
     using F = void (*)(const I*, const I*, T*, T*, T*, T*, const I*, I*);
     lib.Get<F>((std::string(Prefix<T>()) + "gtsv_").c_str())(
-        &n, &nrhs, t.dl.data(), t.d.data(), t.du.data(), b.data(), &ldb,
-        &info);
+        &n, &nrhs, t.dl.data(), t.d.data(), t.du.data(), b.data(), &ldb, &info);
   }
   Result r;
   AddInt(r, "info", info);
@@ -3559,8 +3558,8 @@ Result Pttrf(const BlasLibrary& lib, std::vector<Real<T>> d, std::vector<T> e,
   const I ldb = std::max<I>(n, 1);
   if (b.empty()) {
     using F = void (*)(const I*, R*, T*, I*);
-    lib.Get<F>((std::string(Prefix<T>()) + "pttrf_").c_str())(
-        &n, d.data(), e.data(), &info);
+    lib.Get<F>((std::string(Prefix<T>()) + "pttrf_").c_str())(&n, d.data(),
+                                                              e.data(), &info);
   } else {
     using F = void (*)(const I*, const I*, R*, T*, T*, const I*, I*);
     lib.Get<F>((std::string(Prefix<T>()) + "ptsv_").c_str())(
@@ -3588,8 +3587,8 @@ Result Pttrs(const BlasLibrary& lib, char uplo, const std::vector<Real<T>>& d,
     lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, d.data(), e.data(), b.data(),
                              &ldb, &info, 1);
   } else {
-    using F = void (*)(const I*, const I*, const R*, const T*, T*, const I*,
-                       I*);
+    using F =
+        void (*)(const I*, const I*, const R*, const T*, T*, const I*, I*);
     lib.Get<F>(name.c_str())(&n, &nrhs, d.data(), e.data(), b.data(), &ldb,
                              &info);
   }
@@ -3693,8 +3692,8 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
   // diagonal (growth: the scaled solve), 2 huge off-diagonal elements
   // (CNORM scaled by TSCAL), 3 a zero on the diagonal (SCALE = 0); b of
   // order 1 or near the overflow threshold.
-  const R smlnum = std::numeric_limits<R>::min() /
-                   std::numeric_limits<R>::epsilon();
+  const R smlnum =
+      std::numeric_limits<R>::min() / std::numeric_limits<R>::epsilon();
   for (const I kd : {I(0), I(1), I(3), std::min<I>(s, 20)}) {
     for (const int kind : {0, 1, 2, 3}) {
       std::vector<T> ab = TestMatrix<T>(0, kd + 1, s);
@@ -3712,20 +3711,20 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
             }
           }
         }
-        if (kind == 3 && s > 0) t[dr + static_cast<size_t>(s / 2) * (kd + 1)] = T(0);
+        if (kind == 3 && s > 0)
+          t[dr + static_cast<size_t>(s / 2) * (kd + 1)] = T(0);
         for (const char trans : {'N', 'T', 'C'}) {
           for (const char diag : {'N', 'U'}) {
             snprintf(what, sizeof(what), "n=%d kd=%d kind=%d %c%c%c", int(s),
                      int(kd), kind, uplo, trans, diag);
             for (const R xscale : {R(1), R(0.25) / smlnum}) {
-              Case<T>(hwy, ref, "latbs", what, s,
-                      [&](const BlasLibrary& lib, I) {
-                        return Latbs(lib, uplo, trans, diag, t, s, kd,
-                                     std::vector<T>(b.begin(),
-                                                    b.begin() +
-                                                        std::max<I>(s, 1)),
-                                     xscale);
-                      });
+              Case<T>(
+                  hwy, ref, "latbs", what, s, [&](const BlasLibrary& lib, I) {
+                    return Latbs(lib, uplo, trans, diag, t, s, kd,
+                                 std::vector<T>(b.begin(),
+                                                b.begin() + std::max<I>(s, 1)),
+                                 xscale);
+                  });
             }
           }
         }
@@ -3760,8 +3759,8 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
       });
       std::vector<T> f = pb;
       {
-        using F = void (*)(const char*, const I*, const I*, T*, const I*, I*,
-                           size_t);
+        using F =
+            void (*)(const char*, const I*, const I*, T*, const I*, I*, size_t);
         I info = 0;
         hwy.Get<F>((std::string(Prefix<T>()) + "pbtrf_").c_str())(
             &uplo, &s, &kd, f.data(), &ld, &info, 1);
@@ -3776,7 +3775,8 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
   // Tridiagonal matrices: random, with small diagonals (row interchanges),
   // and with small integers (ties, zero subdiagonals).
   for (const int kind : {0, 1, 4}) {
-    const std::vector<T> g = TestMatrix<T>(kind == 4 ? 4 : 0, 3, std::max<I>(s, 1));
+    const std::vector<T> g =
+        TestMatrix<T>(kind == 4 ? 4 : 0, 3, std::max<I>(s, 1));
     Tri<T> t;
     for (I i = 0; i < std::max<I>(s, 1); ++i) {
       t.dl.push_back(g[3 * i]);
@@ -3784,7 +3784,8 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
       t.du.push_back(g[3 * i + 2]);
     }
     for (const I k : {I(1), I(2), nrhs}) {
-      snprintf(what, sizeof(what), "n=%d kind=%d nrhs=%d", int(s), kind, int(k));
+      snprintf(what, sizeof(what), "n=%d kind=%d nrhs=%d", int(s), kind,
+               int(k));
       Case<T>(hwy, ref, "gtsv", what, s, [&](const BlasLibrary& lib, I) {
         return Gttrf(lib, t, s, b, k);
       });
@@ -3813,9 +3814,8 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
       e.push_back(Random<T>());
     }
     snprintf(what, sizeof(what), "n=%d", int(s));
-    Case<T>(hwy, ref, "pttrf", what, s, [&](const BlasLibrary& lib, I) {
-      return Pttrf<T>(lib, d, e, s);
-    });
+    Case<T>(hwy, ref, "pttrf", what, s,
+            [&](const BlasLibrary& lib, I) { return Pttrf<T>(lib, d, e, s); });
     for (const I k : {I(1), I(2), nrhs}) {
       snprintf(what, sizeof(what), "n=%d nrhs=%d", int(s), int(k));
       Case<T>(hwy, ref, "ptsv", what, s, [&](const BlasLibrary& lib, I) {
@@ -3838,6 +3838,668 @@ void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
           return Pttrs<T>(lib, uplo, df, ef, s, b, k);
         });
       }
+    }
+  }
+  rng = saved;
+}
+
+// ---------------------------------------------------------------------------
+// Generalized nonsymmetric eigenproblem and GSVD. The computational routines
+// get hwyBLAS's results of the preceding steps (xGGHRD's Hessenberg form
+// for xHGEQZ, xGGES's Schur form for xTGEVC, xTGSEN, xTGEXC, xTGSYL) in
+// both libraries.
+
+// Selects the eigenvalues alpha / beta with a negative real part.
+template <typename R>
+I SelectNegative3(const R* ar, const R* /*ai*/, const R* b) {
+  return *ar * *b < 0 ? 1 : 0;
+}
+template <typename R>
+I SelectNegative2(const R* a, const R* b) {
+  return a[0] * b[0] + a[1] * b[1] < 0 ? 1 : 0;
+}
+
+// The eigenvalues: real T, ALPHAR, ALPHAI and BETA (bitwise); complex T,
+// ALPHA and BETA (counted) and the set of ALPHA / BETA (when `compare_w`
+// and all BETA are nonzero).
+template <typename T>
+void AddPencil(Result& r, const std::vector<T>& alpha,
+               const std::vector<T>& alphai, const std::vector<T>& beta, I n,
+               bool compare_w) {
+  const size_t m = static_cast<size_t>(n);
+  Add(r, "alpha", Kind::kOther, alpha.data(), m);
+  if (!kComplex<T>) Add(r, "alphai", Kind::kOther, alphai.data(), m);
+  Add(r, "beta", Kind::kOther, beta.data(), m);
+  if constexpr (kComplex<T>) {
+    bool finite = compare_w;
+    for (I i = 0; i < n; ++i) finite = finite && beta[i] != T(0);
+    if (finite) {
+      std::vector<T> w(m);
+      for (I i = 0; i < n; ++i) w[i] = alpha[i] / beta[i];
+      Add(r, "lambda", Kind::kEigenvalues, w);
+    }
+  }
+}
+
+template <typename T>
+Result Ggbal(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
+             char job, const std::vector<T>& v, I m) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> ls(ld), rs(ld), work(std::max<I>(6 * n, 1));
+  I ilo = 0, ihi = 0, info = 0;
+  const std::string p = Prefix<T>();
+  using F = void (*)(const char*, const I*, T*, const I*, T*, const I*, I*, I*,
+                     R*, R*, R*, I*, size_t);
+  lib.Get<F>((p + "ggbal_").c_str())(&job, &n, a.data(), &ld, b.data(), &ld,
+                                     &ilo, &ihi, ls.data(), rs.data(),
+                                     work.data(), &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "ilo", ilo);
+  AddInt(r, "ihi", ihi);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  Add(r, "lscale", Kind::kOther, ls);
+  Add(r, "rscale", Kind::kOther, rs);
+  // xGGBAK with the balancing of this library.
+  using G =
+      void (*)(const char*, const char*, const I*, const I*, const I*, const R*,
+               const R*, const I*, T*, const I*, I*, size_t, size_t);
+  for (const char side : {'L', 'R'}) {
+    std::vector<T> x = v;
+    lib.Get<G>((p + "ggbak_").c_str())(&job, &side, &n, &ilo, &ihi, ls.data(),
+                                       rs.data(), &m, x.data(), &ld, &info, 1,
+                                       1);
+    AddInt(r, "info", info);
+    Add(r, side == 'L' ? "vl" : "vr", Kind::kOther, x);
+  }
+  return r;
+}
+
+template <typename T>
+Result Gghrd(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
+             I ilo, I ihi, char comp, const std::vector<T>& q0) {
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> q = q0, z = q0;
+  I info = 0;
+  using F = void (*)(const char*, const char*, const I*, const I*, const I*, T*,
+                     const I*, T*, const I*, T*, const I*, T*, const I*, I*,
+                     size_t, size_t);
+  lib.Get<F>((std::string(Prefix<T>()) + "gghrd_").c_str())(
+      &comp, &comp, &n, &ilo, &ihi, a.data(), &ld, b.data(), &ld, q.data(), &ld,
+      z.data(), &ld, &info, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "h", Kind::kOther, a);
+  Add(r, "t", Kind::kOther, b);
+  if (comp != 'N') {
+    Add(r, "q", Kind::kOther, q);
+    Add(r, "z", Kind::kOther, z);
+  }
+  return r;
+}
+
+template <typename T>
+Result Hgeqz(const BlasLibrary& lib, std::vector<T> h, std::vector<T> t,
+             std::vector<T> q, std::vector<T> z, I n, I ilo, I ihi, char job,
+             char comp, bool compare_w, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> work(std::max<I>(lwork, 1)), alpha(ld), alphai(ld), beta(ld);
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "hgeqz_";
+  if constexpr (kComplex<T>) {
+    std::vector<R> rwork(ld);
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const I*, T*, const I*, T*, const I*, T*, T*, T*, const I*, T*,
+                 const I*, T*, const I*, R*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(&job, &comp, &comp, &n, &ilo, &ihi, h.data(), &ld,
+                             t.data(), &ld, alpha.data(), beta.data(), q.data(),
+                             &ld, z.data(), &ld, work.data(), &lwork,
+                             rwork.data(), &info, 1, 1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const I*, T*, const I*, T*, const I*, T*, T*, T*, T*, const I*,
+                 T*, const I*, T*, const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(&job, &comp, &comp, &n, &ilo, &ihi, h.data(), &ld,
+                             t.data(), &ld, alpha.data(), alphai.data(),
+                             beta.data(), q.data(), &ld, z.data(), &ld,
+                             work.data(), &lwork, &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddPencil(r, alpha, alphai, beta, n, compare_w);
+  if (job == 'S') {
+    Add(r, "s", Kind::kOther, h);
+    Add(r, "p", Kind::kOther, t);
+  }
+  if (comp != 'N') {
+    Add(r, "q", Kind::kOther, q);
+    Add(r, "z", Kind::kOther, z);
+  }
+  return r;
+}
+
+// xGGES (SORT = 'S' selects the eigenvalues with a negative real part) and
+// xGGEV (JOBVSL / JOBVSR are JOBVL / JOBVR).
+template <typename T>
+Result Gges(const BlasLibrary& lib, bool ggev, std::vector<T> a,
+            std::vector<T> b, I n, char jobl, char jobr, char sort,
+            bool compare_w, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  std::vector<T> work(std::max<I>(lwork, 1)), alpha(ld), alphai(ld), beta(ld),
+      vl(Size(n, n)), vr(Size(n, n));
+  std::vector<I> bwork(ld);
+  I sdim = 0, info = 0;
+  const std::string p = Prefix<T>();
+  if constexpr (kComplex<T>) {
+    std::vector<R> rwork(std::max<I>(8 * n, 1));
+    if (ggev) {
+      using F = void (*)(const char*, const char*, const I*, T*, const I*, T*,
+                         const I*, T*, T*, T*, const I*, T*, const I*, T*,
+                         const I*, R*, I*, size_t, size_t);
+      lib.Get<F>((p + "ggev_").c_str())(
+          &jobl, &jobr, &n, a.data(), &ld, b.data(), &ld, alpha.data(),
+          beta.data(), vl.data(), &ld, vr.data(), &ld, work.data(), &lwork,
+          rwork.data(), &info, 1, 1);
+    } else {
+      using F = void (*)(const char*, const char*, const char*,
+                         I (*)(const R*, const R*), const I*, T*, const I*, T*,
+                         const I*, I*, T*, T*, T*, const I*, T*, const I*, T*,
+                         const I*, R*, I*, I*, size_t, size_t, size_t);
+      lib.Get<F>((p + "gges_").c_str())(
+          &jobl, &jobr, &sort, &SelectNegative2<R>, &n, a.data(), &ld, b.data(),
+          &ld, &sdim, alpha.data(), beta.data(), vl.data(), &ld, vr.data(), &ld,
+          work.data(), &lwork, rwork.data(), bwork.data(), &info, 1, 1, 1);
+    }
+  } else {
+    if (ggev) {
+      using F = void (*)(const char*, const char*, const I*, T*, const I*, T*,
+                         const I*, T*, T*, T*, T*, const I*, T*, const I*, T*,
+                         const I*, I*, size_t, size_t);
+      lib.Get<F>((p + "ggev_").c_str())(
+          &jobl, &jobr, &n, a.data(), &ld, b.data(), &ld, alpha.data(),
+          alphai.data(), beta.data(), vl.data(), &ld, vr.data(), &ld,
+          work.data(), &lwork, &info, 1, 1);
+    } else {
+      using F =
+          void (*)(const char*, const char*, const char*,
+                   I (*)(const R*, const R*, const R*), const I*, T*, const I*,
+                   T*, const I*, I*, T*, T*, T*, T*, const I*, T*, const I*, T*,
+                   const I*, I*, I*, size_t, size_t, size_t);
+      lib.Get<F>((p + "gges_").c_str())(
+          &jobl, &jobr, &sort, &SelectNegative3<R>, &n, a.data(), &ld, b.data(),
+          &ld, &sdim, alpha.data(), alphai.data(), beta.data(), vl.data(), &ld,
+          vr.data(), &ld, work.data(), &lwork, bwork.data(), &info, 1, 1, 1);
+    }
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddPencil(r, alpha, alphai, beta, n, compare_w);
+  if (!ggev) {
+    AddInt(r, "sdim", sdim);
+    Add(r, "s", Kind::kOther, a);
+    Add(r, "t", Kind::kOther, b);
+  }
+  if (jobl == 'V') Add(r, ggev ? "vl" : "vsl", Kind::kOther, vl);
+  if (jobr == 'V') Add(r, ggev ? "vr" : "vsr", Kind::kOther, vr);
+  return r;
+}
+
+// A generalized Schur form (S, P) = Q**H (A, B) Z (hwyBLAS's xGGES).
+template <typename T>
+struct GSchur {
+  std::vector<T> s, p, q, z;
+};
+
+template <typename T>
+GSchur<T> GeneralizedSchur(const BlasLibrary& hwy, const std::vector<T>& a,
+                           const std::vector<T>& b, I n) {
+  using R = Real<T>;
+  GSchur<T> g{a, b, std::vector<T>(Size(n, n)), std::vector<T>(Size(n, n))};
+  const I ld = std::max<I>(n, 1), lwork = 8 * ld + 16;
+  std::vector<T> work(lwork), alpha(ld), alphai(ld), beta(ld);
+  std::vector<I> bwork(ld);
+  I sdim = 0, info = 0;
+  const char v = 'V', sort = 'N';
+  if constexpr (kComplex<T>) {
+    std::vector<R> rwork(8 * ld);
+    using F = void (*)(const char*, const char*, const char*,
+                       I (*)(const R*, const R*), const I*, T*, const I*, T*,
+                       const I*, I*, T*, T*, T*, const I*, T*, const I*, T*,
+                       const I*, R*, I*, I*, size_t, size_t, size_t);
+    hwy.Get<F>((std::string(Prefix<T>()) + "gges_").c_str())(
+        &v, &v, &sort, &SelectNegative2<R>, &n, g.s.data(), &ld, g.p.data(),
+        &ld, &sdim, alpha.data(), beta.data(), g.q.data(), &ld, g.z.data(), &ld,
+        work.data(), &lwork, rwork.data(), bwork.data(), &info, 1, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const char*,
+                       I (*)(const R*, const R*, const R*), const I*, T*,
+                       const I*, T*, const I*, I*, T*, T*, T*, T*, const I*, T*,
+                       const I*, T*, const I*, I*, I*, size_t, size_t, size_t);
+    hwy.Get<F>((std::string(Prefix<T>()) + "gges_").c_str())(
+        &v, &v, &sort, &SelectNegative3<R>, &n, g.s.data(), &ld, g.p.data(),
+        &ld, &sdim, alpha.data(), alphai.data(), beta.data(), g.q.data(), &ld,
+        g.z.data(), &ld, work.data(), &lwork, bwork.data(), &info, 1, 1, 1);
+  }
+  return g;
+}
+
+template <typename T>
+Result Tgevc(const BlasLibrary& lib, const GSchur<T>& g, I n, char howmny) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  const std::vector<I> select = EveryThird(n);
+  std::vector<T> vl = howmny == 'B' ? g.q : std::vector<T>(Size(n, n));
+  std::vector<T> vr = howmny == 'B' ? g.z : std::vector<T>(Size(n, n));
+  I m = 0, info = 0;
+  const char side = 'B';
+  if constexpr (kComplex<T>) {
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(2 * ld);
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, const T*, const I*, T*, const I*, T*, const I*,
+                       const I*, I*, T*, R*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgevc_").c_str())(
+        &side, &howmny, select.data(), &n, g.s.data(), &ld, g.p.data(), &ld,
+        vl.data(), &ld, vr.data(), &ld, &n, &m, work.data(), rwork.data(),
+        &info, 1, 1);
+  } else {
+    std::vector<T> work(6 * ld);
+    using F = void (*)(const char*, const char*, const I*, const I*, const T*,
+                       const I*, const T*, const I*, T*, const I*, T*, const I*,
+                       const I*, I*, T*, I*, size_t, size_t);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgevc_").c_str())(
+        &side, &howmny, select.data(), &n, g.s.data(), &ld, g.p.data(), &ld,
+        vl.data(), &ld, vr.data(), &ld, &n, &m, work.data(), &info, 1, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  Add(r, "vl", Kind::kOther, vl);
+  Add(r, "vr", Kind::kOther, vr);
+  return r;
+}
+
+// xTGSEN with every third eigenvalue selected.
+template <typename T>
+Result Tgsen(const BlasLibrary& lib, GSchur<T> g, I n, I ijob, I lwork) {
+  using R = Real<T>;
+  const I ld = std::max<I>(n, 1);
+  const std::vector<I> select = EveryThird(n);
+  const I liwork = std::max<I>(n * n + 6, 1);
+  std::vector<T> work(std::max<I>(lwork, 1)), alpha(ld), alphai(ld), beta(ld);
+  std::vector<I> iwork(liwork);
+  const I one = 1;
+  I m = 0, info = 0;
+  R pl = 0, pr = 0, dif[2] = {0, 0};
+  if constexpr (kComplex<T>) {
+    using F =
+        void (*)(const I*, const I*, const I*, const I*, const I*, T*, const I*,
+                 T*, const I*, T*, T*, T*, const I*, T*, const I*, I*, R*, R*,
+                 R*, T*, const I*, I*, const I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgsen_").c_str())(
+        &ijob, &one, &one, select.data(), &n, g.s.data(), &ld, g.p.data(), &ld,
+        alpha.data(), beta.data(), g.q.data(), &ld, g.z.data(), &ld, &m, &pl,
+        &pr, dif, work.data(), &lwork, iwork.data(), &liwork, &info);
+  } else {
+    using F =
+        void (*)(const I*, const I*, const I*, const I*, const I*, T*, const I*,
+                 T*, const I*, T*, T*, T*, T*, const I*, T*, const I*, I*, R*,
+                 R*, R*, T*, const I*, I*, const I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgsen_").c_str())(
+        &ijob, &one, &one, select.data(), &n, g.s.data(), &ld, g.p.data(), &ld,
+        alpha.data(), alphai.data(), beta.data(), g.q.data(), &ld, g.z.data(),
+        &ld, &m, &pl, &pr, dif, work.data(), &lwork, iwork.data(), &liwork,
+        &info);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "m", m);
+  AddPencil(r, alpha, alphai, beta, n, false);
+  Add(r, "s", Kind::kOther, g.s);
+  Add(r, "p", Kind::kOther, g.p);
+  Add(r, "q", Kind::kOther, g.q);
+  Add(r, "z", Kind::kOther, g.z);
+  if (ijob == 1 || ijob >= 4) {
+    Add(r, "pl", Kind::kOther, &pl, 1);
+    Add(r, "pr", Kind::kOther, &pr, 1);
+  }
+  if (ijob >= 2) Add(r, "dif", Kind::kOther, dif, 2);
+  return r;
+}
+
+template <typename T>
+Result Tgexc(const BlasLibrary& lib, GSchur<T> g, I n, I ifst, I ilst) {
+  const I ld = std::max<I>(n, 1);
+  const I one = 1;
+  I info = 0;
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                       T*, const I*, T*, const I*, const I*, I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgexc_").c_str())(
+        &one, &one, &n, g.s.data(), &ld, g.p.data(), &ld, g.q.data(), &ld,
+        g.z.data(), &ld, &ifst, &ilst, &info);
+  } else {
+    const I lwork = 4 * ld + 16;
+    std::vector<T> work(lwork);
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                       T*, const I*, T*, const I*, I*, I*, T*, const I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "tgexc_").c_str())(
+        &one, &one, &n, g.s.data(), &ld, g.p.data(), &ld, g.q.data(), &ld,
+        g.z.data(), &ld, &ifst, &ilst, work.data(), &lwork, &info);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  AddInt(r, "ifst", ifst);
+  AddInt(r, "ilst", ilst);
+  Add(r, "s", Kind::kOther, g.s);
+  Add(r, "p", Kind::kOther, g.p);
+  Add(r, "q", Kind::kOther, g.q);
+  Add(r, "z", Kind::kOther, g.z);
+  return r;
+}
+
+// xTGSYL with (A, D) = g's Schur form (order m) and (B, E) = h's (order n).
+template <typename T>
+Result Tgsyl(const BlasLibrary& lib, const GSchur<T>& g, I m,
+             const GSchur<T>& h, I n, std::vector<T> c, std::vector<T> f,
+             char trans, I ijob, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(m, 1), ldb = std::max<I>(n, 1);
+  std::vector<T> work(std::max<I>(lwork, 1));
+  std::vector<I> iwork(m + n + 6);
+  R scale = 0, dif = 0;
+  I info = 0;
+  using F =
+      void (*)(const char*, const I*, const I*, const I*, const T*, const I*,
+               const T*, const I*, T*, const I*, const T*, const I*, const T*,
+               const I*, T*, const I*, R*, R*, T*, const I*, I*, I*, size_t);
+  lib.Get<F>((std::string(Prefix<T>()) + "tgsyl_").c_str())(
+      &trans, &ijob, &m, &n, g.s.data(), &lda, h.s.data(), &ldb, c.data(), &lda,
+      g.p.data(), &lda, h.p.data(), &ldb, f.data(), &lda, &scale, &dif,
+      work.data(), &lwork, iwork.data(), &info, 1);
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  Add(r, "scale", Kind::kOther, &scale, 1);
+  if (ijob >= 1) Add(r, "dif", Kind::kOther, &dif, 1);
+  if (ijob <= 2) {
+    Add(r, "c", Kind::kOther, c);
+    Add(r, "f", Kind::kOther, f);
+  }
+  return r;
+}
+
+// xGGSVD3 (JOBU = JOBV = JOBQ = job) of the m x n A and the p x n B. The
+// complex ALPHA and BETA are compared with the tolerance as sets (they are
+// not sorted, and rounding can change their order), when `compare_values`
+// (they are too ill-conditioned for graded pairs and pairs with ties).
+template <typename T>
+Result Ggsvd3(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I m,
+              I n, I p, char job, bool compare_values, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(m, 1), ldb = std::max<I>(p, 1),
+          ldq = std::max<I>(n, 1);
+  const char ju = job == 'N' ? 'N' : 'U', jv = job == 'N' ? 'N' : 'V',
+             jq = job == 'N' ? 'N' : 'Q';
+  std::vector<T> u(Size(m, m)), v(Size(p, p)), q(Size(n, n)),
+      work(std::max<I>(lwork, 1));
+  std::vector<R> alpha(ldq), beta(ldq);
+  std::vector<I> iwork(ldq);
+  I k = 0, l = 0, info = 0;
+  const std::string name = std::string(Prefix<T>()) + "ggsvd3_";
+  if constexpr (kComplex<T>) {
+    std::vector<R> rwork(2 * ldq);
+    using F = void (*)(const char*, const char*, const char*, const I*,
+                       const I*, const I*, I*, I*, T*, const I*, T*, const I*,
+                       R*, R*, T*, const I*, T*, const I*, T*, const I*, T*,
+                       const I*, R*, I*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(
+        &ju, &jv, &jq, &m, &n, &p, &k, &l, a.data(), &lda, b.data(), &ldb,
+        alpha.data(), beta.data(), u.data(), &lda, v.data(), &ldb, q.data(),
+        &ldq, work.data(), &lwork, rwork.data(), iwork.data(), &info, 1, 1, 1);
+  } else {
+    using F = void (*)(const char*, const char*, const char*, const I*,
+                       const I*, const I*, I*, I*, T*, const I*, T*, const I*,
+                       R*, R*, T*, const I*, T*, const I*, T*, const I*, T*,
+                       const I*, I*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(&ju, &jv, &jq, &m, &n, &p, &k, &l, a.data(), &lda,
+                             b.data(), &ldb, alpha.data(), beta.data(),
+                             u.data(), &lda, v.data(), &ldb, q.data(), &ldq,
+                             work.data(), &lwork, iwork.data(), &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "k", k);
+  AddInt(r, "l", l);
+  const Kind values = compare_values ? Kind::kEigenvalues : Kind::kOther;
+  Add(r, "alpha", values, alpha.data(), static_cast<size_t>(n));
+  Add(r, "beta", values, beta.data(), static_cast<size_t>(n));
+  Add(r, "iwork", Kind::kInteger, iwork.data(), static_cast<size_t>(n));
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  if (job != 'N') {
+    Add(r, "u", Kind::kOther, u);
+    Add(r, "v", Kind::kOther, v);
+    Add(r, "q", Kind::kOther, q);
+  }
+  return r;
+}
+
+// xGGSVP3 with the given tolerances.
+template <typename T>
+Result Ggsvp3(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I m,
+              I n, I p, Real<T> tola, Real<T> tolb, I lwork) {
+  using R = Real<T>;
+  const I lda = std::max<I>(m, 1), ldb = std::max<I>(p, 1),
+          ldq = std::max<I>(n, 1);
+  const char ju = 'U', jv = 'V', jq = 'Q';
+  std::vector<T> u(Size(m, m)), v(Size(p, p)), q(Size(n, n)), tau(ldq),
+      work(std::max<I>(lwork, 1));
+  std::vector<I> iwork(ldq);
+  I k = 0, l = 0, info = 0;
+  const std::string name = std::string(Prefix<T>()) + "ggsvp3_";
+  if constexpr (kComplex<T>) {
+    std::vector<R> rwork(2 * ldq);
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const I*, T*, const I*, T*, const I*, const R*, const R*, I*,
+                 I*, T*, const I*, T*, const I*, T*, const I*, I*, R*, T*, T*,
+                 const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(
+        &ju, &jv, &jq, &m, &p, &n, a.data(), &lda, b.data(), &ldb, &tola, &tolb,
+        &k, &l, u.data(), &lda, v.data(), &ldb, q.data(), &ldq, iwork.data(),
+        rwork.data(), tau.data(), work.data(), &lwork, &info, 1, 1, 1);
+  } else {
+    using F =
+        void (*)(const char*, const char*, const char*, const I*, const I*,
+                 const I*, T*, const I*, T*, const I*, const R*, const R*, I*,
+                 I*, T*, const I*, T*, const I*, T*, const I*, I*, T*, T*,
+                 const I*, I*, size_t, size_t, size_t);
+    lib.Get<F>(name.c_str())(&ju, &jv, &jq, &m, &p, &n, a.data(), &lda,
+                             b.data(), &ldb, &tola, &tolb, &k, &l, u.data(),
+                             &lda, v.data(), &ldb, q.data(), &ldq, iwork.data(),
+                             tau.data(), work.data(), &lwork, &info, 1, 1, 1);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  AddInt(r, "k", k);
+  AddInt(r, "l", l);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "b", Kind::kOther, b);
+  Add(r, "u", Kind::kOther, u);
+  Add(r, "v", Kind::kOther, v);
+  Add(r, "q", Kind::kOther, q);
+  return r;
+}
+
+// The generalized eigenproblem and GSVD routines for pairs of order n:
+// random, graded, with small integers (ties), and random A with a singular
+// B (a zero row and column). The complex eigenvalues of the graded and
+// singular pairs are not compared (too ill-conditioned or infinite).
+template <typename T>
+void RunGeneralized(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
+  // The other drivers get the same matrices with and without these cases.
+  const std::mt19937_64 saved = rng;
+  char what[96];
+  for (const int kind : {0, 2, 4, 5}) {
+    const std::vector<T> a = TestMatrix<T>(kind == 5 ? 0 : kind, n, n);
+    std::vector<T> b = TestMatrix<T>(kind == 5 ? 0 : kind, n, n);
+    if (kind == 5 && n > 0) {
+      for (I i = 0; i < n; ++i) {
+        b[n / 2 + static_cast<size_t>(i) * n] = T(0);
+        b[i + static_cast<size_t>(n / 2) * n] = T(0);
+      }
+    }
+    const bool compare_w = kind == 0;
+    for (const char jobl : {'V', 'N'}) {
+      for (const char jobr : {'V', 'N'}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d jobvl=%c jobvr=%c", int(n),
+                 kind, jobl, jobr);
+        Case<T>(hwy, ref, "ggev", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Gges(lib, true, a, b, n, jobl, jobr, 'N', compare_w, lw);
+        });
+      }
+    }
+    for (const char sort : {'N', 'S'}) {
+      for (const char job : {'V', 'N'}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d jobvs=%c sort=%c", int(n),
+                 kind, job, sort);
+        Case<T>(hwy, ref, "gges", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Gges(lib, false, a, b, n, job, job, sort, compare_w, lw);
+        });
+      }
+    }
+    const std::vector<T> v = TestMatrix<T>(0, n, 3);
+    for (const char job : {'N', 'P', 'S', 'B'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d job=%c", int(n), kind, job);
+      Case<T>(hwy, ref, "ggbal", what, n, [&](const BlasLibrary& lib, I) {
+        return Ggbal(lib, a, b, n, job, v, 3);
+      });
+    }
+    // xGGHRD on (A, triu(B)) (also with ILO, IHI of a block), then xHGEQZ on
+    // hwyBLAS's Hessenberg form.
+    std::vector<T> bt = b;
+    for (I j = 0; j < n; ++j) {
+      for (I i = j + 1; i < n; ++i) bt[i + static_cast<size_t>(j) * n] = T(0);
+    }
+    const std::vector<T> q0 = TestMatrix<T>(0, n, n);
+    for (const char comp : {'N', 'I', 'V'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d comp=%c", int(n), kind, comp);
+      Case<T>(hwy, ref, "gghrd", what, n, [&](const BlasLibrary& lib, I) {
+        return Gghrd(lib, a, bt, n, 1, n, comp, q0);
+      });
+    }
+    const Result hess = Gghrd(hwy, a, bt, n, 1, n, 'I', q0);
+    std::vector<T> h(Size(n, n)), t(Size(n, n)), q(Size(n, n)), z(Size(n, n));
+    const auto from = [](std::complex<double> x) {
+      if constexpr (kComplex<T>) {
+        return static_cast<T>(x);
+      } else {
+        return static_cast<T>(x.real());
+      }
+    };
+    for (size_t i = 0; i < static_cast<size_t>(n) * n; ++i) {
+      h[i] = from(hess.outputs[1].values[i]);
+      t[i] = from(hess.outputs[2].values[i]);
+      q[i] = from(hess.outputs[3].values[i]);
+      z[i] = from(hess.outputs[4].values[i]);
+    }
+    for (const char job : {'E', 'S'}) {
+      for (const char comp : {'N', 'I', 'V'}) {
+        if (job == 'E' && comp != 'N') continue;
+        snprintf(what, sizeof(what), "n=%d kind=%d job=%c comp=%c", int(n),
+                 kind, job, comp);
+        Case<T>(hwy, ref, "hgeqz", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Hgeqz(lib, h, t, q, z, n, 1, n, job, comp, compare_w, lw);
+        });
+      }
+    }
+    // The routines on hwyBLAS's generalized Schur form.
+    const GSchur<T> g = GeneralizedSchur(hwy, a, b, n);
+    for (const char howmny : {'A', 'S', 'B'}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d howmny=%c", int(n), kind,
+               howmny);
+      Case<T>(hwy, ref, "tgevc", what, n, [&](const BlasLibrary& lib, I) {
+        return Tgevc(lib, g, n, howmny);
+      });
+    }
+    for (I ijob = 0; ijob <= 5; ++ijob) {
+      snprintf(what, sizeof(what), "n=%d kind=%d ijob=%d", int(n), kind,
+               int(ijob));
+      Case<T>(hwy, ref, "tgsen", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Tgsen(lib, g, n, ijob, lw);
+      });
+    }
+    if (n > 1) {
+      for (const auto& move : {std::make_pair(I{1}, n), std::make_pair(n, I{1}),
+                               std::make_pair(I{2}, n / 2 + 1)}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d ifst=%d ilst=%d", int(n),
+                 kind, int(move.first), int(move.second));
+        Case<T>(hwy, ref, "tgexc", what, n, [&](const BlasLibrary& lib, I) {
+          return Tgexc(lib, g, n, move.first, move.second);
+        });
+      }
+    }
+    // xTGSYL with g and the Schur form of another (random) pair of order
+    // n2.
+    if (n > 0 && kind != 5) {
+      const I n2 = std::max<I>(1, n / 2 + 1);
+      const GSchur<T> g2 = GeneralizedSchur(hwy, TestMatrix<T>(0, n2, n2),
+                                            TestMatrix<T>(0, n2, n2), n2);
+      const std::vector<T> c = TestMatrix<T>(0, n, n2),
+                           f = TestMatrix<T>(0, n, n2);
+      for (const char trans : {'N', kComplex<T> ? 'C' : 'T'}) {
+        for (I ijob = 0; ijob <= 4; ++ijob) {
+          if (trans != 'N' && ijob > 0) continue;
+          snprintf(what, sizeof(what), "m=%d n=%d kind=%d trans=%c ijob=%d",
+                   int(n), int(n2), kind, trans, int(ijob));
+          Case<T>(hwy, ref, "tgsyl", what, n,
+                  [&](const BlasLibrary& lib, I lw) {
+                    return Tgsyl(lib, g, n, g2, n2, c, f, trans, ijob, lw);
+                  });
+        }
+      }
+    }
+    // The GSVD of A (n x n, and its first rows) and B (n x n or fewer rows).
+    const I shapes[][2] = {{n, n}, {n / 2, n}, {n, n / 2 + 1}};
+    for (const auto& shape : shapes) {
+      const I m = shape[0], p = shape[1];
+      std::vector<T> am(Size(m, n)), bp(Size(p, n));
+      for (I j = 0; j < n; ++j) {
+        for (I i = 0; i < m; ++i) {
+          am[i + static_cast<size_t>(j) * m] =
+              a[i + static_cast<size_t>(j) * n];
+        }
+        for (I i = 0; i < p; ++i) {
+          bp[i + static_cast<size_t>(j) * p] =
+              b[i + static_cast<size_t>(j) * n];
+        }
+      }
+      for (const char job : {'U', 'N'}) {
+        snprintf(what, sizeof(what), "m=%d n=%d p=%d kind=%d job=%c", int(m),
+                 int(n), int(p), kind, job);
+        Case<T>(hwy, ref, "ggsvd3", what, n, [&](const BlasLibrary& lib, I lw) {
+          return Ggsvd3(lib, am, bp, m, n, p, job, kind == 0 || kind == 5, lw);
+        });
+      }
+      using R = Real<T>;
+      const R tol = std::max<I>(n, 1) * std::numeric_limits<R>::epsilon();
+      snprintf(what, sizeof(what), "m=%d n=%d p=%d kind=%d", int(m), int(n),
+               int(p), kind);
+      Case<T>(hwy, ref, "ggsvp3", what, n, [&](const BlasLibrary& lib, I lw) {
+        return Ggsvp3(lib, am, bp, m, n, p, tol, tol, lw);
+      });
     }
   }
   rng = saved;
@@ -3924,6 +4586,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunSyevr<T>(hwy, ref, n);
     RunGels<T>(hwy, ref, n);
     RunBand<T>(hwy, ref, n);
+    RunGeneralized<T>(hwy, ref, n);
   }
 }
 

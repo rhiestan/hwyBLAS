@@ -174,6 +174,26 @@ blasint Nint(R x) {
   return static_cast<blasint>(std::lround(x));
 }
 
+// X**N for an integer N as flang's runtime (and gfortran's __builtin_powi)
+// computes it: by repeated squaring, and 1 / X**(-N) for N < 0. For a base
+// such as 10, std::pow rounds X**N differently once it is not exact.
+template <typename R>
+R Powi(R x, blasint n) {
+  if (n == 0) return R(1);
+  const bool negative = n < 0;
+  // -n for n < 0 (as unsigned, so that the most negative n is safe).
+  auto e = negative ? 0 - static_cast<std::make_unsigned_t<blasint>>(n)
+                    : static_cast<std::make_unsigned_t<blasint>>(n);
+  R result = R(1);
+  for (;;) {
+    if (e & 1) result *= x;
+    e >>= 1;
+    if (e == 0) break;
+    x *= x;
+  }
+  return negative ? R(1) / result : result;
+}
+
 // MAXLOC(X(1:n), 1) of a real vector as flang (and gfortran) evaluates it:
 // the 1-based index of the first largest element, ignoring NaNs unless all
 // elements are NaN (then 1); 0 if n < 1.

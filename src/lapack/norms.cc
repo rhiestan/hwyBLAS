@@ -1,5 +1,6 @@
 // Matrix norms: xLASSQ (scaled sum of squares), xLANGE (general), xLANSY
-// (symmetric), xLANHE (Hermitian) and xLANTR (trapezoidal).
+// (symmetric), xLANHE (Hermitian), xLANTR (trapezoidal) and xLANHS (upper
+// Hessenberg).
 //
 // NORM is 'M' (max |a(i,j)|, not a consistent matrix norm), '1' or 'O'
 // (one norm, maximum column sum), 'I' (infinity norm, maximum row sum), or
@@ -532,9 +533,65 @@ RealT<T> Lantr(char norm, char uplo, char diag, blasint m, blasint n,
   return value;
 }
 
+// xLANHS: the norm NORM of the N-by-N upper Hessenberg matrix A (A(i, j) = 0
+// for i > j + 1). WORK (N elements) is referenced only for NORM = 'I'.
+template <typename T>
+RealT<T> Lanhs(char norm, blasint n, const T* a, blasint lda, RealT<T>* work) {
+  using R = RealT<T>;
+  const R one = R(1), zero = R(0);
+  const Matrix<const T> A(a, lda);
+  const Vector<R> WORK(work);
+
+  R value = zero;
+  if (n == 0) {
+    value = zero;
+  } else if (Lsame(norm, 'M')) {
+    // Find max(abs(A(i,j))).
+    value = zero;
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = 1; i <= Min(n, j + 1); ++i) {
+        const R sum = std::abs(A(i, j));
+        if (value < sum || std::isnan(sum)) value = sum;
+      }
+    }
+  } else if (Lsame(norm, 'O') || norm == '1') {
+    // Find norm1(A).
+    value = zero;
+    for (blasint j = 1; j <= n; ++j) {
+      R sum = zero;
+      for (blasint i = 1; i <= Min(n, j + 1); ++i) {
+        sum = sum + std::abs(A(i, j));
+      }
+      if (value < sum || std::isnan(sum)) value = sum;
+    }
+  } else if (Lsame(norm, 'I')) {
+    // Find normI(A).
+    for (blasint i = 1; i <= n; ++i) WORK(i) = zero;
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint i = 1; i <= Min(n, j + 1); ++i) {
+        WORK(i) = WORK(i) + std::abs(A(i, j));
+      }
+    }
+    value = zero;
+    for (blasint i = 1; i <= n; ++i) {
+      const R sum = WORK(i);
+      if (value < sum || std::isnan(sum)) value = sum;
+    }
+  } else if (Lsame(norm, 'F') || Lsame(norm, 'E')) {
+    // Find normF(A).
+    R scale = zero, sum = one;
+    for (blasint j = 1; j <= n; ++j) {
+      Lassq(Min(n, j + 1), A.ptr(1, j), 1, &scale, &sum);
+    }
+    value = scale * std::sqrt(sum);
+  }
+  return value;
+}
+
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                       \
   template RealT<T> Lantr<T>(char, char, char, blasint, blasint, const T*,  \
                              blasint, RealT<T>*);                           \
+  template RealT<T> Lanhs<T>(char, blasint, const T*, blasint, RealT<T>*);  \
   template void Lassq<T>(blasint, const T*, blasint, RealT<T>*, RealT<T>*); \
   template RealT<T> Lange<T>(char, blasint, blasint, const T*, blasint,     \
                              RealT<T>*);                                    \
@@ -577,6 +634,10 @@ extern "C" {
                                const hwyblas_int* lda, R* work) {              \
     return hwyblas::lapack::Lantr(*norm, *uplo, *diag, *m, *n, As<const T>(a), \
                                   *lda, work);                                 \
+  }                                                                            \
+  HWYBLAS_API R prefix##lanhs_(const char* norm, const hwyblas_int* n,         \
+                               const R* a, const hwyblas_int* lda, R* work) {  \
+    return hwyblas::lapack::Lanhs(*norm, *n, As<const T>(a), *lda, work);      \
   }
 
 HWYBLAS_LAPACK_NORMS(s, float, float)

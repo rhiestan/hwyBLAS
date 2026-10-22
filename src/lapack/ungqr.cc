@@ -1,6 +1,7 @@
 // The orthogonal (unitary) matrix Q of a QR, LQ or RQ factorization:
 // generating it (xORGQR / xUNGQR, xORGLQ / xUNGLQ, and their unblocked
-// versions xORG2R / xUNG2R, xORGL2 / xUNGL2) and multiplying with it
+// versions xORG2R / xUNG2R, xORGL2 / xUNGL2, xORGR2 / xUNGR2) and
+// multiplying with it
 // (xORMQR / xUNMQR, xORMLQ / xUNMLQ, xORMRQ / xUNMRQ, unblocked xORM2R /
 // xUNM2R, xORML2 / xUNML2, xORMR2 / xUNMR2).
 //
@@ -263,6 +264,68 @@ blasint Ungl2(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
 
     // Set A(i,1:i-1) to zero.
     for (blasint l = 1; l <= i - 1; ++l) A(i, l) = zero;
+  }
+  return info;
+}
+
+// xORGR2 / xUNGR2: generates an M-by-N matrix Q with orthonormal rows,
+// defined as the last M rows of a product of K elementary reflectors of
+// order N,
+//
+//     Q = H(1)**H H(2)**H . . . H(k)**H
+//
+// as returned by xGERQF: on entry, row m-k+i of A (1 <= i <= k) holds the
+// (conjugated) vector of H(i) in its first n-k+i-1 elements, and TAU(i)
+// its scalar; on exit, A is Q. N >= M >= K >= 0. WORK has M elements.
+// (SORGR2 and CUNGR2 also set the unit element of the vector before
+// applying H(i); xLARF1L does not reference it, which gives the same
+// result.)
+template <typename T>
+blasint Ungr2(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work) {
+  const T one = T(1), zero = T(0);
+  const Matrix<T> A(a, lda);
+  const Vector<const T> TAU(tau);
+
+  // Test the input arguments.
+  blasint info = 0;
+  if (m < 0) {
+    info = -1;
+  } else if (n < m) {
+    info = -2;
+  } else if (k < 0 || k > m) {
+    info = -3;
+  } else if (lda < Max<blasint>(1, m)) {
+    info = -5;
+  }
+  if (info != 0) {
+    Xerbla<T>(RealOrComplex<T>("ORGR2", "UNGR2"), -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (m <= 0) return info;
+
+  if (k < m) {
+    // Initialise rows 1:m-k to rows of the unit matrix.
+    for (blasint j = 1; j <= n; ++j) {
+      for (blasint l = 1; l <= m - k; ++l) A(l, j) = zero;
+      if (j > n - m && j <= n - k) A(m - n + j, j) = one;
+    }
+  }
+
+  for (blasint i = 1; i <= k; ++i) {
+    const blasint ii = m - k + i;
+    // Apply H(i)**H to A(1:m-k+i,1:n-k+i) from the right.
+    Lacgv(n - m + ii - 1, A.ptr(ii, 1), lda);
+    Larf1l('R', ii - 1, n - m + ii, A.ptr(ii, 1), lda, Conj(TAU(i)), a, lda,
+           work);
+    Scal(n - m + ii - 1, -TAU(i), A.ptr(ii, 1), lda);
+    Lacgv(n - m + ii - 1, A.ptr(ii, 1), lda);
+    A(ii, n - m + ii) = one - Conj(TAU(i));
+
+    // Set A(m-k+i,n-k+i+1:n) to zero.
+    for (blasint l = n - m + ii + 1; l <= n; ++l) A(ii, l) = zero;
   }
   return info;
 }
@@ -1038,6 +1101,8 @@ blasint Unmrq(char side, char trans, blasint m, blasint n, blasint k, T* a,
                             T*, blasint);                                     \
   template blasint Ungl2<T>(blasint, blasint, blasint, T*, blasint, const T*, \
                             T*);                                              \
+  template blasint Ungr2<T>(blasint, blasint, blasint, T*, blasint, const T*, \
+                            T*);                                              \
   template blasint Unglq<T>(blasint, blasint, blasint, T*, blasint, const T*, \
                             T*, blasint);                                     \
   template blasint Unm2r<T>(char, char, blasint, blasint, blasint, const T*,  \
@@ -1096,6 +1161,12 @@ extern "C" {
       const hwyblas_int* m, const hwyblas_int* n, const hwyblas_int* k, R* a,  \
       const hwyblas_int* lda, const R* tau, R* work, hwyblas_int* info) {      \
     *info = hwyblas::lapack::Ungl2(*m, *n, *k, As<T>(a), *lda,                 \
+                                   As<const T>(tau), As<T>(work));             \
+  }                                                                            \
+  HWYBLAS_API void prefix##gen##r2_(                                           \
+      const hwyblas_int* m, const hwyblas_int* n, const hwyblas_int* k, R* a,  \
+      const hwyblas_int* lda, const R* tau, R* work, hwyblas_int* info) {      \
+    *info = hwyblas::lapack::Ungr2(*m, *n, *k, As<T>(a), *lda,                 \
                                    As<const T>(tau), As<T>(work));             \
   }                                                                            \
   HWYBLAS_API void prefix##gen##lq_(                                           \

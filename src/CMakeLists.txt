@@ -29,18 +29,23 @@ if(HWYBLAS_LAPACK)
     lapack/geqp3.cc
     lapack/geqrf.cc
     lapack/gglse.cc
+    lapack/gghrd.cc
     lapack/gtsv.cc
     lapack/gesdd.cc
     lapack/gesvd.cc
     lapack/gees.cc
     lapack/geev.cc
+    lapack/ggev.cc
+    lapack/ggsvd3.cc
     lapack/getrf.cc
     lapack/hessenberg.cc
+    lapack/hgeqz.cc
     lapack/hseqr.cc
     lapack/householder.cc
     lapack/lapacke.cc
     lapack/lapacke_band.cc
     lapack/lapacke_geev.cc
+    lapack/lapacke_ggev.cc
     lapack/lapacke_gels.cc
     lapack/lapacke_linear.cc
     lapack/lapacke_symmetric.cc
@@ -61,6 +66,8 @@ if(HWYBLAS_LAPACK)
     lapack/syevd.cc
     lapack/syevr.cc
     lapack/syevx.cc
+    lapack/tgevc.cc
+    lapack/tgsen.cc
     lapack/sygv.cc
     lapack/sysv.cc
     lapack/sytrf.cc

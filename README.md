@@ -117,6 +117,10 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?lanv2`, `?laexc`, `?lasy2`, `?laln2` | s d |
 | `?geev` (eigenvalues and eigenvectors), `?geevx` (with balancing options and condition numbers), `?geesx` (Schur factorization with condition numbers), `?trevc3` (eigenvectors of the Schur form), `?trsna` (their condition numbers) | s d c z |
 | `?laqtr` (quasi-triangular systems in real arithmetic) | s d |
+| `?ggev` (generalized eigenvalues and eigenvectors), `?gges` (generalized Schur factorization), `?ggbal`, `?ggbak` (balancing), `?gghrd` (Hessenberg-triangular reduction), `?hgeqz` (QZ iteration), `?tgevc` (eigenvectors), `?tgsen`, `?tgexc`, `?tgex2` (reordering with condition numbers), `?tgsyl`, `?tgsy2` (generalized Sylvester equation), `?getc2`, `?gesc2`, `?latdf`, `?lanhs` | s d c z |
+| `?ggsvd3` (generalized singular value decomposition), `?ggsvp3`, `?tgsja`, `?lags2`, `?lapll`, `?lapmt` | s d c z |
+| `?lag2`, `?lagv2` (2 x 2 generalized eigenproblems), `?orgr2` (Q of RQ, unblocked) | s d |
+| `?ungr2` | c z |
 | `?lartg`, `?rot` (with complex sine), `icmax1`, `izmax1`, `scsum1`, `dzsum1` | c z |
 | `?lange`, `?lansy`, `?lassq` (norms) | s d c z |
 | `?lanhe` | c z |

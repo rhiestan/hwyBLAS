@@ -22,27 +22,6 @@ namespace {
 // The lambdas test IsComplex<T>::value, not a local constexpr kComplex:
 // MSVC does not treat a captured local constexpr as a constant there.
 
-// The n x n eigenvector matrix V of xGEEV and xGEEVX, which the routine
-// only writes, if wanted. LDV is checked in row-major layout as in the
-// reference: ldv >= 1, and ldv >= n if the vectors are wanted.
-template <typename T>
-MatrixArg<T> Eigenvectors(T* v, lapack_int n, lapack_int ldv, bool wanted,
-                          lapack_int ld_info) {
-  MatrixArg<T> arg{v, n, wanted ? n : 1, ldv, ld_info};
-  arg.in = false;
-  arg.used = arg.out = wanted;
-  return arg;
-}
-
-// Calls f with a work array of `size` elements of A if `needed`, else with
-// a null pointer.
-template <typename A, typename F>
-lapack_int MaybeWithWorkArray(const std::string& name, bool needed,
-                              lapack_int size, const F& f) {
-  if (!needed) return f(static_cast<A*>(nullptr));
-  return WithWorkArray<A>(name, size, f);
-}
-
 // ---------------------------------------------------------------------------
 // xGEEV and xGEEVX
 

@@ -50,7 +50,10 @@ The translator produces the conventions described in
   (`(x * x)` for `**2`, otherwise `std::pow`). `MAXLOC` (xPSTRF) is
   `Maxloc` of `lapack_common.h`, with flang's NaN rule (the first largest
   element, ignoring NaNs unless all are NaN); the translator does not know
-  it.
+  it. A real to an integer power (`SCLFAC**IR` in xGGBAL) is `Powi`,
+  which computes it by repeated squaring as flang's runtime (and
+  gfortran) do: `std::pow` rounds powers of 10 differently once they are
+  not exact.
 - **Calls**: one template per real/complex pair, named after the complex
   routine (`DORGBR` and `ZUNGBR` both become `Ungbr`). A real routine called
   from a complex one gets `<R>`. `INFO` is not an argument: internal routines
@@ -72,12 +75,16 @@ The translator produces the conventions described in
   `if constexpr`, or the two are ported as separate functions behind one
   template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`,
   `LatbsReal` / `LatbsComplex`, `GtsvReal` / `GtsvComplex`,
-  `PttrfReal` / `PttrfComplex`),
+  `PttrfReal` / `PttrfComplex`, `TgsylReal` / `TgsylComplex`,
+  `LatdfReal` / `LatdfComplex`, `Lags2Real` / `Lags2Complex`),
   or as two overloads of the same name where their arguments differ (`WR`
   and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES, xGEEV, xGEEVX,
   xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA; the complex Q
   of ZSTEDC, ZLAED0, ZLAED7 and ZLAED8, whose other xLAED* routines are
-  real; xPTTRS and xPTTS2, whose complex routines take UPLO / IUPLO). The
+  real; xPTTRS and xPTTS2, whose complex routines take UPLO / IUPLO;
+  ALPHAR and ALPHAI against ALPHA, and the 2-by-2 blocks of the real
+  generalized Schur form, in xHGEQZ, xTGEVC, xTGEX2, xTGEXC, xTGSEN,
+  xTGSY2, xGGES and xGGEV). The
   MRRR and inverse iteration routines whose complex version
   only stores the real eigenvectors in a complex Z (xSTEMR, xLARRV,
   xLAR1V, xSTEIN) are one template for all four types: R is the real
@@ -94,7 +101,8 @@ The translator produces the conventions described in
   xSYEV, xSYEVD, xSYEVX, xSYGV, xSYGVD with their xHE* routines, which
   take `rwork` for complex T only; xSYEVX keeps its tridiagonal matrix
   and the workspace of xSTEBZ and xSTEIN in RWORK, or in WORK for real T,
-  where it starts the workspace of xORMTR at E instead). xSYEVR and xHEEVR lay out their
+  where it starts the workspace of xORMTR at E instead; and xGGSVD3,
+  which sorts ALPHA in RWORK, or in WORK for real T). xSYEVR and xHEEVR lay out their
   workspaces too differently for that and are two bodies behind one
   template (`SyevrReal` / `HeevrComplex` behind `Heevr`), as xLARNV
   (`LarnvReal` / `LarnvComplex`), xGELSS and xGELSD (whose complex
@@ -289,7 +297,8 @@ xSTEMR, xSTEBZ, xSTEIN and xLARNV; xGELS, xGELSS, xGELSD, xGELSY,
 xGGLSE, xGGGLM, xGGQRF, xGGRQF, xGERQF, xGERQ2, xTZRZF, xORMRQ / xUNMRQ
 and xORMRZ / xUNMRZ; xGBTRF, xGBTF2, xGBTRS, xGBSV, xGBCON, xLATBS,
 xPOTF2, xPBTRF, xPBTF2, xPBTRS, xPBSV, xGTTRF, xGTTRS, xGTSV, xPTTRF,
-xPTTRS and xPTSV) in both on the same matrices of
+xPTTRS and xPTSV; xGGEV, xGGES, xGGBAL, xGGBAK, xGGHRD, xHGEQZ, xTGEVC,
+xTGSEN, xTGEXC, xTGSYL, xGGSVD3 and xGGSVP3) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS
@@ -314,5 +323,11 @@ reference's C/ZLATBS drop an element of A in some scaled solves (fixed in
 the port, see `LatbsComplex`), so the complex X of xLATBS is not compared
 either. The tool
 therefore compares the complex singular values and eigenvalues with a
-tolerance (the nonsymmetric eigenvalues as sets), and only counts the
-bitwise identical results otherwise.
+tolerance (the nonsymmetric eigenvalues as sets; not those of
+ill-conditioned problems, such as graded matrices, whose last bits are
+amplified too much), and only counts the bitwise identical results
+otherwise. The port's xTGSEN asks for one more
+element of WORK than the reference in some cases (a fixed reference bug,
+see `Tgsen`), so both get the larger workspace; C/ZTGSEN's Difl estimate
+differs (another fixed bug, visible only in the complex results, which
+are counted).

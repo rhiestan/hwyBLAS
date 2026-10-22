@@ -100,6 +100,9 @@ template <typename T>
 RealT<T> Lantr(char norm, char uplo, char diag, blasint m, blasint n,
                const T* a, blasint lda, RealT<T>* work);
 
+template <typename T>
+RealT<T> Lanhs(char norm, blasint n, const T* a, blasint lda, RealT<T>* work);
+
 // ---------------------------------------------------------------------------
 // Householder reflectors (householder.cc)
 
@@ -466,6 +469,10 @@ blasint Ungqr(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
 
 template <typename T>
 blasint Ungl2(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work);
+
+template <typename T>
+blasint Ungr2(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
               T* work);
 
 template <typename T>
@@ -1340,12 +1347,12 @@ blasint Geesx(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
 // General band matrices (gbsv.cc)
 
 template <typename T>
-blasint Gbtf2(blasint m, blasint n, blasint kl, blasint ku, T* ab,
-              blasint ldab, blasint* ipiv);
+blasint Gbtf2(blasint m, blasint n, blasint kl, blasint ku, T* ab, blasint ldab,
+              blasint* ipiv);
 
 template <typename T>
-blasint Gbtrf(blasint m, blasint n, blasint kl, blasint ku, T* ab,
-              blasint ldab, blasint* ipiv);
+blasint Gbtrf(blasint m, blasint n, blasint kl, blasint ku, T* ab, blasint ldab,
+              blasint* ipiv);
 
 template <typename T>
 blasint Gbtrs(char trans, blasint n, blasint kl, blasint ku, blasint nrhs,
@@ -1396,8 +1403,7 @@ blasint Gttrf(blasint n, T* dl, T* d, T* du, T* du2, blasint* ipiv);
 
 template <typename T>
 void Gtts2(blasint itrans, blasint n, blasint nrhs, const T* dl, const T* d,
-           const T* du, const T* du2, const blasint* ipiv, T* b,
-           blasint ldb);
+           const T* du, const T* du2, const blasint* ipiv, T* b, blasint ldb);
 
 template <typename T>
 blasint Gttrs(char trans, blasint n, blasint nrhs, const T* dl, const T* d,
@@ -1409,8 +1415,7 @@ blasint Pttrf(blasint n, RealT<T>* d, T* e);
 
 // Real T only (the complex routines take UPLO / IUPLO).
 template <typename T>
-void Ptts2(blasint n, blasint nrhs, const T* d, const T* e, T* b,
-           blasint ldb);
+void Ptts2(blasint n, blasint nrhs, const T* d, const T* e, T* b, blasint ldb);
 template <typename T>
 blasint Pttrs(blasint n, blasint nrhs, const T* d, const T* e, T* b,
               blasint ldb);
@@ -1420,11 +1425,217 @@ template <typename T>
 void Ptts2(blasint iuplo, blasint n, blasint nrhs, const RealT<T>* d,
            const T* e, T* b, blasint ldb);
 template <typename T>
-blasint Pttrs(char uplo, blasint n, blasint nrhs, const RealT<T>* d,
-              const T* e, T* b, blasint ldb);
+blasint Pttrs(char uplo, blasint n, blasint nrhs, const RealT<T>* d, const T* e,
+              T* b, blasint ldb);
 
 template <typename T>
 blasint Ptsv(blasint n, blasint nrhs, RealT<T>* d, T* e, T* b, blasint ldb);
+
+// ---------------------------------------------------------------------------
+// Generalized nonsymmetric eigenproblem: balancing and Hessenberg-triangular
+// reduction (gghrd.cc), QZ iteration (hgeqz.cc), eigenvectors (tgevc.cc). Where
+// the real and the complex routine have different arguments (ALPHAR and ALPHAI
+// for ALPHA, workspaces), they are two overloads of the same name.
+
+template <typename T>
+blasint Ggbal(char job, blasint n, T* a, blasint lda, T* b, blasint ldb,
+              blasint* ilo, blasint* ihi, RealT<T>* lscale, RealT<T>* rscale,
+              RealT<T>* work);
+
+template <typename T>
+blasint Ggbak(char job, char side, blasint n, blasint ilo, blasint ihi,
+              const RealT<T>* lscale, const RealT<T>* rscale, blasint m, T* v,
+              blasint ldv);
+
+template <typename T>
+blasint Gghrd(char compq, char compz, blasint n, blasint ilo, blasint ihi, T* a,
+              blasint lda, T* b, blasint ldb, T* q, blasint ldq, T* z,
+              blasint ldz);
+
+// Real T only.
+template <typename R>
+void Lag2(const R* a, blasint lda, const R* b, blasint ldb, R safmin, R* scale1,
+          R* scale2, R* wr1, R* wr2, R* wi);
+
+// Real T.
+template <typename R>
+blasint Hgeqz(char job, char compq, char compz, blasint n, blasint ilo,
+              blasint ihi, R* h, blasint ldh, R* t, blasint ldt, R* alphar,
+              R* alphai, R* beta, R* q, blasint ldq, R* z, blasint ldz, R* work,
+              blasint lwork);
+// Complex T.
+template <typename T>
+blasint Hgeqz(char job, char compq, char compz, blasint n, blasint ilo,
+              blasint ihi, T* h, blasint ldh, T* t, blasint ldt, T* alpha,
+              T* beta, T* q, blasint ldq, T* z, blasint ldz, T* work,
+              blasint lwork, RealT<T>* rwork);
+
+// Real T.
+template <typename R>
+blasint Tgevc(char side, char howmny, const blasint* select, blasint n,
+              const R* s, blasint lds, const R* p, blasint ldp, R* vl,
+              blasint ldvl, R* vr, blasint ldvr, blasint mm, blasint* m,
+              R* work);
+// Complex T.
+template <typename T>
+blasint Tgevc(char side, char howmny, const blasint* select, blasint n,
+              const T* s, blasint lds, const T* p, blasint ldp, T* vl,
+              blasint ldvl, T* vr, blasint ldvr, blasint mm, blasint* m,
+              T* work, RealT<T>* rwork);
+
+// ---------------------------------------------------------------------------
+// Generalized nonsymmetric eigenproblem: reordering of the generalized Schur
+// form and condition estimation (tgsen.cc).
+
+template <typename T>
+blasint Getc2(blasint n, T* a, blasint lda, blasint* ipiv, blasint* jpiv);
+
+template <typename T>
+void Gesc2(blasint n, const T* a, blasint lda, T* rhs, const blasint* ipiv,
+           const blasint* jpiv, RealT<T>* scale);
+
+template <typename T>
+void Latdf(blasint ijob, blasint n, const T* z, blasint ldz, T* rhs,
+           RealT<T>* rdsum, RealT<T>* rdscal, const blasint* ipiv,
+           const blasint* jpiv);
+
+// Real T.
+template <typename R>
+blasint Tgsy2(char trans, blasint ijob, blasint m, blasint n, const R* a,
+              blasint lda, const R* b, blasint ldb, R* c, blasint ldc,
+              const R* d, blasint ldd, const R* e, blasint lde, R* f,
+              blasint ldf, R* scale, R* rdsum, R* rdscal, blasint* iwork,
+              blasint* pq);
+// Complex T.
+template <typename T>
+blasint Tgsy2(char trans, blasint ijob, blasint m, blasint n, const T* a,
+              blasint lda, const T* b, blasint ldb, T* c, blasint ldc,
+              const T* d, blasint ldd, const T* e, blasint lde, T* f,
+              blasint ldf, RealT<T>* scale, RealT<T>* rdsum, RealT<T>* rdscal);
+
+template <typename T>
+blasint Tgsyl(char trans, blasint ijob, blasint m, blasint n, const T* a,
+              blasint lda, const T* b, blasint ldb, T* c, blasint ldc,
+              const T* d, blasint ldd, const T* e, blasint lde, T* f,
+              blasint ldf, RealT<T>* scale, RealT<T>* dif, T* work,
+              blasint lwork, blasint* iwork);
+
+// Real T only.
+template <typename R>
+void Lagv2(R* a, blasint lda, R* b, blasint ldb, R* alphar, R* alphai, R* beta,
+           R* csl, R* snl, R* csr, R* snr);
+
+// Real T.
+template <typename R>
+blasint Tgex2(bool wantq, bool wantz, blasint n, R* a, blasint lda, R* b,
+              blasint ldb, R* q, blasint ldq, R* z, blasint ldz, blasint j1,
+              blasint n1, blasint n2, R* work, blasint lwork);
+// Complex T.
+template <typename T>
+blasint Tgex2(bool wantq, bool wantz, blasint n, T* a, blasint lda, T* b,
+              blasint ldb, T* q, blasint ldq, T* z, blasint ldz, blasint j1);
+
+// Real T.
+template <typename R>
+blasint Tgexc(bool wantq, bool wantz, blasint n, R* a, blasint lda, R* b,
+              blasint ldb, R* q, blasint ldq, R* z, blasint ldz, blasint* ifst,
+              blasint* ilst, R* work, blasint lwork);
+// Complex T.
+template <typename T>
+blasint Tgexc(bool wantq, bool wantz, blasint n, T* a, blasint lda, T* b,
+              blasint ldb, T* q, blasint ldq, T* z, blasint ldz, blasint ifst,
+              blasint* ilst);
+
+// Real T.
+template <typename R>
+blasint Tgsen(blasint ijob, bool wantq, bool wantz, const blasint* select,
+              blasint n, R* a, blasint lda, R* b, blasint ldb, R* alphar,
+              R* alphai, R* beta, R* q, blasint ldq, R* z, blasint ldz,
+              blasint* m, R* pl, R* pr, R* dif, R* work, blasint lwork,
+              blasint* iwork, blasint liwork);
+// Complex T.
+template <typename T>
+blasint Tgsen(blasint ijob, bool wantq, bool wantz, const blasint* select,
+              blasint n, T* a, blasint lda, T* b, blasint ldb, T* alpha,
+              T* beta, T* q, blasint ldq, T* z, blasint ldz, blasint* m,
+              RealT<T>* pl, RealT<T>* pr, RealT<T>* dif, T* work, blasint lwork,
+              blasint* iwork, blasint liwork);
+
+// ---------------------------------------------------------------------------
+// Generalized nonsymmetric eigenproblem: drivers (ggev.cc).
+
+// The SELCTG functions of xGGES, with the Fortran calling convention:
+// SELCTG(ALPHAR, ALPHAI, BETA) for real T, SELCTG(ALPHA, BETA) for complex
+// T (ALPHA and BETA point to their real and imaginary parts). Nonzero is
+// true.
+template <typename R>
+using GgesSelectReal = blasint (*)(const R*, const R*, const R*);
+template <typename R>
+using GgesSelectComplex = blasint (*)(const R*, const R*);
+
+// Real T.
+template <typename R>
+blasint Gges(char jobvsl, char jobvsr, char sort, GgesSelectReal<R> selctg,
+             blasint n, R* a, blasint lda, R* b, blasint ldb, blasint* sdim,
+             R* alphar, R* alphai, R* beta, R* vsl, blasint ldvsl, R* vsr,
+             blasint ldvsr, R* work, blasint lwork, blasint* bwork);
+// Complex T.
+template <typename T>
+blasint Gges(char jobvsl, char jobvsr, char sort,
+             GgesSelectComplex<RealT<T>> selctg, blasint n, T* a, blasint lda,
+             T* b, blasint ldb, blasint* sdim, T* alpha, T* beta, T* vsl,
+             blasint ldvsl, T* vsr, blasint ldvsr, T* work, blasint lwork,
+             RealT<T>* rwork, blasint* bwork);
+
+// Real T.
+template <typename R>
+blasint Ggev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* b,
+             blasint ldb, R* alphar, R* alphai, R* beta, R* vl, blasint ldvl,
+             R* vr, blasint ldvr, R* work, blasint lwork);
+// Complex T.
+template <typename T>
+blasint Ggev(char jobvl, char jobvr, blasint n, T* a, blasint lda, T* b,
+             blasint ldb, T* alpha, T* beta, T* vl, blasint ldvl, T* vr,
+             blasint ldvr, T* work, blasint lwork, RealT<T>* rwork);
+
+// ---------------------------------------------------------------------------
+// Generalized singular value decomposition (ggsvd3.cc).
+
+template <typename T>
+void Lapll(blasint n, T* x, blasint incx, T* y, blasint incy, RealT<T>* ssmin);
+
+template <typename T>
+void Lapmt(bool forwrd, blasint m, blasint n, T* x, blasint ldx, blasint* k);
+
+// The real routine for real T (all of A1 ... SNQ real), the complex one for
+// complex T.
+template <typename T>
+void Lags2(bool upper, RealT<T> a1, T a2, RealT<T> a3, RealT<T> b1, T b2,
+           RealT<T> b3, RealT<T>* csu, T* snu, RealT<T>* csv, T* snv,
+           RealT<T>* csq, T* snq);
+
+template <typename T>
+blasint Tgsja(char jobu, char jobv, char jobq, blasint m, blasint p, blasint n,
+              blasint k, blasint l, T* a, blasint lda, T* b, blasint ldb,
+              RealT<T> tola, RealT<T> tolb, RealT<T>* alpha, RealT<T>* beta,
+              T* u, blasint ldu, T* v, blasint ldv, T* q, blasint ldq, T* work,
+              blasint* ncycle);
+
+// RWORK: complex T only.
+template <typename T>
+blasint Ggsvp3(char jobu, char jobv, char jobq, blasint m, blasint p, blasint n,
+               T* a, blasint lda, T* b, blasint ldb, RealT<T> tola,
+               RealT<T> tolb, blasint* k, blasint* l, T* u, blasint ldu, T* v,
+               blasint ldv, T* q, blasint ldq, blasint* iwork, RealT<T>* rwork,
+               T* tau, T* work, blasint lwork);
+
+// RWORK: complex T only.
+template <typename T>
+blasint Ggsvd3(char jobu, char jobv, char jobq, blasint m, blasint n, blasint p,
+               blasint* k, blasint* l, T* a, blasint lda, T* b, blasint ldb,
+               RealT<T>* alpha, RealT<T>* beta, T* u, blasint ldu, T* v,
+               blasint ldv, T* q, blasint ldq, T* work, blasint lwork,
+               RealT<T>* rwork, blasint* iwork);
 
 }  // namespace lapack
 }  // namespace hwyblas

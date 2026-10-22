@@ -383,8 +383,8 @@ template <typename T>
 MatrixArg<T> SymmetricBand(T* ab, char uplo, lapack_int n, lapack_int kd,
                            lapack_int ldab, lapack_int ld_info) {
   const bool upper = lapack::Lsame(uplo, 'U');
-  MatrixArg<T> arg = Band(ab, n, n, upper ? 0 : kd, upper ? kd : 0, ldab,
-                          ld_info);
+  MatrixArg<T> arg =
+      Band(ab, n, n, upper ? 0 : kd, upper ? kd : 0, ldab, ld_info);
   // LAPACKE_xpb_trans copies nothing for an invalid uplo.
   if (!upper && !lapack::Lsame(uplo, 'L')) arg.band_m = 0;
   return arg;
@@ -397,7 +397,8 @@ void Transpose(int matrix_layout, const MatrixArg<T>& arg, const T* in,
   if (arg.uplo == 'B') {
     GbTrans(matrix_layout, arg.band_m, arg.cols, arg.kl, arg.ku, in, ldin, out,
             ldout);
-  } else if ((arg.uplo == 'U' || arg.uplo == 'L') && !(back && arg.out_general)) {
+  } else if ((arg.uplo == 'U' || arg.uplo == 'L') &&
+             !(back && arg.out_general)) {
     TrTrans(matrix_layout, arg.uplo, 'N', arg.rows, in, ldin, out, ldout);
   } else {
     GeTrans(matrix_layout, arg.rows, arg.cols, in, ldin, out, ldout);
@@ -589,6 +590,41 @@ lapack_int WithWorkspaces(const std::string& name, const Work& work) {
       });
     }
   });
+}
+
+// The n x n eigenvector (or Schur vector) matrix V of xGEEV, xGEEVX,
+// xGGEV and xGGES, which the routine only writes, if wanted. LDV is checked in
+// row-major layout as in the reference: ldv >= 1, and ldv >= n if the vectors
+// are wanted.
+template <typename T>
+MatrixArg<T> Eigenvectors(T* v, lapack_int n, lapack_int ldv, bool wanted,
+                          lapack_int ld_info) {
+  MatrixArg<T> arg{v, n, wanted ? n : 1, ldv, ld_info};
+  arg.in = false;
+  arg.used = arg.out = wanted;
+  return arg;
+}
+
+// Calls f with a work array of `size` elements of A if `needed`, else with
+// a null pointer.
+template <typename A, typename F>
+lapack_int MaybeWithWorkArray(const std::string& name, bool needed,
+                              lapack_int size, const F& f) {
+  if (!needed) return f(static_cast<A*>(nullptr));
+  return WithWorkArray<A>(name, size, f);
+}
+
+// A matrix that the routine reads if `in` and writes if `out` (and does not
+// reference otherwise), e.g. Q of xGGHRD: read for COMPQ = 'V', written
+// for 'I' or 'V'.
+template <typename T>
+MatrixArg<T> Optional(T* a, lapack_int rows, lapack_int cols, lapack_int ld,
+                      lapack_int ld_info, bool in, bool out) {
+  MatrixArg<T> arg{a, rows, cols, ld, ld_info};
+  arg.in = in;
+  arg.out = out;
+  arg.used = in || out;
+  return arg;
 }
 
 // A triangular matrix argument: only the triangle uplo is transposed.
