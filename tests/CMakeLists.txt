@@ -106,6 +106,7 @@ target_include_directories(hwyblas_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 if(HWYBLAS_LAPACK)
   target_sources(hwyblas_tests PRIVATE
     lapack/auxiliary_test.cc
+    lapack/band_test.cc
     lapack/gees_test.cc
     lapack/geev_test.cc
     lapack/gels_test.cc

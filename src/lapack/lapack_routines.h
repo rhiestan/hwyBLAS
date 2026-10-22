@@ -231,6 +231,9 @@ blasint Potrf2(char uplo, blasint n, T* a, blasint lda);
 template <typename T>
 blasint Potrf(char uplo, blasint n, T* a, blasint lda);
 
+template <typename T>
+blasint Potf2(char uplo, blasint n, T* a, blasint lda);
+
 // WORK has 2 * n elements.
 template <typename T>
 blasint Pstf2(char uplo, blasint n, T* a, blasint lda, blasint* piv,
@@ -1332,6 +1335,96 @@ blasint Geesx(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
               char sense, blasint n, T* a, blasint lda, blasint* sdim, T* w,
               T* vs, blasint ldvs, RealT<T>* rconde, RealT<T>* rcondv, T* work,
               blasint lwork, RealT<T>* rwork, blasint* bwork);
+
+// ---------------------------------------------------------------------------
+// General band matrices (gbsv.cc)
+
+template <typename T>
+blasint Gbtf2(blasint m, blasint n, blasint kl, blasint ku, T* ab,
+              blasint ldab, blasint* ipiv);
+
+template <typename T>
+blasint Gbtrf(blasint m, blasint n, blasint kl, blasint ku, T* ab,
+              blasint ldab, blasint* ipiv);
+
+template <typename T>
+blasint Gbtrs(char trans, blasint n, blasint kl, blasint ku, blasint nrhs,
+              const T* ab, blasint ldab, const blasint* ipiv, T* b,
+              blasint ldb);
+
+template <typename T>
+blasint Gbsv(blasint n, blasint kl, blasint ku, blasint nrhs, T* ab,
+             blasint ldab, blasint* ipiv, T* b, blasint ldb);
+
+template <typename T>
+blasint Latbs(char uplo, char trans, char diag, char normin, blasint n,
+              blasint kd, const T* ab, blasint ldab, T* x, RealT<T>* scale,
+              RealT<T>* cnorm);
+
+// WORK (3 * n elements) and IWORK (n) for real T, WORK (2 * n) and RWORK
+// (n) for complex T.
+template <typename T>
+blasint Gbcon(char norm, blasint n, blasint kl, blasint ku, const T* ab,
+              blasint ldab, const blasint* ipiv, RealT<T> anorm,
+              RealT<T>* rcond, T* work, RealT<T>* rwork, blasint* iwork);
+
+// ---------------------------------------------------------------------------
+// Symmetric (Hermitian) positive definite band matrices (pbsv.cc)
+
+template <typename T>
+blasint Pbtf2(char uplo, blasint n, blasint kd, T* ab, blasint ldab);
+
+template <typename T>
+blasint Pbtrf(char uplo, blasint n, blasint kd, T* ab, blasint ldab);
+
+template <typename T>
+blasint Pbtrs(char uplo, blasint n, blasint kd, blasint nrhs, const T* ab,
+              blasint ldab, T* b, blasint ldb);
+
+template <typename T>
+blasint Pbsv(char uplo, blasint n, blasint kd, blasint nrhs, T* ab,
+             blasint ldab, T* b, blasint ldb);
+
+// ---------------------------------------------------------------------------
+// Tridiagonal systems (gtsv.cc)
+
+template <typename T>
+blasint Gtsv(blasint n, blasint nrhs, T* dl, T* d, T* du, T* b, blasint ldb);
+
+template <typename T>
+blasint Gttrf(blasint n, T* dl, T* d, T* du, T* du2, blasint* ipiv);
+
+template <typename T>
+void Gtts2(blasint itrans, blasint n, blasint nrhs, const T* dl, const T* d,
+           const T* du, const T* du2, const blasint* ipiv, T* b,
+           blasint ldb);
+
+template <typename T>
+blasint Gttrs(char trans, blasint n, blasint nrhs, const T* dl, const T* d,
+              const T* du, const T* du2, const blasint* ipiv, T* b,
+              blasint ldb);
+
+template <typename T>
+blasint Pttrf(blasint n, RealT<T>* d, T* e);
+
+// Real T only (the complex routines take UPLO / IUPLO).
+template <typename T>
+void Ptts2(blasint n, blasint nrhs, const T* d, const T* e, T* b,
+           blasint ldb);
+template <typename T>
+blasint Pttrs(blasint n, blasint nrhs, const T* d, const T* e, T* b,
+              blasint ldb);
+
+// Complex T only.
+template <typename T>
+void Ptts2(blasint iuplo, blasint n, blasint nrhs, const RealT<T>* d,
+           const T* e, T* b, blasint ldb);
+template <typename T>
+blasint Pttrs(char uplo, blasint n, blasint nrhs, const RealT<T>* d,
+              const T* e, T* b, blasint ldb);
+
+template <typename T>
+blasint Ptsv(blasint n, blasint nrhs, RealT<T>* d, T* e, T* b, blasint ldb);
 
 }  // namespace lapack
 }  // namespace hwyblas

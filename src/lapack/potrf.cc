@@ -1,6 +1,7 @@
 // Cholesky factorization of a symmetric (Hermitian) positive definite
-// matrix: xPOTRF (blocked) and xPOTRF2 (recursive), and of a positive
-// semidefinite one with complete pivoting: xPSTRF (blocked) and xPSTF2.
+// matrix: xPOTRF (blocked), xPOTRF2 (recursive) and xPOTF2 (unblocked),
+// and of a positive semidefinite one with complete pivoting: xPSTRF
+// (blocked) and xPSTF2.
 //
 // Derived from LAPACK 3.12.1, Copyright (c) 1992-2023 The University of
 // Tennessee and The University of Tennessee Research Foundation, The
@@ -194,6 +195,91 @@ blasint Potrf(char uplo, blasint n, T* a, blasint lda) {
       }
     }
   }
+  return info;
+}
+
+// xPOTF2: computes the Cholesky factorization of a real symmetric or
+// complex Hermitian positive definite matrix A, like xPOTRF2 (see there for
+// the result and INFO), with the unblocked algorithm (Level 2 BLAS): it
+// computes U row by row (L column by column). (xPOTRF uses xPOTRF2; xPOTF2
+// factors the diagonal blocks of xPBTRF.)
+template <typename T>
+blasint Potf2(char uplo, blasint n, T* a, blasint lda) {
+  using R = RealT<T>;
+  const R one = R(1), zero = R(0);
+  const T cone = T(1);
+  const Matrix<T> A(a, lda);
+  blasint j;
+  bool upper;
+  R ajj;
+
+  // Test the input parameters.
+  blasint info = 0;
+  upper = Lsame(uplo, 'U');
+  if (!upper && !Lsame(uplo, 'L')) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, n)) {
+    info = -4;
+  }
+  if (info != 0) {
+    Xerbla<T>("POTF2", -info);
+    return info;
+  }
+
+  // Quick return if possible.
+  if (n == 0) return info;
+
+  if (upper) {
+    // Compute the Cholesky factorization A = U**H *U.
+    for (j = 1; j <= n; ++j) {
+      // Compute U(J,J) and test for non-positive-definiteness.
+      ajj = std::real(A(j, j)) -
+            std::real(Dotc(j - 1, A.ptr(1, j), 1, A.ptr(1, j), 1));
+      if (ajj <= zero || std::isnan(ajj)) {
+        A(j, j) = ajj;
+        goto L30;
+      }
+      ajj = std::sqrt(ajj);
+      A(j, j) = ajj;
+
+      // Compute elements J+1:N of row J.
+      if (j < n) {
+        Lacgv(j - 1, A.ptr(1, j), 1);
+        Gemv('T', j - 1, n - j, -cone, A.ptr(1, j + 1), lda, A.ptr(1, j), 1,
+             cone, A.ptr(j, j + 1), lda);
+        Lacgv(j - 1, A.ptr(1, j), 1);
+        Rscal(n - j, one / ajj, A.ptr(j, j + 1), lda);
+      }
+    }
+  } else {
+    // Compute the Cholesky factorization A = L*L**H.
+    for (j = 1; j <= n; ++j) {
+      // Compute L(J,J) and test for non-positive-definiteness.
+      ajj = std::real(A(j, j)) -
+            std::real(Dotc(j - 1, A.ptr(j, 1), lda, A.ptr(j, 1), lda));
+      if (ajj <= zero || std::isnan(ajj)) {
+        A(j, j) = ajj;
+        goto L30;
+      }
+      ajj = std::sqrt(ajj);
+      A(j, j) = ajj;
+
+      // Compute elements J+1:N of column J.
+      if (j < n) {
+        Lacgv(j - 1, A.ptr(j, 1), lda);
+        Gemv('N', n - j, j - 1, -cone, A.ptr(j + 1, 1), lda, A.ptr(j, 1), lda,
+             cone, A.ptr(j + 1, j), 1);
+        Lacgv(j - 1, A.ptr(j, 1), lda);
+        Rscal(n - j, one / ajj, A.ptr(j + 1, j), 1);
+      }
+    }
+  }
+  return info;
+
+L30:
+  info = j;
   return info;
 }
 
@@ -641,7 +727,7 @@ L220:
 
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                       \
   template blasint Potrf2<T>(char, blasint, T*, blasint);                   \
-  template blasint Potrf<T>(char, blasint, T*, blasint);                    \
+  template blasint Potrf<T>(char, blasint, T*, blasint);                      template blasint Potf2<T>(char, blasint, T*, blasint);                    \
   template blasint Pstf2<T>(char, blasint, T*, blasint, blasint*, blasint*, \
                             RealT<T>, RealT<T>*);                           \
   template blasint Pstrf<T>(char, blasint, T*, blasint, blasint*, blasint*, \
@@ -669,7 +755,7 @@ extern "C" {
                                    hwyblas_int* info) {                        \
     *info = hwyblas::lapack::Potrf2(*uplo, *n, As<T>(a), *lda);                \
   }                                                                            \
-  HWYBLAS_API void prefix##pstf2_(const char* uplo, const hwyblas_int* n,      \
+  HWYBLAS_API void prefix##potf2_(const char* uplo, const hwyblas_int* n,                                        R* a, const hwyblas_int* lda,                                                  hwyblas_int* info) {                             *info = hwyblas::lapack::Potf2(*uplo, *n, As<T>(a), *lda);                   }                                                                              HWYBLAS_API void prefix##pstf2_(const char* uplo, const hwyblas_int* n,      \
                                   R* a, const hwyblas_int* lda,                \
                                   hwyblas_int* piv, hwyblas_int* rank,         \
                                   const R* tol, R* work, hwyblas_int* info) {  \

@@ -666,13 +666,6 @@ blasint LatrsReal(char uplo, char trans, char diag, char normin, blasint n,
   return info;
 }
 
-// CABS2(z) = |Re(z) / 2| + |Im(z) / 2|, the statement function of xLATRS.
-template <typename T>
-RealT<T> Cabs2(T z) {
-  using R = RealT<T>;
-  return std::abs(std::real(z) / R(2)) + std::abs(std::imag(z) / R(2));
-}
-
 // xLATRS for complex T (CLATRS / ZLATRS); see Latrs. It differs from the
 // real routine in its scaling (by BIGNUM/2, with |Re| + |Im| as the
 // absolute value) and in its separate branches for A**T and A**H.

@@ -3305,6 +3305,544 @@ void RunGels(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Band and tridiagonal systems
+
+// The band storage (leading dimension ldab, kv superdiagonals in it) of the
+// band of the m x n matrix a with kl subdiagonals and ku superdiagonals;
+// zero elsewhere.
+template <typename T>
+std::vector<T> BandOf(const std::vector<T>& a, I m, I n, I kl, I ku, I kv,
+                      I ldab) {
+  std::vector<T> ab(static_cast<size_t>(ldab) * std::max<I>(n, 1));
+  for (I j = 0; j < n; ++j) {
+    for (I i = std::max<I>(0, j - ku); i < std::min(m, j + kl + 1); ++i) {
+      ab[kv + i - j + static_cast<size_t>(j) * ldab] =
+          a[i + static_cast<size_t>(j) * m];
+    }
+  }
+  return ab;
+}
+
+// How the pivots of the band LU factorization are compared: exactly for
+// real T; for complex T only counted, as the factors, since flang's complex
+// division of the multipliers rounds differently and can flip near-ties
+// (seen in CGBTRF of order 100 and 150).
+template <typename T>
+constexpr Kind BandPivots() {
+  return kComplex<T> ? Kind::kOther : Kind::kInteger;
+}
+
+// gbtrf or gbtf2 (unblocked).
+template <typename T>
+Result Gbtrf(const BlasLibrary& lib, bool unblocked, std::vector<T> ab, I m,
+             I n, I kl, I ku) {
+  using F = void (*)(const I*, const I*, const I*, const I*, T*, const I*, I*,
+                     I*);
+  const I ldab = 2 * kl + ku + 1;
+  std::vector<I> ipiv(std::max<I>(std::min(m, n), 1));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + (unblocked ? "gbtf2_" : "gbtrf_"))
+                 .c_str())(&m, &n, &kl, &ku, ab.data(), &ldab, ipiv.data(),
+                           &info);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "ipiv", BandPivots<T>(), ipiv);
+  Add(r, "ab", Kind::kOther, ab);
+  return r;
+}
+
+template <typename T>
+Result Gbtrs(const BlasLibrary& lib, char trans, const std::vector<T>& lu,
+             const std::vector<I>& ipiv, I n, I kl, I ku, std::vector<T> b,
+             I nrhs) {
+  using F = void (*)(const char*, const I*, const I*, const I*, const I*,
+                     const T*, const I*, const I*, T*, const I*, I*, size_t);
+  const I ldab = 2 * kl + ku + 1, ldb = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gbtrs_").c_str())(
+      &trans, &n, &kl, &ku, &nrhs, lu.data(), &ldab, ipiv.data(), b.data(),
+      &ldb, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Gbsv(const BlasLibrary& lib, std::vector<T> ab, I n, I kl, I ku,
+            std::vector<T> b, I nrhs) {
+  using F = void (*)(const I*, const I*, const I*, const I*, T*, const I*, I*,
+                     T*, const I*, I*);
+  const I ldab = 2 * kl + ku + 1, ldb = std::max<I>(n, 1);
+  std::vector<I> ipiv(std::max<I>(n, 1));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gbsv_").c_str())(
+      &n, &kl, &ku, &nrhs, ab.data(), &ldab, ipiv.data(), b.data(), &ldb,
+      &info);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "ipiv", BandPivots<T>(), ipiv);
+  Add(r, "ab", Kind::kOther, ab);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Gbcon(const BlasLibrary& lib, char norm, const std::vector<T>& lu,
+             const std::vector<I>& ipiv, I n, I kl, I ku, Real<T> anorm) {
+  using R = Real<T>;
+  const I ldab = 2 * kl + ku + 1, ld = std::max<I>(n, 1);
+  R rcond = -1;
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "gbcon_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const I*, const I*, const T*,
+                       const I*, const I*, const R*, R*, T*, R*, I*, size_t);
+    std::vector<T> work(2 * ld);
+    std::vector<R> rwork(ld);
+    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab,
+                             ipiv.data(), &anorm, &rcond, work.data(),
+                             rwork.data(), &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const I*, const T*,
+                       const I*, const I*, const R*, R*, T*, I*, I*, size_t);
+    std::vector<T> work(3 * ld);
+    std::vector<I> iwork(ld);
+    lib.Get<F>(name.c_str())(&norm, &n, &kl, &ku, lu.data(), &ldab,
+                             ipiv.data(), &anorm, &rcond, work.data(),
+                             iwork.data(), &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "rcond", Kind::kValues, &rcond, 1);
+  return r;
+}
+
+// latbs with the triangular band matrix ab (kd + 1 rows) and normin = 'N'.
+template <typename T>
+Result Latbs(const BlasLibrary& lib, char uplo, char trans, char diag,
+             const std::vector<T>& ab, I n, I kd, std::vector<T> x,
+             Real<T> xscale) {
+  for (T& v : x) v *= xscale;
+  using R = Real<T>;
+  using F = void (*)(const char*, const char*, const char*, const char*,
+                     const I*, const I*, const T*, const I*, T*, R*, R*, I*,
+                     size_t, size_t, size_t, size_t);
+  const I ldab = kd + 1;
+  const char normin = 'N';
+  std::vector<R> cnorm(std::max<I>(n, 1));
+  R scale = -1;
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "latbs_").c_str())(
+      &uplo, &trans, &diag, &normin, &n, &kd, ab.data(), &ldab, x.data(),
+      &scale, cnorm.data(), &info, 1, 1, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  // SCALE and CNORM with the tolerance for complex T (they show the scaling
+  // decisions). The complex X is not, nor SCALE of the lower triangular
+  // A**T and A**H solves: C/ZLATBS in the reference drop an element of A
+  // there in scaled solves (see LatbsComplex in src/lapack/gbsv.cc).
+  Add(r, "scale",
+      uplo == 'L' && trans != 'N' ? Kind::kOther : Kind::kValues, &scale, 1);
+  Add(r, "x", Kind::kOther, x);
+  Add(r, "cnorm", Kind::kValues, cnorm);
+  return r;
+}
+
+// pbtrf, pbtf2 (unblocked), potf2 (kd = -1: the full matrix ab of order n)
+// or pbsv (b given).
+template <typename T>
+Result Pbtrf(const BlasLibrary& lib, const char* name, char uplo,
+             std::vector<T> ab, I n, I kd, std::vector<T> b = {}, I nrhs = 0) {
+  const I ldab = kd < 0 ? std::max<I>(n, 1) : kd + 1, ldb = std::max<I>(n, 1);
+  const std::string f = std::string(Prefix<T>()) + name;
+  I info = 0;
+  if (kd < 0) {
+    using F = void (*)(const char*, const I*, T*, const I*, I*, size_t);
+    lib.Get<F>(f.c_str())(&uplo, &n, ab.data(), &ldab, &info, 1);
+  } else if (b.empty()) {
+    using F = void (*)(const char*, const I*, const I*, T*, const I*, I*,
+                       size_t);
+    lib.Get<F>(f.c_str())(&uplo, &n, &kd, ab.data(), &ldab, &info, 1);
+  } else {
+    using F = void (*)(const char*, const I*, const I*, const I*, T*,
+                       const I*, T*, const I*, I*, size_t);
+    lib.Get<F>(f.c_str())(&uplo, &n, &kd, &nrhs, ab.data(), &ldab, b.data(),
+                          &ldb, &info, 1);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "ab", Kind::kOther, ab);
+  if (!b.empty()) Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+template <typename T>
+Result Pbtrs(const BlasLibrary& lib, char uplo, const std::vector<T>& f, I n,
+             I kd, std::vector<T> b, I nrhs) {
+  using F = void (*)(const char*, const I*, const I*, const I*, const T*,
+                     const I*, T*, const I*, I*, size_t);
+  const I ldab = kd + 1, ldb = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "pbtrs_").c_str())(
+      &uplo, &n, &kd, &nrhs, f.data(), &ldab, b.data(), &ldb, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// A tridiagonal matrix and its factorization.
+template <typename T>
+struct Tri {
+  std::vector<T> dl, d, du, du2;
+  std::vector<I> ipiv;
+};
+
+// gttrf (b empty) or gtsv.
+template <typename T>
+Result Gttrf(const BlasLibrary& lib, Tri<T> t, I n, std::vector<T> b = {},
+             I nrhs = 0, Tri<T>* factor = nullptr) {
+  I info = 0;
+  const I ldb = std::max<I>(n, 1);
+  t.du2.assign(std::max<I>(n, 1), T(0));
+  t.ipiv.assign(std::max<I>(n, 1), 0);
+  if (b.empty()) {
+    using F = void (*)(const I*, T*, T*, T*, T*, I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "gttrf_").c_str())(
+        &n, t.dl.data(), t.d.data(), t.du.data(), t.du2.data(), t.ipiv.data(),
+        &info);
+  } else {
+    using F = void (*)(const I*, const I*, T*, T*, T*, T*, const I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "gtsv_").c_str())(
+        &n, &nrhs, t.dl.data(), t.d.data(), t.du.data(), b.data(), &ldb,
+        &info);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "dl", Kind::kOther, t.dl);
+  Add(r, "d", Kind::kOther, t.d);
+  Add(r, "du", Kind::kOther, t.du);
+  if (b.empty()) {
+    Add(r, "du2", Kind::kOther, t.du2);
+    Add(r, "ipiv", Kind::kInteger, t.ipiv);
+  } else {
+    Add(r, "b", Kind::kOther, b);
+  }
+  if (factor != nullptr) *factor = t;
+  return r;
+}
+
+template <typename T>
+Result Gttrs(const BlasLibrary& lib, char trans, const Tri<T>& f, I n,
+             std::vector<T> b, I nrhs) {
+  using F = void (*)(const char*, const I*, const I*, const T*, const T*,
+                     const T*, const T*, const I*, T*, const I*, I*, size_t);
+  const I ldb = std::max<I>(n, 1);
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gttrs_").c_str())(
+      &trans, &n, &nrhs, f.dl.data(), f.d.data(), f.du.data(), f.du2.data(),
+      f.ipiv.data(), b.data(), &ldb, &info, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// pttrf (b empty) or ptsv.
+template <typename T>
+Result Pttrf(const BlasLibrary& lib, std::vector<Real<T>> d, std::vector<T> e,
+             I n, std::vector<T> b = {}, I nrhs = 0) {
+  using R = Real<T>;
+  I info = 0;
+  const I ldb = std::max<I>(n, 1);
+  if (b.empty()) {
+    using F = void (*)(const I*, R*, T*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "pttrf_").c_str())(
+        &n, d.data(), e.data(), &info);
+  } else {
+    using F = void (*)(const I*, const I*, R*, T*, T*, const I*, I*);
+    lib.Get<F>((std::string(Prefix<T>()) + "ptsv_").c_str())(
+        &n, &nrhs, d.data(), e.data(), b.data(), &ldb, &info);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "d", Kind::kOther, d);
+  Add(r, "e", Kind::kOther, e);
+  if (!b.empty()) Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// pttrs (uplo for complex T only).
+template <typename T>
+Result Pttrs(const BlasLibrary& lib, char uplo, const std::vector<Real<T>>& d,
+             const std::vector<T>& e, I n, std::vector<T> b, I nrhs) {
+  using R = Real<T>;
+  const I ldb = std::max<I>(n, 1);
+  I info = 0;
+  const std::string name = std::string(Prefix<T>()) + "pttrs_";
+  if constexpr (kComplex<T>) {
+    using F = void (*)(const char*, const I*, const I*, const R*, const T*, T*,
+                       const I*, I*, size_t);
+    lib.Get<F>(name.c_str())(&uplo, &n, &nrhs, d.data(), e.data(), b.data(),
+                             &ldb, &info, 1);
+  } else {
+    using F = void (*)(const I*, const I*, const R*, const T*, T*, const I*,
+                       I*);
+    lib.Get<F>(name.c_str())(&n, &nrhs, d.data(), e.data(), b.data(), &ldb,
+                             &info);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "b", Kind::kOther, b);
+  return r;
+}
+
+// The band and tridiagonal routines for matrices of order s: general band
+// matrices (square, and with three more rows or columns for the
+// factorization) with several bandwidths, also wide enough for the blocked
+// code (ILAENV's block size for xGBTRF and xPBTRF is 32 only for more than
+// 64 superdiagonals), random, graded and with small integers (ties);
+// xLATBS with matrices that need scaling; positive definite band matrices;
+// general and positive definite tridiagonal matrices. The routines that take
+// a factorization get hwyBLAS's in both libraries.
+template <typename T>
+void RunBand(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
+  using R = Real<T>;
+  // The other drivers get the same matrices with and without these cases.
+  const std::mt19937_64 saved = rng;
+  char what[96];
+  const I nrhs = 3;
+  const std::vector<T> b = TestMatrix<T>(0, std::max<I>(s, 1), nrhs);
+  const I bands[][2] = {{0, 0},
+                        {1, 1},
+                        {s / 4 + 1, s / 3},
+                        {s / 2, 2},
+                        {std::min<I>(s, 40), std::min<I>(s, 70)}};
+  for (const auto& band : bands) {
+    const I kl = band[0], ku = band[1], ldab = 2 * kl + ku + 1;
+    for (const int kind : {0, 2, 4}) {
+      for (const I dm : {0, 3, -3}) {
+        const I m = dm > 0 ? s + dm : s, n = dm < 0 ? s - dm : s;
+        const std::vector<T> ab =
+            BandOf(TestMatrix<T>(kind, m, n), m, n, kl, ku, kl + ku, ldab);
+        snprintf(what, sizeof(what), "m=%d n=%d kl=%d ku=%d kind=%d", int(m),
+                 int(n), int(kl), int(ku), kind);
+        for (const bool unblocked : {false, true}) {
+          Case<T>(hwy, ref, unblocked ? "gbtf2" : "gbtrf", what, n,
+                  [&](const BlasLibrary& lib, I) {
+                    return Gbtrf(lib, unblocked, ab, m, n, kl, ku);
+                  });
+        }
+        if (m != n) continue;
+        Case<T>(hwy, ref, "gbsv", what, n, [&](const BlasLibrary& lib, I) {
+          return Gbsv(lib, ab, n, kl, ku, b, nrhs);
+        });
+        // hwyBLAS's factorization for xGBTRS and xGBCON.
+        std::vector<T> lu = ab;
+        std::vector<I> ipiv(std::max<I>(n, 1));
+        {
+          using F = void (*)(const I*, const I*, const I*, const I*, T*,
+                             const I*, I*, I*);
+          I info = 0;
+          hwy.Get<F>((std::string(Prefix<T>()) + "gbtrf_").c_str())(
+              &n, &n, &kl, &ku, lu.data(), &ldab, ipiv.data(), &info);
+          if (info != 0) continue;
+        }
+        for (const char trans : {'N', 'T', 'C'}) {
+          snprintf(what, sizeof(what), "n=%d kl=%d ku=%d kind=%d trans=%c",
+                   int(n), int(kl), int(ku), kind, trans);
+          Case<T>(hwy, ref, "gbtrs", what, n, [&](const BlasLibrary& lib, I) {
+            return Gbtrs(lib, trans, lu, ipiv, n, kl, ku, b, nrhs);
+          });
+        }
+        for (const char norm : {'1', 'I'}) {
+          snprintf(what, sizeof(what), "n=%d kl=%d ku=%d kind=%d norm=%c",
+                   int(n), int(kl), int(ku), kind, norm);
+          Case<T>(hwy, ref, "gbcon", what, n, [&](const BlasLibrary& lib, I) {
+            return Gbcon(lib, norm, lu, ipiv, n, kl, ku, R(n + 1));
+          });
+        }
+      }
+    }
+  }
+
+  // xGBCON with solves that scale: an upper triangular band matrix (KL =
+  // 0, so that U = A) with a tiny diagonal.
+  for (const I ku : {I(1), I(3)}) {
+    const I ldab = ku + 1;
+    std::vector<T> u = TestMatrix<T>(0, ldab, std::max<I>(s, 1));
+    for (I j = 0; j < s; ++j) {
+      u[ku + static_cast<size_t>(j) * ldab] *=
+          std::numeric_limits<R>::min() / std::numeric_limits<R>::epsilon() *
+          R(1 << 20);
+    }
+    std::vector<I> ipiv(std::max<I>(s, 1));
+    for (I j = 0; j < s; ++j) ipiv[j] = j + 1;
+    for (const char norm : {'1', 'I'}) {
+      snprintf(what, sizeof(what), "n=%d ku=%d tiny diagonal norm=%c", int(s),
+               int(ku), norm);
+      Case<T>(hwy, ref, "gbcon", what, s, [&](const BlasLibrary& lib, I) {
+        return Gbcon(lib, norm, u, ipiv, s, 0, ku, R(2));
+      });
+    }
+  }
+
+  // xLATBS: kind 0 random with a dominant diagonal (xTBSV), 1 a tiny
+  // diagonal (growth: the scaled solve), 2 huge off-diagonal elements
+  // (CNORM scaled by TSCAL), 3 a zero on the diagonal (SCALE = 0); b of
+  // order 1 or near the overflow threshold.
+  const R smlnum = std::numeric_limits<R>::min() /
+                   std::numeric_limits<R>::epsilon();
+  for (const I kd : {I(0), I(1), I(3), std::min<I>(s, 20)}) {
+    for (const int kind : {0, 1, 2, 3}) {
+      std::vector<T> ab = TestMatrix<T>(0, kd + 1, s);
+      for (const char uplo : {'U', 'L'}) {
+        const I dr = uplo == 'U' ? kd : 0;
+        std::vector<T> t = ab;
+        for (I j = 0; j < s; ++j) {
+          for (I i = 0; i <= kd; ++i) {
+            T& x = t[i + static_cast<size_t>(j) * (kd + 1)];
+            if (i == dr) {
+              if (kind == 0) x += T(R(kd + 2));
+              if (kind == 1) x *= smlnum * R(64);
+            } else if (kind == 2) {
+              x *= std::numeric_limits<R>::max() / R(16 * (kd + 1));
+            }
+          }
+        }
+        if (kind == 3 && s > 0) t[dr + static_cast<size_t>(s / 2) * (kd + 1)] = T(0);
+        for (const char trans : {'N', 'T', 'C'}) {
+          for (const char diag : {'N', 'U'}) {
+            snprintf(what, sizeof(what), "n=%d kd=%d kind=%d %c%c%c", int(s),
+                     int(kd), kind, uplo, trans, diag);
+            for (const R xscale : {R(1), R(0.25) / smlnum}) {
+              Case<T>(hwy, ref, "latbs", what, s,
+                      [&](const BlasLibrary& lib, I) {
+                        return Latbs(lib, uplo, trans, diag, t, s, kd,
+                                     std::vector<T>(b.begin(),
+                                                    b.begin() +
+                                                        std::max<I>(s, 1)),
+                                     xscale);
+                      });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Positive definite band matrices, and xPOTF2.
+  const std::vector<T> spd = PositiveDefinite<T>(s);
+  for (const char uplo : {'U', 'L'}) {
+    snprintf(what, sizeof(what), "n=%d uplo=%c", int(s), uplo);
+    Case<T>(hwy, ref, "potf2", what, s, [&](const BlasLibrary& lib, I) {
+      return Pbtrf(lib, "potf2_", uplo, spd, s, -1);
+    });
+    for (const I kd : {I(0), I(1), s / 3, std::min<I>(s, 70)}) {
+      const I ld = kd + 1;
+      // Random, with a dominant real diagonal.
+      std::vector<T> pb = TestMatrix<T>(0, ld, std::max<I>(s, 1));
+      for (I j = 0; j < s; ++j) {
+        T& x = pb[(uplo == 'U' ? kd : 0) + static_cast<size_t>(j) * ld];
+        x = T(R(2 * kd + 2) + std::real(x));
+      }
+      snprintf(what, sizeof(what), "n=%d kd=%d uplo=%c", int(s), int(kd), uplo);
+      for (const char* name : {"pbtrf_", "pbtf2_"}) {
+        Case<T>(hwy, ref, std::string(name).substr(0, 5), what, s,
+                [&](const BlasLibrary& lib, I) {
+                  return Pbtrf(lib, name, uplo, pb, s, kd);
+                });
+      }
+      Case<T>(hwy, ref, "pbsv", what, s, [&](const BlasLibrary& lib, I) {
+        return Pbtrf(lib, "pbsv_", uplo, pb, s, kd, b, nrhs);
+      });
+      std::vector<T> f = pb;
+      {
+        using F = void (*)(const char*, const I*, const I*, T*, const I*, I*,
+                           size_t);
+        I info = 0;
+        hwy.Get<F>((std::string(Prefix<T>()) + "pbtrf_").c_str())(
+            &uplo, &s, &kd, f.data(), &ld, &info, 1);
+        if (info != 0) continue;
+      }
+      Case<T>(hwy, ref, "pbtrs", what, s, [&](const BlasLibrary& lib, I) {
+        return Pbtrs(lib, uplo, f, s, kd, b, nrhs);
+      });
+    }
+  }
+
+  // Tridiagonal matrices: random, with small diagonals (row interchanges),
+  // and with small integers (ties, zero subdiagonals).
+  for (const int kind : {0, 1, 4}) {
+    const std::vector<T> g = TestMatrix<T>(kind == 4 ? 4 : 0, 3, std::max<I>(s, 1));
+    Tri<T> t;
+    for (I i = 0; i < std::max<I>(s, 1); ++i) {
+      t.dl.push_back(g[3 * i]);
+      t.d.push_back(kind == 1 ? g[3 * i + 1] * R(0.01) : g[3 * i + 1]);
+      t.du.push_back(g[3 * i + 2]);
+    }
+    for (const I k : {I(1), I(2), nrhs}) {
+      snprintf(what, sizeof(what), "n=%d kind=%d nrhs=%d", int(s), kind, int(k));
+      Case<T>(hwy, ref, "gtsv", what, s, [&](const BlasLibrary& lib, I) {
+        return Gttrf(lib, t, s, b, k);
+      });
+    }
+    snprintf(what, sizeof(what), "n=%d kind=%d", int(s), kind);
+    Tri<T> f;
+    Case<T>(hwy, ref, "gttrf", what, s, [&](const BlasLibrary& lib, I) {
+      return Gttrf(lib, t, s, {}, 0, &lib == &hwy ? &f : nullptr);
+    });
+    for (const char trans : {'N', 'T', 'C'}) {
+      for (const I k : {I(1), nrhs}) {
+        snprintf(what, sizeof(what), "n=%d kind=%d trans=%c nrhs=%d", int(s),
+                 kind, trans, int(k));
+        Case<T>(hwy, ref, "gttrs", what, s, [&](const BlasLibrary& lib, I) {
+          return Gttrs(lib, trans, f, s, b, k);
+        });
+      }
+    }
+  }
+  // Positive definite tridiagonal matrices.
+  {
+    std::vector<R> d;
+    std::vector<T> e;
+    for (I i = 0; i < std::max<I>(s, 1); ++i) {
+      d.push_back(R(4) + std::real(Random<T>()));
+      e.push_back(Random<T>());
+    }
+    snprintf(what, sizeof(what), "n=%d", int(s));
+    Case<T>(hwy, ref, "pttrf", what, s, [&](const BlasLibrary& lib, I) {
+      return Pttrf<T>(lib, d, e, s);
+    });
+    for (const I k : {I(1), I(2), nrhs}) {
+      snprintf(what, sizeof(what), "n=%d nrhs=%d", int(s), int(k));
+      Case<T>(hwy, ref, "ptsv", what, s, [&](const BlasLibrary& lib, I) {
+        return Pttrf<T>(lib, d, e, s, b, k);
+      });
+    }
+    std::vector<R> df = d;
+    std::vector<T> ef = e;
+    {
+      using F = void (*)(const I*, R*, T*, I*);
+      I info = 0;
+      hwy.Get<F>((std::string(Prefix<T>()) + "pttrf_").c_str())(
+          &s, df.data(), ef.data(), &info);
+    }
+    for (const char uplo : {'U', 'L'}) {
+      for (const I k : {I(1), I(2), nrhs}) {
+        snprintf(what, sizeof(what), "n=%d uplo=%c nrhs=%d", int(s), uplo,
+                 int(k));
+        Case<T>(hwy, ref, "pttrs", what, s, [&](const BlasLibrary& lib, I) {
+          return Pttrs<T>(lib, uplo, df, ef, s, b, k);
+        });
+      }
+    }
+  }
+  rng = saved;
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -3385,6 +3923,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunSyevd<T>(hwy, ref, n);
     RunSyevr<T>(hwy, ref, n);
     RunGels<T>(hwy, ref, n);
+    RunBand<T>(hwy, ref, n);
   }
 }
 

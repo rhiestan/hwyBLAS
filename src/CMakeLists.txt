@@ -21,6 +21,7 @@ if(HWYBLAS_LAPACK)
     lapack/gesvx.cc
     lapack/rotation_kernels.cc
     lapack/bdsdc.cc
+    lapack/gbsv.cc
     lapack/bdsqr.cc
     lapack/bidiagonal.cc
     lapack/gels.cc
@@ -28,6 +29,7 @@ if(HWYBLAS_LAPACK)
     lapack/geqp3.cc
     lapack/geqrf.cc
     lapack/gglse.cc
+    lapack/gtsv.cc
     lapack/gesdd.cc
     lapack/gesvd.cc
     lapack/gees.cc
@@ -37,6 +39,7 @@ if(HWYBLAS_LAPACK)
     lapack/hseqr.cc
     lapack/householder.cc
     lapack/lapacke.cc
+    lapack/lapacke_band.cc
     lapack/lapacke_geev.cc
     lapack/lapacke_gels.cc
     lapack/lapacke_linear.cc
@@ -45,6 +48,7 @@ if(HWYBLAS_LAPACK)
     lapack/lapacke_syevr.cc
     lapack/lasq.cc
     lapack/norms.cc
+    lapack/pbsv.cc
     lapack/posv.cc
     lapack/potrf.cc
     lapack/steqr.cc

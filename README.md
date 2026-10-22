@@ -71,9 +71,12 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?gesv`, `?getrs`, `?getri` (linear systems and inverse with the LU factorization) | s d c z |
 | `?gesvx` (expert driver), `?gecon` (condition number), `?gerfs` (iterative refinement), `?geequ`, `?laqge` (equilibration) | s d c z |
 | `?trtrs`, `?latrs` (triangular systems), `?trtri`, `?trti2` (inverse), `?trcon`, `?trrfs`, `?lantr` | s d c z |
-| `?potrf`, `?potrf2` (Cholesky factorization), `?pstrf`, `?pstf2` (with complete pivoting) | s d c z |
+| `?potrf`, `?potrf2`, `?potf2` (Cholesky factorization), `?pstrf`, `?pstf2` (with complete pivoting) | s d c z |
 | `?posv`, `?potrs`, `?potri`, `?lauum`, `?lauu2` (positive definite systems and inverse), `?posvx` (expert driver), `?pocon`, `?porfs`, `?poequ`, `?laqsy` | s d c z |
 | `?laqhe` | c z |
+| `?gbsv`, `?gbtrf`, `?gbtf2`, `?gbtrs` (band systems), `?gbcon`, `?latbs` (triangular band systems) | s d c z |
+| `?pbsv`, `?pbtrf`, `?pbtf2`, `?pbtrs` (positive definite band systems) | s d c z |
+| `?gtsv`, `?gttrf`, `?gttrs`, `?gtts2` (tridiagonal systems), `?ptsv`, `?pttrf`, `?pttrs`, `?ptts2` (positive definite tridiagonal systems) | s d c z |
 | `?sysv`, `?sytrf`, `?lasyf`, `?sytf2` (symmetric indefinite systems, Bunch-Kaufman), `?sytrs`, `?sytrs2`, `?syconv`, `?sytri`, `?sysvx` (expert driver), `?sycon`, `?syrfs` | s d c z |
 | `?hesv`, `?hetrf`, `?lahef`, `?hetf2` (Hermitian indefinite systems), `?hetrs`, `?hetrs2`, `?hetri`, `?hesvx`, `?hecon`, `?herfs`, `?symv`, `?syr` (complex symmetric) | c z |
 | `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |

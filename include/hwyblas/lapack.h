@@ -2734,6 +2734,332 @@ HWYBLAS_API void slaruv_(hwyblas_int* iseed, const hwyblas_int* n, float* x);
 HWYBLAS_API void dlaruv_(hwyblas_int* iseed, const hwyblas_int* n, double* x);
 
 /* ------------------------------------------------------------------------ */
+/* Band and tridiagonal systems                                             */
+
+/* A = P * L * U with partial pivoting for the m x n band matrix A with kl
+ * subdiagonals and ku superdiagonals (?gbtrf blocked, ?gbtf2 unblocked).
+ * Band storage: A(i, j) in ab(kl+ku+1+i-j, j), ldab >= 2*kl+ku+1 (the
+ * first kl rows are for fill-in); on exit U in rows 1 to kl+ku+1 and the
+ * multipliers below. info > 0: U(info, info) is exactly zero. */
+HWYBLAS_API void sgbtrf_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void dgbtrf_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void cgbtrf_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void zgbtrf_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void sgbtf2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void dgbtf2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void cgbtf2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void zgbtf2_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+
+/* Solves op(A) * X = B (trans = 'N', 'T' or 'C') with the LU factorization
+ * of ?gbtrf (?gbtrs), or A * X = B, factoring A first (?gbsv); B is n x
+ * nrhs. Estimates the reciprocal condition number of A in the 1-norm
+ * (norm = '1' or 'O') or the infinity norm ('I') from its LU
+ * factorization and anorm (?gbcon); work: 3n (real) or 2n (complex),
+ * iwork / rwork: n. */
+HWYBLAS_API void sgbtrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const hwyblas_int* nrhs, const float* ab,
+                         const hwyblas_int* ldab, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgbtrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const hwyblas_int* nrhs, const double* ab,
+                         const hwyblas_int* ldab, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgbtrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const hwyblas_int* nrhs, const float* ab,
+                         const hwyblas_int* ldab, const hwyblas_int* ipiv,
+                         float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgbtrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const hwyblas_int* nrhs, const double* ab,
+                         const hwyblas_int* ldab, const hwyblas_int* ipiv,
+                         double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void sgbsv_(const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const hwyblas_int* nrhs,
+                        float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                        float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgbsv_(const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const hwyblas_int* nrhs,
+                        double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                        double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgbsv_(const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const hwyblas_int* nrhs,
+                        float* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                        float* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgbsv_(const hwyblas_int* n, const hwyblas_int* kl,
+                        const hwyblas_int* ku, const hwyblas_int* nrhs,
+                        double* ab, const hwyblas_int* ldab, hwyblas_int* ipiv,
+                        double* b, const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void sgbcon_(const char* norm, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const float* ab, const hwyblas_int* ldab,
+                         const hwyblas_int* ipiv, const float* anorm,
+                         float* rcond, float* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void dgbcon_(const char* norm, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const double* ab, const hwyblas_int* ldab,
+                         const hwyblas_int* ipiv, const double* anorm,
+                         double* rcond, double* work, hwyblas_int* iwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cgbcon_(const char* norm, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const float* ab, const hwyblas_int* ldab,
+                         const hwyblas_int* ipiv, const float* anorm,
+                         float* rcond, float* work, float* rwork,
+                         hwyblas_int* info);
+HWYBLAS_API void zgbcon_(const char* norm, const hwyblas_int* n,
+                         const hwyblas_int* kl, const hwyblas_int* ku,
+                         const double* ab, const hwyblas_int* ldab,
+                         const hwyblas_int* ipiv, const double* anorm,
+                         double* rcond, double* work, double* rwork,
+                         hwyblas_int* info);
+
+/* Solves op(A) * x = scale * b with the triangular band matrix A (kd
+ * super- or subdiagonals, band storage), scaling against overflow as
+ * ?latrs; cnorm: the column norms (computed for normin = 'N'). */
+HWYBLAS_API void slatbs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const hwyblas_int* kd, const float* ab,
+                         const hwyblas_int* ldab, float* x, float* scale,
+                         float* cnorm, hwyblas_int* info);
+HWYBLAS_API void dlatbs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const hwyblas_int* kd, const double* ab,
+                         const hwyblas_int* ldab, double* x, double* scale,
+                         double* cnorm, hwyblas_int* info);
+HWYBLAS_API void clatbs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const hwyblas_int* kd, const float* ab,
+                         const hwyblas_int* ldab, float* x, float* scale,
+                         float* cnorm, hwyblas_int* info);
+HWYBLAS_API void zlatbs_(const char* uplo, const char* trans, const char* diag,
+                         const char* normin, const hwyblas_int* n,
+                         const hwyblas_int* kd, const double* ab,
+                         const hwyblas_int* ldab, double* x, double* scale,
+                         double* cnorm, hwyblas_int* info);
+
+/* A = U^H * U (uplo = 'U') or A = L * L^H ('L') for the symmetric
+ * (Hermitian) positive definite band matrix A of order n with kd super- or
+ * subdiagonals (?pbtrf blocked, ?pbtf2 unblocked; ?potf2: the unblocked
+ * Cholesky factorization of a full matrix). Band storage: uplo = 'U',
+ * A(i, j) in ab(kd+1+i-j, j); 'L', in ab(1+i-j, j); ldab >= kd+1. Solves
+ * A * X = B with the factorization (?pbtrs), or factoring A first
+ * (?pbsv). info > 0: the leading minor of order info is not positive. */
+HWYBLAS_API void spbtrf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, float* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void dpbtrf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, double* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void cpbtrf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, float* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void zpbtrf_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, double* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void spbtf2_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, float* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void dpbtf2_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, double* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void cpbtf2_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, float* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void zpbtf2_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, double* ab,
+                         const hwyblas_int* ldab, hwyblas_int* info);
+HWYBLAS_API void spotf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void dpotf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void cpotf2_(const char* uplo, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void zpotf2_(const char* uplo, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, hwyblas_int* info);
+HWYBLAS_API void spbtrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, const hwyblas_int* nrhs,
+                         const float* ab, const hwyblas_int* ldab, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dpbtrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, const hwyblas_int* nrhs,
+                         const double* ab, const hwyblas_int* ldab, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cpbtrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, const hwyblas_int* nrhs,
+                         const float* ab, const hwyblas_int* ldab, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zpbtrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* kd, const hwyblas_int* nrhs,
+                         const double* ab, const hwyblas_int* ldab, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void spbsv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* kd, const hwyblas_int* nrhs,
+                        float* ab, const hwyblas_int* ldab, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dpbsv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* kd, const hwyblas_int* nrhs,
+                        double* ab, const hwyblas_int* ldab, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cpbsv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* kd, const hwyblas_int* nrhs,
+                        float* ab, const hwyblas_int* ldab, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zpbsv_(const char* uplo, const hwyblas_int* n,
+                        const hwyblas_int* kd, const hwyblas_int* nrhs,
+                        double* ab, const hwyblas_int* ldab, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+
+/* The tridiagonal matrix A with subdiagonal dl (n-1), diagonal d (n) and
+ * superdiagonal du (n-1): A = L * U with partial pivoting (?gttrf; du2:
+ * the second superdiagonal of U, n-2); solves op(A) * X = B with it
+ * (?gttrs; ?gtts2 without argument checks, itrans = 0, 1 or 2 for 'N',
+ * 'T', 'C'), or factoring A first (?gtsv). info > 0: U(info, info) is
+ * exactly zero. */
+HWYBLAS_API void sgttrf_(const hwyblas_int* n, float* dl, float* d, float* du,
+                         float* du2, hwyblas_int* ipiv, hwyblas_int* info);
+HWYBLAS_API void dgttrf_(const hwyblas_int* n, double* dl, double* d,
+                         double* du, double* du2, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void cgttrf_(const hwyblas_int* n, float* dl, float* d, float* du,
+                         float* du2, hwyblas_int* ipiv, hwyblas_int* info);
+HWYBLAS_API void zgttrf_(const hwyblas_int* n, double* dl, double* d,
+                         double* du, double* du2, hwyblas_int* ipiv,
+                         hwyblas_int* info);
+HWYBLAS_API void sgttrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* dl,
+                         const float* d, const float* du, const float* du2,
+                         const hwyblas_int* ipiv, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgttrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* dl,
+                         const double* d, const double* du, const double* du2,
+                         const hwyblas_int* ipiv, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgttrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* dl,
+                         const float* d, const float* du, const float* du2,
+                         const hwyblas_int* ipiv, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgttrs_(const char* trans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* dl,
+                         const double* d, const double* du, const double* du2,
+                         const hwyblas_int* ipiv, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void sgtts2_(const hwyblas_int* itrans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* dl,
+                         const float* d, const float* du, const float* du2,
+                         const hwyblas_int* ipiv, float* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void dgtts2_(const hwyblas_int* itrans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* dl,
+                         const double* d, const double* du, const double* du2,
+                         const hwyblas_int* ipiv, double* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void cgtts2_(const hwyblas_int* itrans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* dl,
+                         const float* d, const float* du, const float* du2,
+                         const hwyblas_int* ipiv, float* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void zgtts2_(const hwyblas_int* itrans, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* dl,
+                         const double* d, const double* du, const double* du2,
+                         const hwyblas_int* ipiv, double* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void sgtsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        float* dl, float* d, float* du, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dgtsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* dl, double* d, double* du, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cgtsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        float* dl, float* d, float* du, float* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void zgtsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* dl, double* d, double* du, double* b,
+                        const hwyblas_int* ldb, hwyblas_int* info);
+
+/* The symmetric (Hermitian) positive definite tridiagonal matrix A with
+ * real diagonal d (n) and subdiagonal e (n-1): A = L * D * L^H (?pttrf);
+ * solves A * X = B with it (?pttrs; ?ptts2 without argument checks; the
+ * complex routines take uplo, 'U' if e is the superdiagonal of U = L^H,
+ * or iuplo = 1 or 0), or factoring A first (?ptsv). info > 0: the leading
+ * minor of order info is not positive. */
+HWYBLAS_API void spttrf_(const hwyblas_int* n, float* d, float* e,
+                         hwyblas_int* info);
+HWYBLAS_API void dpttrf_(const hwyblas_int* n, double* d, double* e,
+                         hwyblas_int* info);
+HWYBLAS_API void cpttrf_(const hwyblas_int* n, float* d, float* e,
+                         hwyblas_int* info);
+HWYBLAS_API void zpttrf_(const hwyblas_int* n, double* d, double* e,
+                         hwyblas_int* info);
+HWYBLAS_API void spttrs_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* d, const float* e, float* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void dpttrs_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* d, const double* e, double* b,
+                         const hwyblas_int* ldb, hwyblas_int* info);
+HWYBLAS_API void cpttrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* d,
+                         const float* e, float* b, const hwyblas_int* ldb,
+                         hwyblas_int* info);
+HWYBLAS_API void zpttrs_(const char* uplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* d,
+                         const double* e, double* b, const hwyblas_int* ldb,
+                         hwyblas_int* info);
+HWYBLAS_API void sptts2_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const float* d, const float* e, float* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void dptts2_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                         const double* d, const double* e, double* b,
+                         const hwyblas_int* ldb);
+HWYBLAS_API void cptts2_(const hwyblas_int* iuplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const float* d,
+                         const float* e, float* b, const hwyblas_int* ldb);
+HWYBLAS_API void zptts2_(const hwyblas_int* iuplo, const hwyblas_int* n,
+                         const hwyblas_int* nrhs, const double* d,
+                         const double* e, double* b, const hwyblas_int* ldb);
+HWYBLAS_API void sptsv_(const hwyblas_int* n, const hwyblas_int* nrhs, float* d,
+                        float* e, float* b, const hwyblas_int* ldb,
+                        hwyblas_int* info);
+HWYBLAS_API void dptsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* d, double* e, double* b, const hwyblas_int* ldb,
+                        hwyblas_int* info);
+HWYBLAS_API void cptsv_(const hwyblas_int* n, const hwyblas_int* nrhs, float* d,
+                        float* e, float* b, const hwyblas_int* ldb,
+                        hwyblas_int* info);
+HWYBLAS_API void zptsv_(const hwyblas_int* n, const hwyblas_int* nrhs,
+                        double* d, double* e, double* b, const hwyblas_int* ldb,
+                        hwyblas_int* info);
+
+/* ------------------------------------------------------------------------ */
 /* Least squares                                                            */
 
 /* A = R * Q (?gerqf, blocked; ?gerq2 unblocked) for the m x n matrix A: R

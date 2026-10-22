@@ -113,6 +113,25 @@ RealT<T> Cabs1(T z) {
   return std::abs(std::real(z)) + std::abs(std::imag(z));
 }
 
+// CONJG(z) for complex z, z for real z (in branches of a merged template
+// that only complex T reaches).
+template <typename T>
+T Conj(T z) {
+  if constexpr (IsComplex<T>::value) {
+    return std::conj(z);
+  } else {
+    return z;
+  }
+}
+
+// CABS2(z) = |Re(z) / 2| + |Im(z) / 2|, the statement function of xLATRS
+// and xLATBS.
+template <typename T>
+RealT<T> Cabs2(T z) {
+  using R = RealT<T>;
+  return std::abs(std::real(z) / R(2)) + std::abs(std::imag(z) / R(2));
+}
+
 // MAX(a, b, ...) and MIN(a, b, ...) as Fortran (flang) evaluates them:
 // a > b ? a : b (a < b ? a : b for MIN), from the left. They differ from
 // std::max and std::min only if an argument is NaN (and for zeros of

@@ -180,6 +180,42 @@ bool PoNancheck(int matrix_layout, char uplo, lapack_int n, const T* a,
   return TrNancheck(matrix_layout, uplo, 'N', n, a, lda);
 }
 
+// LAPACKE_xgb_nancheck: whether the m x n band matrix A with kl
+// subdiagonals and ku superdiagonals contains a NaN. A is in band storage:
+// column-major, A(i, j) in ab[ku+i-j + j*ldab]; row-major, the transpose,
+// ab[(ku+i-j)*ldab + j].
+template <typename T>
+bool GbNancheck(int matrix_layout, lapack_int m, lapack_int n, lapack_int kl,
+                lapack_int ku, const T* ab, lapack_int ldab) {
+  if (ab == nullptr) return false;
+  const bool colmaj = matrix_layout == LAPACK_COL_MAJOR;
+  if (!colmaj && matrix_layout != LAPACK_ROW_MAJOR) return false;
+  for (lapack_int j = 0; j < n; ++j) {
+    for (lapack_int i = std::max<lapack_int>(ku - j, 0);
+         i < std::min(m + ku - j, kl + ku + 1); ++i) {
+      if (IsNan(colmaj ? ab[i + static_cast<size_t>(j) * ldab]
+                       : ab[static_cast<size_t>(i) * ldab + j])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// LAPACKE_xpb_nancheck: the symmetric (Hermitian) band matrix of order n
+// with kd super- (uplo = 'U') or subdiagonals ('L'). Returns false for an
+// invalid uplo.
+template <typename T>
+bool PbNancheck(int matrix_layout, char uplo, lapack_int n, lapack_int kd,
+                const T* ab, lapack_int ldab) {
+  if (lapack::Lsame(uplo, 'U')) {
+    return GbNancheck(matrix_layout, n, n, 0, kd, ab, ldab);
+  } else if (lapack::Lsame(uplo, 'L')) {
+    return GbNancheck(matrix_layout, n, n, kd, 0, ab, ldab);
+  }
+  return false;
+}
+
 // LAPACKE_xge_trans: copies the transpose of the m x n matrix `in` (in the
 // given layout) to `out`, which then holds it in the other layout. In case
 // of incorrect m, n, ldin or ldout it does nothing (or copies less).
@@ -242,6 +278,34 @@ void TrTrans(int matrix_layout, char uplo, char diag, lapack_int n, const T* in,
   }
 }
 
+// LAPACKE_xgb_trans: like GeTrans, for the band storage of the m x n band
+// matrix `in` with kl subdiagonals and ku superdiagonals (see GbNancheck).
+// Like the reference, it copies at most ldin rows of a column-major `in`
+// (ldout of a column-major `out`) and min(n, ldout) columns (min(n, ldin)).
+template <typename T>
+void GbTrans(int matrix_layout, lapack_int m, lapack_int n, lapack_int kl,
+             lapack_int ku, const T* in, lapack_int ldin, T* out,
+             lapack_int ldout) {
+  if (in == nullptr || out == nullptr) return;
+  if (matrix_layout == LAPACK_COL_MAJOR) {
+    for (lapack_int j = 0; j < std::min(ldout, n); ++j) {
+      for (lapack_int i = std::max<lapack_int>(ku - j, 0);
+           i < std::min({ldin, m + ku - j, kl + ku + 1}); ++i) {
+        out[static_cast<size_t>(i) * ldout + j] =
+            in[i + static_cast<size_t>(j) * ldin];
+      }
+    }
+  } else if (matrix_layout == LAPACK_ROW_MAJOR) {
+    for (lapack_int j = 0; j < std::min(n, ldin); ++j) {
+      for (lapack_int i = std::max<lapack_int>(ku - j, 0);
+           i < std::min({ldout, m + ku - j, kl + ku + 1}); ++i) {
+        out[i + static_cast<size_t>(j) * ldout] =
+            in[static_cast<size_t>(i) * ldin + j];
+      }
+    }
+  }
+}
+
 // The function names of the error messages, e.g. Name<double>("getrf") =
 // "LAPACKE_dgetrf".
 template <typename T>
@@ -285,6 +349,12 @@ struct MatrixArg {
   // false: the routine does not reference the matrix (e.g. Z of xSTEQR for
   // COMPZ = 'N'), which then gets no temporary (a null pointer).
   bool used = true;
+  // For uplo 'B': a band matrix of band_m rows (and cols columns) with kl
+  // subdiagonals and ku superdiagonals, in band storage of rows = kl+ku+1
+  // rows (LAPACKE_xgb_trans).
+  lapack_int band_m = 0;
+  lapack_int kl = 0;
+  lapack_int ku = 0;
 };
 
 // A matrix that the routine only reads.
@@ -294,11 +364,40 @@ MatrixArg<T> Input(const T* a, lapack_int rows, lapack_int cols, lapack_int ld,
   return {const_cast<T*>(a), rows, cols, ld, ld_info, true, false};
 }
 
+// A band matrix argument (see MatrixArg::band_m): the m x n matrix with
+// kl subdiagonals and ku superdiagonals in band storage `ab` (ldab).
+template <typename T>
+MatrixArg<T> Band(T* ab, lapack_int m, lapack_int n, lapack_int kl,
+                  lapack_int ku, lapack_int ldab, lapack_int ld_info) {
+  MatrixArg<T> arg{ab, kl + ku + 1, n, ldab, ld_info};
+  arg.uplo = 'B';
+  arg.band_m = m;
+  arg.kl = kl;
+  arg.ku = ku;
+  return arg;
+}
+
+// The symmetric (Hermitian) band matrix of order n with kd super- (uplo =
+// 'U') or subdiagonals ('L'), as LAPACKE_xpb_trans copies it.
+template <typename T>
+MatrixArg<T> SymmetricBand(T* ab, char uplo, lapack_int n, lapack_int kd,
+                           lapack_int ldab, lapack_int ld_info) {
+  const bool upper = lapack::Lsame(uplo, 'U');
+  MatrixArg<T> arg = Band(ab, n, n, upper ? 0 : kd, upper ? kd : 0, ldab,
+                          ld_info);
+  // LAPACKE_xpb_trans copies nothing for an invalid uplo.
+  if (!upper && !lapack::Lsame(uplo, 'L')) arg.band_m = 0;
+  return arg;
+}
+
 template <typename T>
 void Transpose(int matrix_layout, const MatrixArg<T>& arg, const T* in,
                lapack_int ldin, T* out, lapack_int ldout) {
   const bool back = matrix_layout == LAPACK_COL_MAJOR;
-  if ((arg.uplo == 'U' || arg.uplo == 'L') && !(back && arg.out_general)) {
+  if (arg.uplo == 'B') {
+    GbTrans(matrix_layout, arg.band_m, arg.cols, arg.kl, arg.ku, in, ldin, out,
+            ldout);
+  } else if ((arg.uplo == 'U' || arg.uplo == 'L') && !(back && arg.out_general)) {
     TrTrans(matrix_layout, arg.uplo, 'N', arg.rows, in, ldin, out, ldout);
   } else {
     GeTrans(matrix_layout, arg.rows, arg.cols, in, ldin, out, ldout);

@@ -70,12 +70,15 @@ The translator produces the conventions described in
   reference LAPACK finds such a difference (all residual tests pass). Where the real and complex routines
   differ by more than conjugation, the difference is kept with
   `if constexpr`, or the two are ported as separate functions behind one
-  template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`),
+  template (`GesvdReal` / `GesvdComplex`, `LatrsReal` / `LatrsComplex`,
+  `LatbsReal` / `LatbsComplex`, `GtsvReal` / `GtsvComplex`,
+  `PttrfReal` / `PttrfComplex`),
   or as two overloads of the same name where their arguments differ (`WR`
   and `WI` against `W` in xHSEQR, xLAQR*, xTRSEN, xGEES, xGEEV, xGEEVX,
   xGEESX; RWORK in xTREVC3; IWORK against RWORK in xTRSNA; the complex Q
   of ZSTEDC, ZLAED0, ZLAED7 and ZLAED8, whose other xLAED* routines are
-  real). The MRRR and inverse iteration routines whose complex version
+  real; xPTTRS and xPTTS2, whose complex routines take UPLO / IUPLO). The
+  MRRR and inverse iteration routines whose complex version
   only stores the real eigenvectors in a complex Z (xSTEMR, xLARRV,
   xLAR1V, xSTEIN) are one template for all four types: R is the real
   type of T, and the few places where the complex routine works
@@ -284,7 +287,9 @@ xORMTR / xUNMTR, xORMQL / xUNMQL, xSYGST / xHEGST, xSYGV / xHEGV and
 xSYGVD / xHEGVD; xSYEVR / xHEEVR, xSTEVR, xSYEVX / xHEEVX, xSTEVX,
 xSTEMR, xSTEBZ, xSTEIN and xLARNV; xGELS, xGELSS, xGELSD, xGELSY,
 xGGLSE, xGGGLM, xGGQRF, xGGRQF, xGERQF, xGERQ2, xTZRZF, xORMRQ / xUNMRQ
-and xORMRZ / xUNMRZ) in both on the same matrices of
+and xORMRZ / xUNMRZ; xGBTRF, xGBTF2, xGBTRS, xGBSV, xGBCON, xLATBS,
+xPOTF2, xPBTRF, xPBTF2, xPBTRS, xPBSV, xGTTRF, xGTTRS, xGTSV, xPTTRF,
+xPTTRS and xPTSV) in both on the same matrices of
 orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS
@@ -303,7 +308,11 @@ COMPLEX / REAL a full complex division, for REAL * COMPLEX a complex
 multiplication, the standard's conversion to COMPLEX first, while C++ and
 gfortran operate on the two parts; with infinities, flang's 0 * Inf gives
 NaN); the multishift QR algorithm amplifies such differences into a
-different order of the eigenvalues. The tool
+different order of the eigenvalues, and in xGBTRF into a different pivot
+at a near-tie (the complex band pivots are therefore only counted). The
+reference's C/ZLATBS drop an element of A in some scaled solves (fixed in
+the port, see `LatbsComplex`), so the complex X of xLATBS is not compared
+either. The tool
 therefore compares the complex singular values and eigenvalues with a
 tolerance (the nonsymmetric eigenvalues as sets), and only counts the
 bitwise identical results otherwise.
