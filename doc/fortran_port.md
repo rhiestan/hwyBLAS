@@ -5,7 +5,8 @@ LAPACK 3.12.1. The goal is that every routine can be read next to its Fortran
 source: same structure, same variable names, same 1-based indexing, same
 order of floating-point operations. Deviations are allowed only where they
 are documented in the routine's comment (own block sizes, fused kernels,
-fixed reference bugs).
+fixed reference bugs); those visible to users are also listed in
+[deviations.md](deviations.md).
 
 The routines of milestones M0–M2 (getrf … syev) were ported by hand. From M3
 on (gesvd, gesdd, gees, the linear systems of phase 2 and their helpers), a

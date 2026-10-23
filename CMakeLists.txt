@@ -117,12 +117,19 @@ if(HWYBLAS_INSTALL)
     install(FILES LICENSE-LAPACK
             DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/hwyblas")
   endif()
+  # Highway built here is part of the installed library, so its license is
+  # installed too (an installed Highway package comes with its own).
+  get_target_property(_hwy_imported hwy::hwy IMPORTED)
+  if(NOT _hwy_imported)
+    get_target_property(_hwy_source_dir hwy::hwy SOURCE_DIR)
+    install(FILES "${_hwy_source_dir}/LICENSE" RENAME LICENSE-highway
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/hwyblas")
+  endif()
 
   # A shared hwyblas contains Highway. A static one needs it at link time:
   # either the installed Highway package it was built against, or the
   # Highway built here, installed as hwyblas_hwy so that it cannot clash
   # with another Highway installation.
-  get_target_property(_hwy_imported hwy::hwy IMPORTED)
   set(HWYBLAS_FIND_HWY_PACKAGE FALSE)
   set(HWYBLAS_PC_LIBS_PRIVATE "")
   if(NOT BUILD_SHARED_LIBS)

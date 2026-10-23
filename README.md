@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/rhiestan/hwyBLAS/actions/workflows/ci.yml/badge.svg)](https://github.com/rhiestan/hwyBLAS/actions/workflows/ci.yml)
 
-A BLAS implementation built on [Google Highway](https://github.com/google/highway).
+A BLAS implementation built on [Google Highway](https://github.com/google/highway),
+with a port of the reference LAPACK.
 
 Goals:
 
@@ -53,17 +54,31 @@ in OpenBLAS:
 All options are supported (transposition, conjugation, side, uplo, unit
 diagonal, any vector increments including negative ones).
 
-### LAPACK (in progress)
+### LAPACK
 
-LAPACK is being ported from the reference implementation (LAPACK 3.12.1):
-first the routines that Eigen calls with `EIGEN_USE_LAPACKE`, now the
-common drivers (linear systems, eigenproblems, least squares). The
-ports follow the Fortran original line by line (same algorithms, INFO
-values, error exits and workspace rules, 1-based indexing), and are
-documented where they deviate, e.g. in block sizes or optimized kernels. The
-interfaces are the Fortran one (`hwyblas/lapack.h`, `dgetrf_` etc.) and
-LAPACKE (`hwyblas/lapacke.h`, compatible with the reference LAPACKE and
+hwyBLAS contains a port of the reference LAPACK 3.12.1: all routines that
+Eigen calls with `EIGEN_USE_LAPACKE`, and the common drivers for dense
+matrices, with the routines they call. These cover linear systems
+(general, triangular, positive definite, symmetric indefinite, band and
+tridiagonal), least squares, the symmetric, nonsymmetric and generalized
+eigenproblems, and the singular value decompositions.
+
+The ports follow the Fortran original line by line (same algorithms, INFO
+values, error exits and workspace rules, 1-based indexing). Where they
+deviate, it is documented (see [doc/deviations.md](doc/deviations.md)).
+The interfaces are the Fortran one (`hwyblas/lapack.h`, `dgetrf_` etc.)
+and LAPACKE (`hwyblas/lapacke.h`, compatible with the reference LAPACKE and
 Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
+
+Not ported are, among others: the routines for packed and RFP storage
+(e.g. `?spsv`, `?spev`, `?pftrf`), the band eigensolvers (`?sbev` etc.),
+the expert drivers `?gbsvx`, `?gtsvx`, `?ggevx`, `?ggesx` and the `?svxx`
+variants, `?stev`, the blocked `?ggev3` and `?gges3`, the 2-stage
+eigensolvers (`?syev_2stage` etc.), the other symmetric indefinite
+factorizations (rook, Aasen, `?sytrf_rk`), `?gesvdx`, the Jacobi SVD
+(`?gejsv`, `?gesvj`), the CS decomposition, the tall-skinny and
+triangular-pentagonal QR (`?geqr`, `?latsqr`, `?tpqrt`) and the
+mixed-precision solvers (`?sgesv`, `?sposv`).
 
 | Routines | Precisions |
 |----------|------------|
@@ -132,22 +147,45 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
 LAPACKE has the reference LAPACKE's functions for these routines (with
-documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx`, `LAPACKE_?syconv`,
-`LAPACKE_?ormrq` / `?unmrq` / `?ormrz` / `?unmrz` and `LAPACKE_?gemqrt`, see
-`hwyblas/lapacke.h`).
+fixes for bugs of the reference LAPACKE, see
+[doc/deviations.md](doc/deviations.md#lapacke)).
 
-Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs
-(`tests/lapack/run_lapack_testers.sh`, which links them with hwyBLAS in
-place of the reference routines), and the real drivers give bitwise
-identical results to the reference LAPACK on the same BLAS
-(`tests/lapack/compare_reference.sh`), except where a documented kernel
-rounds differently (the leaves of `?getrf2` and `?potrf2`, which make
-small LU and Cholesky factorizations several times faster). Other kernels
-keep the reference's arithmetic: the plane rotations of `?lasr`, most of
-the time of `?gesvd` and `?syev`, run in a SIMD kernel with the same
-operations on each element, in the same order. The LAPACK code keeps
-LAPACK's license (`LICENSE-LAPACK`, modified BSD). How the Fortran is translated, and the
-scripts used for it, are described in `doc/fortran_port.md`.
+Besides hwyBLAS's own tests, the ported routines are checked with LAPACK's
+test programs (`tests/lapack/run_lapack_testers.sh`, which links them with
+hwyBLAS in place of the reference routines): of their 5.1 million tests,
+7 exceed their threshold, in the symmetric tridiagonal eigenvalue tests and
+the RFP tests, and these 7 have not changed as more routines were ported.
+
+The real drivers give bitwise identical results to the reference LAPACK on
+the same BLAS (`tests/lapack/compare_reference.sh`), except for the fixed
+reference bugs and where a documented kernel rounds differently (the
+leaves of `?getrf2` and `?potrf2`, which make small LU and Cholesky
+factorizations several times faster). Other kernels keep the reference's
+arithmetic: the plane rotations of `?lasr`, most of the time of `?gesvd`
+and `?syev`, run in a SIMD kernel with the same operations on each
+element, in the same order.
+
+The LAPACK code keeps LAPACK's license (`LICENSE-LAPACK`, modified BSD).
+How the Fortran is translated, and the scripts used for it, are described
+in [doc/fortran_port.md](doc/fortran_port.md).
+
+## Documentation
+
+hwyBLAS implements standard interfaces, so the reference documentation
+describes its routines:
+
+- BLAS: [Netlib BLAS](https://www.netlib.org/blas/) and its
+  [quick reference card](https://www.netlib.org/blas/blasqr.pdf); CBLAS is
+  described on the same page.
+- LAPACK: the [routine documentation](https://www.netlib.org/lapack/explore-html/)
+  of LAPACK 3.12 and the [LAPACK Users' Guide](https://www.netlib.org/lapack/lug/).
+- LAPACKE: [the C interface to LAPACK](https://www.netlib.org/lapack/lapacke.html).
+
+[doc/deviations.md](doc/deviations.md) lists where hwyBLAS differs from the
+reference implementations: fixed reference bugs, faster kernels that round
+differently, and additions such as `hwyblas_set_error_handler`. The headers
+in `include/hwyblas/` document the hwyBLAS-specific functions and
+conventions; [Conventions](#conventions) below summarizes them for BLAS.
 
 ## Building
 
@@ -240,6 +278,14 @@ also run the AVX-512 targets in SDE. The jobs fetch Eigen 5.0.1 and OpenBLAS
 0.3.34 (the sources for the Netlib testers, and the library as the fuzz
 reference) and download Highway 1.4.0. Eigen's own test suite is not run.
 
+The GCC jobs, the macOS job and the clang-cl job pack their installation
+(see [Installing](#installing)) as `hwyblas-<version>-<platform>.tar.gz`
+(`.zip` on Windows), kept as a workflow artifact. Pushing a tag
+`v<version>`, with the version of `project()` in `CMakeLists.txt`, creates
+a draft release on GitHub with these archives once all jobs have passed;
+it is published by hand. The Linux binaries are built on Ubuntu 24.04 and
+need glibc 2.39 or newer.
+
 ## Installing
 
 ```sh
@@ -252,7 +298,9 @@ cmake --install build
 This installs the library (`bin/hwyblas.dll` and `lib/hwyblas.lib` on
 Windows, `lib/libhwyblas.so` elsewhere), the headers (`include/hwyblas/`), a
 CMake package (`lib/cmake/hwyblas/`) and a pkg-config file
-(`lib/pkgconfig/hwyblas.pc`). The shared library contains Highway. A static
+(`lib/pkgconfig/hwyblas.pc`), with the licenses in `share/doc/hwyblas/`.
+The shared library contains Highway (whose license is installed as
+`LICENSE-highway` when Highway is built with hwyBLAS). A static
 build (`-DBUILD_SHARED_LIBS=OFF`) also installs the Highway it was built
 with, as `hwyblas_hwy`, unless it was built against an installed Highway
 package; consumers link it automatically through the CMake package. Install

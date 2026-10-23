@@ -4,6 +4,12 @@
 # sources (../OpenBLAS, for the Netlib CBLAS testers) and an OpenBLAS library
 # (the reference of the fuzz tests). Highway 1.4.0 is downloaded by the build.
 # Two jobs also run the AVX-512 targets in Intel SDE.
+#
+# The jobs with a `package` name pack their installation as an archive
+# (hwyblas-<version>-<package>.tar.gz, .zip on Windows), uploaded as a
+# workflow artifact. Pushing a tag v<version> (the version of CMakeLists.txt)
+# then creates a draft GitHub release with these archives, once all jobs
+# have passed; it is published by hand.
 name: CI
 
 on:
@@ -37,6 +43,7 @@ jobs:
             cxx: g++
             sde: true
             openblas_target: HASWELL
+            package: linux-x86_64
           - name: Linux x86-64 Clang ASan
             os: ubuntu-24.04
             cc: clang
@@ -48,11 +55,13 @@ jobs:
             cc: gcc
             cxx: g++
             openblas_target: ARMV8
+            package: linux-arm64
           - name: macOS ARM64 Clang
             os: macos-latest
             cc: clang
             cxx: clang++
             openblas_target: ARMV8
+            package: macos-arm64
           - name: Windows MSVC
             os: windows-latest
             cc: cl
@@ -62,6 +71,7 @@ jobs:
             cc: clang-cl
             cxx: clang-cl
             sde: true
+            package: windows-x64
 
     defaults:
       run:
@@ -176,6 +186,31 @@ jobs:
       - name: Install
         run: cmake --install build --prefix install
 
+      # The archive holds the installation in hwyblas-<version>-<package>/.
+      - name: Pack the installation
+        if: matrix.package
+        id: pack
+        run: |
+          version=$(sed -n 's/^project(hwyblas VERSION \([0-9.]*\).*/\1/p' hwyBLAS/CMakeLists.txt)
+          name="hwyblas-$version-${{ matrix.package }}"
+          mkdir -p dist
+          cp -R install "$name"
+          cp hwyBLAS/README.md "$name/"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a -tzip -bso0 "dist/$name.zip" "$name"
+          else
+            tar -czf "dist/$name.tar.gz" "$name"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the archive
+        if: matrix.package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: dist/*
+          if-no-files-found: error
+
       - name: Upload the test log
         if: failure()
         uses: actions/upload-artifact@v7
@@ -183,3 +218,42 @@ jobs:
           name: test-log-${{ matrix.os }}-${{ matrix.cc }}${{ matrix.flags && '-asan' || '' }}
           path: build/Testing/Temporary/LastTest*.log
           if-no-files-found: ignore
+
+  # A draft release for a tag v<version>, with the archives of this run.
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out hwyBLAS
+        uses: actions/checkout@v7
+
+      - name: Check the version
+        run: |
+          version=$(sed -n 's/^project(hwyblas VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match the version $version of CMakeLists.txt"
+            exit 1
+          fi
+
+      - name: Download the archives
+        run: gh run download "$GITHUB_RUN_ID" --pattern 'hwyblas-*' --dir dist
+
+      # A rerun replaces the archives of an existing release.
+      - name: Create the draft release
+        run: |
+          files=(dist/*/*)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" --draft --verify-tag \
+              --title "hwyBLAS ${TAG#v}" --generate-notes
+          fi
