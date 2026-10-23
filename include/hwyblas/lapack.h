@@ -5587,6 +5587,140 @@ HWYBLAS_API void zlapmt_(const hwyblas_int* forwrd, const hwyblas_int* m,
                          const hwyblas_int* n, double* x,
                          const hwyblas_int* ldx, hwyblas_int* k);
 
+/* ------------------------------------------------------------------------ */
+/* QL factorization and compact WY QR factorization                         */
+
+/* A = Q * L (?geqlf, blocked; ?geql2 unblocked) for the m x n matrix A: L
+ * in the last min(m, n) rows (lower triangle / trapezoid), Q as min(m, n)
+ * reflectors in the rest of A and tau. lwork >= max(1, n) (-1: query);
+ * ?geql2's work has n elements. */
+HWYBLAS_API void sgeqlf_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, float* tau, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dgeqlf_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* tau, double* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void cgeqlf_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, float* tau, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zgeqlf_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* tau, double* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void sgeql2_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, float* tau, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dgeql2_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* tau, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void cgeql2_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                         const hwyblas_int* lda, float* tau, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zgeql2_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                         const hwyblas_int* lda, double* tau, double* work,
+                         hwyblas_int* info);
+
+/* The m x n matrix Q with orthonormal rows (n >= m >= k) from the k
+ * reflectors of ?gerqf (?orgrq / ?ungrq; lwork >= max(1, m), -1: query). */
+HWYBLAS_API void sorgrq_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* k, float* a, const hwyblas_int* lda,
+                         const float* tau, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void dorgrq_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* k, double* a,
+                         const hwyblas_int* lda, const double* tau,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+HWYBLAS_API void cungrq_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* k, float* a, const hwyblas_int* lda,
+                         const float* tau, float* work,
+                         const hwyblas_int* lwork, hwyblas_int* info);
+HWYBLAS_API void zungrq_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* k, double* a,
+                         const hwyblas_int* lda, const double* tau,
+                         double* work, const hwyblas_int* lwork,
+                         hwyblas_int* info);
+
+/* A = Q * R in the compact WY representation (?geqrt, blocks of nb
+ * columns, 1 <= nb <= min(m, n); work: nb*n): the reflectors below the
+ * diagonal of A, the nb x nb upper triangular factors of the block
+ * reflectors I - V*T*V^H side by side in the nb x min(m, n) array t
+ * (ldt >= nb). ?geqrt2 (unblocked) and ?geqrt3 (recursive) factor m x n
+ * A, m >= n, with one n x n factor t. ?gemqrt multiplies the m x n matrix
+ * C by Q of ?geqrt (k reflectors in v, nb, t): Q*C, Q^H*C (side = 'L'),
+ * C*Q, C*Q^H ('R'); work: n*nb (side = 'L') or m*nb. */
+HWYBLAS_API void sgeqrt_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* nb, float* a,
+                         const hwyblas_int* lda, float* t,
+                         const hwyblas_int* ldt, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void dgeqrt_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* nb, double* a,
+                         const hwyblas_int* lda, double* t,
+                         const hwyblas_int* ldt, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void cgeqrt_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* nb, float* a,
+                         const hwyblas_int* lda, float* t,
+                         const hwyblas_int* ldt, float* work,
+                         hwyblas_int* info);
+HWYBLAS_API void zgeqrt_(const hwyblas_int* m, const hwyblas_int* n,
+                         const hwyblas_int* nb, double* a,
+                         const hwyblas_int* lda, double* t,
+                         const hwyblas_int* ldt, double* work,
+                         hwyblas_int* info);
+HWYBLAS_API void sgeqrt2_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, float* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void dgeqrt2_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, double* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void cgeqrt2_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, float* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void zgeqrt2_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, double* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void sgeqrt3_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, float* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void dgeqrt3_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, double* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void cgeqrt3_(const hwyblas_int* m, const hwyblas_int* n, float* a,
+                          const hwyblas_int* lda, float* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void zgeqrt3_(const hwyblas_int* m, const hwyblas_int* n, double* a,
+                          const hwyblas_int* lda, double* t,
+                          const hwyblas_int* ldt, hwyblas_int* info);
+HWYBLAS_API void sgemqrt_(const char* side, const char* trans,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const hwyblas_int* k, const hwyblas_int* nb,
+                          const float* v, const hwyblas_int* ldv,
+                          const float* t, const hwyblas_int* ldt, float* c,
+                          const hwyblas_int* ldc, float* work,
+                          hwyblas_int* info);
+HWYBLAS_API void dgemqrt_(const char* side, const char* trans,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const hwyblas_int* k, const hwyblas_int* nb,
+                          const double* v, const hwyblas_int* ldv,
+                          const double* t, const hwyblas_int* ldt, double* c,
+                          const hwyblas_int* ldc, double* work,
+                          hwyblas_int* info);
+HWYBLAS_API void cgemqrt_(const char* side, const char* trans,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const hwyblas_int* k, const hwyblas_int* nb,
+                          const float* v, const hwyblas_int* ldv,
+                          const float* t, const hwyblas_int* ldt, float* c,
+                          const hwyblas_int* ldc, float* work,
+                          hwyblas_int* info);
+HWYBLAS_API void zgemqrt_(const char* side, const char* trans,
+                          const hwyblas_int* m, const hwyblas_int* n,
+                          const hwyblas_int* k, const hwyblas_int* nb,
+                          const double* v, const hwyblas_int* ldv,
+                          const double* t, const hwyblas_int* ldt, double* c,
+                          const hwyblas_int* ldc, double* work,
+                          hwyblas_int* info);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

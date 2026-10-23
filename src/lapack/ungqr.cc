@@ -1,9 +1,8 @@
 // The orthogonal (unitary) matrix Q of a QR, LQ or RQ factorization:
-// generating it (xORGQR / xUNGQR, xORGLQ / xUNGLQ, and their unblocked
-// versions xORG2R / xUNG2R, xORGL2 / xUNGL2, xORGR2 / xUNGR2) and
-// multiplying with it
-// (xORMQR / xUNMQR, xORMLQ / xUNMLQ, xORMRQ / xUNMRQ, unblocked xORM2R /
-// xUNM2R, xORML2 / xUNML2, xORMR2 / xUNMR2).
+// generating it (xORGQR / xUNGQR, xORGLQ / xUNGLQ, xORGRQ / xUNGRQ, and
+// their unblocked versions xORG2R / xUNG2R, xORGL2 / xUNGL2, xORGR2 /
+// xUNGR2) and multiplying with it (xORMQR / xUNMQR, xORMLQ / xUNMLQ, xORMRQ
+// / xUNMRQ, unblocked xORM2R / xUNM2R, xORML2 / xUNML2, xORMR2 / xUNMR2).
 //
 // Each template is the real routine for real T and the complex one for
 // complex T; they differ only in conjugations and in TRANS = 'T' (real) or
@@ -435,6 +434,121 @@ blasint Unglq(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
       // Set columns 1:i-1 of the current block to zero.
       for (blasint j = 1; j <= i - 1; ++j) {
         for (blasint l = i; l <= i + ib - 1; ++l) A(l, j) = zero;
+      }
+    }
+  }
+
+  WORK(1) = WorkSize<T>(iws);
+  return info;
+}
+
+// xORGRQ / xUNGRQ: generates Q like xORGR2 / xUNGR2 (see there), with the
+// blocked algorithm (see xORGQR / xUNGQR; here the blocks are applied from
+// the bottom rows up). LWORK >= max(1, M); the optimal LWORK is M*NB.
+template <typename T>
+blasint Ungrq(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work, blasint lwork) {
+  const T zero = T(0);
+  const Matrix<T> A(a, lda);
+  const Vector<const T> TAU(tau);
+  const Vector<T> WORK(work);
+  const char* name = RealOrComplex<T>("ORGRQ", "UNGRQ");
+
+  // Test the input arguments.
+  blasint info = 0;
+  const bool lquery = (lwork == -1);
+  if (m < 0) {
+    info = -1;
+  } else if (n < m) {
+    info = -2;
+  } else if (k < 0 || k > m) {
+    info = -3;
+  } else if (lda < Max<blasint>(1, m)) {
+    info = -5;
+  }
+
+  blasint nb = 0;
+  if (info == 0) {
+    blasint lwkopt;
+    if (m <= 0) {
+      lwkopt = 1;
+    } else {
+      nb = Ilaenv<T>(1, name, " ", m, n, k, -1);
+      lwkopt = m * nb;
+    }
+    WORK(1) = WorkSize<T>(lwkopt);
+
+    if (lwork < Max<blasint>(1, m) && !lquery) info = -8;
+  }
+
+  if (info != 0) {
+    Xerbla<T>(name, -info);
+    return info;
+  }
+  if (lquery) return info;
+
+  // Quick return if possible.
+  if (m <= 0) return info;
+
+  blasint nbmin = 2;
+  blasint nx = 0;
+  blasint iws = m;
+  blasint ldwork = 0;
+  if (nb > 1 && nb < k) {
+    // Determine when to cross over from blocked to unblocked code.
+    nx = Max<blasint>(0, Ilaenv<T>(3, name, " ", m, n, k, -1));
+    if (nx < k) {
+      // Determine if workspace is large enough for blocked code.
+      ldwork = m;
+      iws = ldwork * nb;
+      if (lwork < iws) {
+        // Not enough workspace to use optimal NB: reduce NB and determine
+        // the minimum value of NB.
+        nb = lwork / ldwork;
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, name, " ", m, n, k, -1));
+      }
+    }
+  }
+
+  blasint kk;
+  if (nb >= nbmin && nb < k && nx < k) {
+    // Use blocked code after the first block. The last kk rows are handled
+    // by the block method.
+    kk = Min(k, ((k - nx + nb - 1) / nb) * nb);
+
+    // Set A(1:m-kk,n-kk+1:n) to zero.
+    for (blasint j = n - kk + 1; j <= n; ++j) {
+      for (blasint i = 1; i <= m - kk; ++i) A(i, j) = zero;
+    }
+  } else {
+    kk = 0;
+  }
+
+  // Use unblocked code for the first or only block.
+  Ungr2(m - kk, n - kk, k - kk, a, lda, tau, work);
+
+  if (kk > 0) {
+    // Use blocked code.
+    for (blasint i = k - kk + 1; i <= k; i += nb) {
+      const blasint ib = Min(nb, k - i + 1);
+      const blasint ii = m - k + i;
+      if (ii > 1) {
+        // Form the triangular factor of the block reflector
+        // H = H(i+ib-1) . . . H(i+1) H(i).
+        Larft('B', 'R', n - k + i + ib - 1, ib, A.ptr(ii, 1), lda, TAU.ptr(i),
+              work, ldwork);
+
+        // Apply H**H to A(1:m-k+i-1,1:n-k+i+ib-1) from the right.
+        Larfb('R', 'C', 'B', 'R', ii - 1, n - k + i + ib - 1, ib, A.ptr(ii, 1),
+              lda, work, ldwork, a, lda, WORK.ptr(ib + 1), ldwork);
+      }
+
+      // Apply H**H to columns 1:n-k+i+ib-1 of current block.
+      Ungr2(ib, n - k + i + ib - 1, ib, A.ptr(ii, 1), lda, TAU.ptr(i), work);
+
+      // Set columns n-k+i+ib:n of current block to zero.
+      for (blasint l = n - k + i + ib; l <= n; ++l) {
+        for (blasint j = ii; j <= ii + ib - 1; ++j) A(j, l) = zero;
       }
     }
   }
@@ -1105,6 +1219,8 @@ blasint Unmrq(char side, char trans, blasint m, blasint n, blasint k, T* a,
                             T*);                                              \
   template blasint Unglq<T>(blasint, blasint, blasint, T*, blasint, const T*, \
                             T*, blasint);                                     \
+  template blasint Ungrq<T>(blasint, blasint, blasint, T*, blasint, const T*, \
+                            T*, blasint);                                     \
   template blasint Unm2r<T>(char, char, blasint, blasint, blasint, const T*,  \
                             blasint, const T*, T*, blasint, T*);              \
   template blasint Unmqr<T>(char, char, blasint, blasint, blasint, const T*,  \
@@ -1174,6 +1290,13 @@ extern "C" {
       const hwyblas_int* lda, const R* tau, R* work, const hwyblas_int* lwork, \
       hwyblas_int* info) {                                                     \
     *info = hwyblas::lapack::Unglq(*m, *n, *k, As<T>(a), *lda,                 \
+                                   As<const T>(tau), As<T>(work), *lwork);     \
+  }                                                                            \
+  HWYBLAS_API void prefix##gen##rq_(                                           \
+      const hwyblas_int* m, const hwyblas_int* n, const hwyblas_int* k, R* a,  \
+      const hwyblas_int* lda, const R* tau, R* work, const hwyblas_int* lwork, \
+      hwyblas_int* info) {                                                     \
+    *info = hwyblas::lapack::Ungrq(*m, *n, *k, As<T>(a), *lda,                 \
                                    As<const T>(tau), As<T>(work), *lwork);     \
   }                                                                            \
   HWYBLAS_API void prefix##mul##2r_(                                           \

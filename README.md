@@ -79,10 +79,11 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `?gtsv`, `?gttrf`, `?gttrs`, `?gtts2` (tridiagonal systems), `?ptsv`, `?pttrf`, `?pttrs`, `?ptts2` (positive definite tridiagonal systems) | s d c z |
 | `?sysv`, `?sytrf`, `?lasyf`, `?sytf2` (symmetric indefinite systems, Bunch-Kaufman), `?sytrs`, `?sytrs2`, `?syconv`, `?sytri`, `?sysvx` (expert driver), `?sycon`, `?syrfs` | s d c z |
 | `?hesv`, `?hetrf`, `?lahef`, `?hetf2` (Hermitian indefinite systems), `?hetrs`, `?hetrs2`, `?hetri`, `?hesvx`, `?hecon`, `?herfs`, `?symv`, `?syr` (complex symmetric) | c z |
-| `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2` (QR and LQ factorizations) | s d c z |
+| `?geqrf`, `?geqr2`, `?gelqf`, `?gelq2`, `?geqlf`, `?geql2` (QR, LQ and QL factorizations) | s d c z |
+| `?geqrt`, `?geqrt2`, `?geqrt3` (QR factorization in compact WY form), `?gemqrt` (its Q) | s d c z |
 | `?gerqf`, `?gerq2` (RQ factorization), `?tzrzf`, `?latrz`, `?larz`, `?larzt`, `?larzb` (RZ factorization of a trapezoidal matrix) | s d c z |
-| `?ormrq`, `?ormr2`, `?ormrz`, `?ormr3` (Q of RQ, Z of RZ) | s d |
-| `?unmrq`, `?unmr2`, `?unmrz`, `?unmr3` | c z |
+| `?orgrq`, `?ormrq`, `?ormr2`, `?ormrz`, `?ormr3` (Q of RQ, Z of RZ) | s d |
+| `?ungrq`, `?unmrq`, `?unmr2`, `?unmrz`, `?unmr3` | c z |
 | `?gels` (least squares by QR / LQ), `?gelss` (by the SVD), `?gelsd` (by the SVD with divide and conquer), `?lalsd`, `?lalsa`, `?lals0`, `?gelsy` (by complete orthogonal factorization), `?laic1` | s d c z |
 | `?gglse` (equality-constrained least squares), `?ggglm` (Gauss-Markov linear model), `?ggqrf`, `?ggrqf` (generalized QR and RQ factorizations) | s d c z |
 | `?geqp3`, `?laqps`, `?laqp2` (QR factorization with column pivoting) | s d c z |
@@ -131,8 +132,8 @@ Eigen). `-DHWYBLAS_LAPACK=OFF` leaves LAPACK out.
 | `ilaenv`, `iparmq`, `ieeeck`, `lsame`, `?lamch` | |
 
 LAPACKE has the reference LAPACKE's functions for these routines (with
-documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx`, `LAPACKE_?syconv`
-and `LAPACKE_?ormrq` / `?unmrq` / `?ormrz` / `?unmrz`, see
+documented fixes in `LAPACKE_?gesvx`, `LAPACKE_?geesx`, `LAPACKE_?syconv`,
+`LAPACKE_?ormrq` / `?unmrq` / `?ormrz` / `?unmrz` and `LAPACKE_?gemqrt`, see
 `hwyblas/lapacke.h`).
 
 Besides hwyBLAS's own tests, the ported routines pass LAPACK's test programs

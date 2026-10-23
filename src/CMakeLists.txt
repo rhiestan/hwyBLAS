@@ -28,6 +28,7 @@ if(HWYBLAS_LAPACK)
     lapack/gelsd.cc
     lapack/geqp3.cc
     lapack/geqrf.cc
+    lapack/geqrt.cc
     lapack/gglse.cc
     lapack/gghrd.cc
     lapack/gtsv.cc
@@ -47,6 +48,7 @@ if(HWYBLAS_LAPACK)
     lapack/lapacke_geev.cc
     lapack/lapacke_ggev.cc
     lapack/lapacke_gels.cc
+    lapack/lapacke_geqrt.cc
     lapack/lapacke_linear.cc
     lapack/lapacke_symmetric.cc
     lapack/lapacke_syevd.cc

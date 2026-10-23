@@ -4505,6 +4505,217 @@ void RunGeneralized(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
   rng = saved;
 }
 
+// An unblocked factorization of the m x n matrix A (geql2_ etc.).
+template <typename T>
+Result Factor2(const BlasLibrary& lib, const char* name, std::vector<T> a, I m,
+               I n) {
+  using F = void (*)(const I*, const I*, T*, const I*, T*, T*, I*);
+  const I lda = std::max<I>(m, 1);
+  std::vector<T> tau(std::max<I>(std::min(m, n), 1));
+  std::vector<T> work(std::max<I>({m, n, 1}));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + name).c_str())(
+      &m, &n, a.data(), &lda, tau.data(), work.data(), &info);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "tau", Kind::kOther, tau);
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// The m x n matrix Q of the k reflectors of an RQ factorization in the last
+// k rows of A (orgrq / ungrq, or orgr2 / ungr2 for lwork = 0).
+template <typename T>
+Result Ungrq(const BlasLibrary& lib, std::vector<T> a, I m, I n, I k,
+             const std::vector<T>& tau, I lwork) {
+  const I lda = std::max<I>(m, 1);
+  std::vector<T> work(std::max<I>({lwork, m, 1}));
+  I info = 0;
+  const std::string prefix =
+      std::string(Prefix<T>()) + (kComplex<T> ? "ung" : "org");
+  if (lwork == 0) {
+    using F =
+        void (*)(const I*, const I*, const I*, T*, const I*, const T*, T*, I*);
+    lib.Get<F>((prefix + "r2_").c_str())(&m, &n, &k, a.data(), &lda, tau.data(),
+                                         work.data(), &info);
+  } else {
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, const T*, T*,
+                       const I*, I*);
+    lib.Get<F>((prefix + "rq_").c_str())(&m, &n, &k, a.data(), &lda, tau.data(),
+                                         work.data(), &lwork, &info);
+  }
+  Result r;
+  r.lwork = std::real(work[0]);
+  AddInt(r, "info", info);
+  if (lwork == -1) return r;
+  Add(r, "a", Kind::kOther, a);
+  return r;
+}
+
+// xGEQRT (variant 0, block size nb), xGEQRT2 (2) or xGEQRT3 (3) of the
+// m x n matrix A.
+template <typename T>
+Result Geqrt(const BlasLibrary& lib, int variant, std::vector<T> a, I m, I n,
+             I nb) {
+  const I lda = std::max<I>(m, 1);
+  const I ldt = std::max<I>(variant == 0 ? nb : n, 1);
+  std::vector<T> t(static_cast<size_t>(ldt) *
+                   std::max<I>(variant == 0 ? std::min(m, n) : n, 1));
+  I info = 0;
+  if (variant == 0) {
+    using F = void (*)(const I*, const I*, const I*, T*, const I*, T*, const I*,
+                       T*, I*);
+    std::vector<T> work(static_cast<size_t>(nb) * std::max<I>(n, 1));
+    lib.Get<F>((std::string(Prefix<T>()) + "geqrt_").c_str())(
+        &m, &n, &nb, a.data(), &lda, t.data(), &ldt, work.data(), &info);
+  } else {
+    using F = void (*)(const I*, const I*, T*, const I*, T*, const I*, I*);
+    lib.Get<F>(
+        (std::string(Prefix<T>()) + (variant == 2 ? "geqrt2_" : "geqrt3_"))
+            .c_str())(&m, &n, a.data(), &lda, t.data(), &ldt, &info);
+  }
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "a", Kind::kOther, a);
+  Add(r, "t", Kind::kOther, t);
+  return r;
+}
+
+// xGEMQRT: the Q of xGEQRT (k reflectors of order q in v, block size nb,
+// t) applied to the m x n matrix C.
+template <typename T>
+Result Gemqrt(const BlasLibrary& lib, const std::vector<T>& v, I q, I k, I nb,
+              const std::vector<T>& t, std::vector<T> c, I m, I n, char side,
+              char trans) {
+  using F = void (*)(const char*, const char*, const I*, const I*, const I*,
+                     const I*, const T*, const I*, const T*, const I*, T*,
+                     const I*, T*, I*, size_t, size_t);
+  const I ldv = std::max<I>(q, 1), ldt = std::max<I>(nb, 1),
+          ldc = std::max<I>(m, 1);
+  std::vector<T> work(static_cast<size_t>(std::max<I>(side == 'L' ? n : m, 1)) *
+                      std::max<I>(nb, 1));
+  I info = 0;
+  lib.Get<F>((std::string(Prefix<T>()) + "gemqrt_").c_str())(
+      &side, &trans, &m, &n, &k, &nb, v.data(), &ldv, t.data(), &ldt, c.data(),
+      &ldc, work.data(), &info, 1, 1);
+  Result r;
+  AddInt(r, "info", info);
+  Add(r, "c", Kind::kOther, c);
+  return r;
+}
+
+// The QL factorization (xGEQLF, xGEQL2), the Q of the RQ factorization
+// (xORGRQ / xUNGRQ, xORGR2 / xUNGR2, from hwyBLAS's xGERQF) and the QR
+// factorization in the compact WY representation (xGEQRT with several
+// block sizes, xGEQRT2, xGEQRT3, and xGEMQRT with hwyBLAS's xGEQRT) for
+// square, tall and wide matrices of order s: random, graded and with small
+// integers.
+template <typename T>
+void RunQrt(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
+  // The other drivers get the same matrices with and without these cases.
+  const std::mt19937_64 saved = rng;
+  char what[96];
+  const char ctrans = kComplex<T> ? 'C' : 'T';
+  const I shapes[][2] = {{s, s}, {2 * s + 1, s}, {s, 2 * s + 1}};
+  for (const auto& shape : shapes) {
+    const I m = shape[0], n = shape[1], k = std::min(m, n);
+    const I mn = std::max(m, n);
+    for (const int kind : {0, 2, 4}) {
+      const std::vector<T> a = TestMatrix<T>(kind, m, n);
+      snprintf(what, sizeof(what), "m=%d n=%d kind=%d", int(m), int(n), kind);
+      Case<T>(hwy, ref, "geqlf", what, mn, [&](const BlasLibrary& lib, I lw) {
+        return Geqrf(lib, "geqlf_", a, m, n, lw);
+      });
+      Case<T>(hwy, ref, "geql2", what, mn, [&](const BlasLibrary& lib, I) {
+        return Factor2(lib, "geql2_", a, m, n);
+      });
+      for (const I nb : {I(1), I(3), I(32), k}) {
+        if (nb < 1 || (k > 0 && nb > k)) continue;
+        snprintf(what, sizeof(what), "m=%d n=%d kind=%d nb=%d", int(m), int(n),
+                 kind, int(nb));
+        Case<T>(hwy, ref, "geqrt", what, mn, [&](const BlasLibrary& lib, I) {
+          return Geqrt(lib, 0, a, m, n, nb);
+        });
+      }
+      if (m >= n) {
+        snprintf(what, sizeof(what), "m=%d n=%d kind=%d", int(m), int(n), kind);
+        Case<T>(hwy, ref, "geqrt2", what, mn, [&](const BlasLibrary& lib, I) {
+          return Geqrt(lib, 2, a, m, n, 0);
+        });
+        // Not for N = 0: the reference xGEQRT3 then calls itself until the
+        // stack overflows (fixed in the port, see Geqrt3).
+        if (n > 0) {
+          Case<T>(hwy, ref, "geqrt3", what, mn, [&](const BlasLibrary& lib, I) {
+            return Geqrt(lib, 3, a, m, n, 0);
+          });
+        }
+      }
+
+      // Q of the RQ factorization: all rows (m <= n) with all or half of
+      // the reflectors.
+      if (m > n) continue;
+      std::vector<T> f = a;
+      std::vector<T> tau(std::max<I>(k, 1));
+      {
+        using F =
+            void (*)(const I*, const I*, T*, const I*, T*, T*, const I*, I*);
+        const I lda = std::max<I>(m, 1), lwork = 64 * std::max<I>(m, 1);
+        std::vector<T> work(lwork);
+        I info = 0;
+        hwy.Get<F>((std::string(Prefix<T>()) + "gerqf_").c_str())(
+            &m, &n, f.data(), &lda, tau.data(), work.data(), &lwork, &info);
+      }
+      for (const I kp : {k, k / 2}) {
+        const std::vector<T> tau_kp(tau.begin() + (k - kp), tau.end());
+        snprintf(what, sizeof(what), "m=%d n=%d kind=%d k=%d", int(m), int(n),
+                 kind, int(kp));
+        Case<T>(hwy, ref, kComplex<T> ? "ungrq" : "orgrq", what, n,
+                [&](const BlasLibrary& lib, I lw) {
+                  return Ungrq(lib, f, m, n, kp, tau_kp, lw);
+                });
+        Case<T>(hwy, ref, kComplex<T> ? "ungr2" : "orgr2", what, n,
+                [&](const BlasLibrary& lib, I) {
+                  return Ungrq(lib, f, m, n, kp, tau_kp, 0);
+                });
+      }
+    }
+  }
+
+  // xGEMQRT with the reflectors of a q x k matrix (k <= q), applied to C
+  // from both sides.
+  for (const I k : {s, s / 2}) {
+    const I q = s + (s + 1) / 2;
+    for (const I nb : {I(1), I(3), k}) {
+      if (nb < 1 || (k > 0 && nb > k)) continue;
+      std::vector<T> v = TestMatrix<T>(0, q, k);
+      const I ldt = std::max<I>(nb, 1);
+      std::vector<T> t(static_cast<size_t>(ldt) * std::max<I>(k, 1));
+      {
+        using F = void (*)(const I*, const I*, const I*, T*, const I*, T*,
+                           const I*, T*, I*);
+        const I ldv = std::max<I>(q, 1);
+        std::vector<T> work(static_cast<size_t>(nb) * std::max<I>(k, 1));
+        I info = 0;
+        hwy.Get<F>((std::string(Prefix<T>()) + "geqrt_").c_str())(
+            &q, &k, &nb, v.data(), &ldv, t.data(), &ldt, work.data(), &info);
+      }
+      const I nc = 5;
+      for (const char side : {'L', 'R'}) {
+        for (const char trans : {'N', ctrans}) {
+          const I cm = side == 'L' ? q : nc, cn = side == 'L' ? nc : q;
+          const std::vector<T> c = TestMatrix<T>(0, cm, cn);
+          snprintf(what, sizeof(what), "q=%d k=%d nb=%d side=%c trans=%c",
+                   int(q), int(k), int(nb), side, trans);
+          Case<T>(hwy, ref, "gemqrt", what, q, [&](const BlasLibrary& lib, I) {
+            return Gemqrt(lib, v, q, k, nb, t, c, cm, cn, side, trans);
+          });
+        }
+      }
+    }
+  }
+  rng = saved;
+}
+
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
   static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
@@ -4587,6 +4798,7 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
     RunGels<T>(hwy, ref, n);
     RunBand<T>(hwy, ref, n);
     RunGeneralized<T>(hwy, ref, n);
+    RunQrt<T>(hwy, ref, n);
   }
 }
 

@@ -298,8 +298,9 @@ xGGLSE, xGGGLM, xGGQRF, xGGRQF, xGERQF, xGERQ2, xTZRZF, xORMRQ / xUNMRQ
 and xORMRZ / xUNMRZ; xGBTRF, xGBTF2, xGBTRS, xGBSV, xGBCON, xLATBS,
 xPOTF2, xPBTRF, xPBTF2, xPBTRS, xPBSV, xGTTRF, xGTTRS, xGTSV, xPTTRF,
 xPTTRS and xPTSV; xGGEV, xGGES, xGGBAL, xGGBAK, xGGHRD, xHGEQZ, xTGEVC,
-xTGSEN, xTGEXC, xTGSYL, xGGSVD3 and xGGSVP3) in both on the same matrices of
-orders 0 to 401. With the
+xTGSEN, xTGEXC, xTGSYL, xGGSVD3 and xGGSVP3; xGEQLF, xGEQL2, xORGRQ /
+xUNGRQ, xORGR2 / xUNGR2, xGEQRT, xGEQRT2, xGEQRT3 and xGEMQRT) in both on
+the same matrices of orders 0 to 401. With the
 same BLAS and parameters, the real results are bitwise identical, and
 mutations of the heuristics change them (also of the scaling in xLATRS
 and of the error estimates of xGERFS, which the unit tests cannot see).
@@ -330,4 +331,6 @@ otherwise. The port's xTGSEN asks for one more
 element of WORK than the reference in some cases (a fixed reference bug,
 see `Tgsen`), so both get the larger workspace; C/ZTGSEN's Difl estimate
 differs (another fixed bug, visible only in the complex results, which
-are counted).
+are counted). The reference xGEQRT3 calls itself until the stack
+overflows for N = 0 (fixed in the port, see `Geqrt3`), so it is only
+compared for N > 0.

@@ -415,7 +415,7 @@ blasint Hesvx(char fact, char uplo, blasint n, blasint nrhs, const T* a,
               RealT<T>* berr, T* work, blasint lwork, RealT<T>* rwork);
 
 // ---------------------------------------------------------------------------
-// QR, LQ and RQ factorizations (geqrf.cc)
+// QR, LQ, RQ and QL factorizations (geqrf.cc)
 
 template <typename T>
 blasint Geqr2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
@@ -436,6 +436,13 @@ blasint Gerq2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
 
 template <typename T>
 blasint Gerqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
+              blasint lwork);
+
+template <typename T>
+blasint Geql2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work);
+
+template <typename T>
+blasint Geqlf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
               blasint lwork);
 
 // ---------------------------------------------------------------------------
@@ -477,6 +484,10 @@ blasint Ungr2(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
 
 template <typename T>
 blasint Unglq(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
+              T* work, blasint lwork);
+
+template <typename T>
+blasint Ungrq(blasint m, blasint n, blasint k, T* a, blasint lda, const T* tau,
               T* work, blasint lwork);
 
 template <typename T>
@@ -1636,6 +1647,24 @@ blasint Ggsvd3(char jobu, char jobv, char jobq, blasint m, blasint n, blasint p,
                RealT<T>* alpha, RealT<T>* beta, T* u, blasint ldu, T* v,
                blasint ldv, T* q, blasint ldq, T* work, blasint lwork,
                RealT<T>* rwork, blasint* iwork);
+
+// ---------------------------------------------------------------------------
+// QR factorization in the compact WY representation (geqrt.cc)
+
+template <typename T>
+blasint Geqrt2(blasint m, blasint n, T* a, blasint lda, T* t, blasint ldt);
+
+template <typename T>
+blasint Geqrt3(blasint m, blasint n, T* a, blasint lda, T* t, blasint ldt);
+
+template <typename T>
+blasint Geqrt(blasint m, blasint n, blasint nb, T* a, blasint lda, T* t,
+              blasint ldt, T* work);
+
+template <typename T>
+blasint Gemqrt(char side, char trans, blasint m, blasint n, blasint k,
+               blasint nb, const T* v, blasint ldv, const T* t, blasint ldt,
+               T* c, blasint ldc, T* work);
 
 }  // namespace lapack
 }  // namespace hwyblas

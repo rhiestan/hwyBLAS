@@ -1,5 +1,5 @@
-// QR, LQ and RQ factorizations: xGEQRF, xGELQF and xGERQF (blocked),
-// xGEQR2, xGELQ2 and xGERQ2 (unblocked).
+// QR, LQ, RQ and QL factorizations: xGEQRF, xGELQF, xGERQF and xGEQLF
+// (blocked), xGEQR2, xGELQ2, xGERQ2 and xGEQL2 (unblocked).
 //
 // The factorizations store Q as a product of elementary reflectors (see
 // householder.cc): the vectors v below the diagonal of A (QR, unit first
@@ -457,13 +457,175 @@ blasint Gerqf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
   return info;
 }
 
+// xGEQL2: computes a QL factorization of the M-by-N matrix A, A = Q * L,
+// with the unblocked algorithm.
+//
+// On exit, if M >= N, the lower triangle of the subarray A(m-n+1:m,1:n)
+// contains the N-by-N lower triangular matrix L; if M <= N, the elements on
+// and below the (n-m)-th superdiagonal contain the M-by-N lower trapezoidal
+// matrix L; the remaining elements, with the array TAU, represent the
+// unitary matrix Q as a product of k = min(M,N) elementary reflectors
+//
+//     Q = H(k) . . . H(2) H(1),   H(i) = I - tau * v * v**H,
+//
+// where tau is TAU(i) and v(m-k+i+1:m) = 0, v(m-k+i) = 1, and
+// v(1:m-k+i-1) is stored in A(1:m-k+i-1,n-k+i). WORK has N elements.
+template <typename T>
+blasint Geql2(blasint m, blasint n, T* a, blasint lda, T* tau, T* work) {
+  const Matrix<T> A(a, lda);
+  const Vector<T> TAU(tau);
+  blasint i, k;
+
+  // Test the input arguments
+  blasint info = 0;
+  if (m < 0) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, m)) {
+    info = -4;
+  }
+  if (info != 0) {
+    Xerbla<T>("GEQL2", -info);
+    return info;
+  }
+
+  k = Min(m, n);
+  for (i = k; i >= 1; --i) {
+    // Generate elementary reflector H(i) to annihilate
+    // A(1:m-k+i-1,n-k+i)
+    Larfg(m - k + i, A.ptr(m - k + i, n - k + i), A.ptr(1, n - k + i), 1,
+          TAU.ptr(i));
+
+    // Apply H(i)**H to A(1:m-k+i,1:n-k+i-1) from the left
+    Larf1l('L', m - k + i, n - k + i - 1, A.ptr(1, n - k + i), 1, Conj(TAU(i)),
+           a, lda, work);
+  }
+  return info;
+}
+
+// xGEQLF: computes a QL factorization of the M-by-N matrix A, A = Q * L,
+// like xGEQL2 (see there for the result).
+//
+// This is the blocked version: it factors panels of NB columns from the
+// right with xGEQL2 and applies their block reflectors (xLARFT, xLARFB) to
+// the columns on the left, down to the first NX columns, which xGEQL2
+// factors. LWORK >= max(1, N) (or 1 if min(M,N) = 0; any LWORK >= 1 if
+// M = 0); the optimal LWORK is N*NB. LWORK = -1 is a workspace query.
+template <typename T>
+blasint Geqlf(blasint m, blasint n, T* a, blasint lda, T* tau, T* work,
+              blasint lwork) {
+  const Matrix<T> A(a, lda);
+  const Vector<T> TAU(tau);
+  const Vector<T> WORK(work);
+  blasint i, ib, iws, k, ki, kk, ldwork, lwkopt, mu, nbmin, nu, nx;
+  // Set where K > 0 (the only case that reads it).
+  blasint nb = 0;
+  bool lquery;
+
+  // Test the input arguments
+  blasint info = 0;
+  lquery = (lwork == -1);
+  if (m < 0) {
+    info = -1;
+  } else if (n < 0) {
+    info = -2;
+  } else if (lda < Max<blasint>(1, m)) {
+    info = -4;
+  }
+
+  k = Min(m, n);
+  if (info == 0) {
+    if (k == 0) {
+      lwkopt = 1;
+    } else {
+      nb = Ilaenv<T>(1, "GEQLF", " ", m, n, -1, -1);
+      lwkopt = n * nb;
+    }
+    WORK(1) = WorkSize<T>(lwkopt);
+
+    if (!lquery) {
+      if (lwork <= 0 || (m > 0 && lwork < Max<blasint>(1, n))) info = -7;
+    }
+  }
+
+  if (info != 0) {
+    Xerbla<T>("GEQLF", -info);
+    return info;
+  } else if (lquery) {
+    return info;
+  }
+
+  // Quick return if possible
+  if (k == 0) return info;
+
+  nbmin = 2;
+  nx = 1;
+  iws = n;
+  ldwork = 0;
+  if (nb > 1 && nb < k) {
+    // Determine when to cross over from blocked to unblocked code.
+    nx = Max<blasint>(0, Ilaenv<T>(3, "GEQLF", " ", m, n, -1, -1));
+    if (nx < k) {
+      // Determine if workspace is large enough for blocked code.
+      ldwork = n;
+      iws = ldwork * nb;
+      if (lwork < iws) {
+        // Not enough workspace to use optimal NB:  reduce NB and
+        // determine the minimum value of NB.
+        nb = lwork / ldwork;
+        nbmin = Max<blasint>(2, Ilaenv<T>(2, "GEQLF", " ", m, n, -1, -1));
+      }
+    }
+  }
+
+  if (nb >= nbmin && nb < k && nx < k) {
+    // Use blocked code initially.
+    // The last kk columns are handled by the block method.
+    ki = ((k - nx - 1) / nb) * nb;
+    kk = Min(k, ki + nb);
+
+    for (i = k - kk + ki + 1; i >= k - kk + 1; i -= nb) {
+      ib = Min(k - i + 1, nb);
+
+      // Compute the QL factorization of the current block
+      // A(1:m-k+i+ib-1,n-k+i:n-k+i+ib-1)
+      Geql2(m - k + i + ib - 1, ib, A.ptr(1, n - k + i), lda, TAU.ptr(i), work);
+      if (n - k + i > 1) {
+        // Form the triangular factor of the block reflector
+        // H = H(i+ib-1) . . . H(i+1) H(i)
+        Larft('B', 'C', m - k + i + ib - 1, ib, A.ptr(1, n - k + i), lda,
+              TAU.ptr(i), work, ldwork);
+
+        // Apply H**H to A(1:m-k+i+ib-1,1:n-k+i-1) from the left
+        Larfb('L', 'C', 'B', 'C', m - k + i + ib - 1, n - k + i - 1, ib,
+              A.ptr(1, n - k + i), lda, work, ldwork, a, lda, WORK.ptr(ib + 1),
+              ldwork);
+      }
+    }
+    mu = m - k + i + nb - 1;
+    nu = n - k + i + nb - 1;
+  } else {
+    mu = m;
+    nu = n;
+  }
+
+  // Use unblocked code to factor the last or only block
+  if (mu > 0 && nu > 0) Geql2(mu, nu, a, lda, tau, work);
+
+  WORK(1) = WorkSize<T>(iws);
+  return info;
+}
+
 #define HWYBLAS_LAPACK_INSTANTIATE(T)                                        \
   template blasint Geqr2<T>(blasint, blasint, T*, blasint, T*, T*);          \
   template blasint Geqrf<T>(blasint, blasint, T*, blasint, T*, T*, blasint); \
   template blasint Gelq2<T>(blasint, blasint, T*, blasint, T*, T*);          \
   template blasint Gelqf<T>(blasint, blasint, T*, blasint, T*, T*, blasint); \
   template blasint Gerq2<T>(blasint, blasint, T*, blasint, T*, T*);          \
-  template blasint Gerqf<T>(blasint, blasint, T*, blasint, T*, T*, blasint);
+  template blasint Gerqf<T>(blasint, blasint, T*, blasint, T*, T*, blasint); \
+  template blasint Geql2<T>(blasint, blasint, T*, blasint, T*, T*);          \
+  template blasint Geqlf<T>(blasint, blasint, T*, blasint, T*, T*, blasint);
 HWYBLAS_LAPACK_FOR_EACH_TYPE(HWYBLAS_LAPACK_INSTANTIATE)
 #undef HWYBLAS_LAPACK_INSTANTIATE
 
@@ -514,6 +676,19 @@ extern "C" {
                                   R* work, const hwyblas_int* lwork,          \
                                   hwyblas_int* info) {                        \
     *info = hwyblas::lapack::Gerqf(*m, *n, As<T>(a), *lda, As<T>(tau),        \
+                                   As<T>(work), *lwork);                      \
+  }                                                                           \
+  HWYBLAS_API void prefix##geql2_(const hwyblas_int* m, const hwyblas_int* n, \
+                                  R* a, const hwyblas_int* lda, R* tau,       \
+                                  R* work, hwyblas_int* info) {               \
+    *info = hwyblas::lapack::Geql2(*m, *n, As<T>(a), *lda, As<T>(tau),        \
+                                   As<T>(work));                              \
+  }                                                                           \
+  HWYBLAS_API void prefix##geqlf_(const hwyblas_int* m, const hwyblas_int* n, \
+                                  R* a, const hwyblas_int* lda, R* tau,       \
+                                  R* work, const hwyblas_int* lwork,          \
+                                  hwyblas_int* info) {                        \
+    *info = hwyblas::lapack::Geqlf(*m, *n, As<T>(a), *lda, As<T>(tau),        \
                                    As<T>(work), *lwork);                      \
   }
 
