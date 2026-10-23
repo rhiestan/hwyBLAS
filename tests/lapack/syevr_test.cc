@@ -201,7 +201,9 @@ void ExpectEigenvalues(const std::vector<R>& w, hwyblas_int m,
   ASSERT_EQ(m, s.count);
   for (hwyblas_int k = 0; k < m; ++k) {
     EXPECT_NEAR(w[k], ref[s.first + k], tol) << k;
-    if (k > 0) EXPECT_LE(w[k - 1], w[k]) << k;
+    if (k > 0) {
+      EXPECT_LE(w[k - 1], w[k]) << k;
+    }
   }
 }
 
@@ -301,8 +303,12 @@ TYPED_TEST(SyevrTest, Stemr) {
                                &tryrac, rac == 0),
                       0);
             ExpectEigenvalues(w, m, ref, s, tol);
-            if (rac == 0) EXPECT_EQ(tryrac, 0);
-            if (kind == 6 && n > 2 && rac == 1) EXPECT_EQ(tryrac, 1);
+            if (rac == 0) {
+              EXPECT_EQ(tryrac, 0);
+            }
+            if (kind == 6 && n > 2 && rac == 1) {
+              EXPECT_EQ(tryrac, 1);
+            }
             if (jobz != 'V') continue;
             ExpectEigenvectors(t, z, n, m, ldz, w, anorm, kMrrrThreshold);
             // For N = 2, LAPACK's xSTEMR sets the support (2, 2) whenever
@@ -318,7 +324,9 @@ TYPED_TEST(SyevrTest, Stemr) {
               for (hwyblas_int i = 0; i < n; ++i) {
                 const T zij = z[i + j * ldz];
                 EXPECT_EQ(std::imag(zij), 0) << i << ", " << j;
-                if (i < lo || i > hi) EXPECT_EQ(zij, T(0)) << i << ", " << j;
+                if (i < lo || i > hi) {
+                  EXPECT_EQ(zij, T(0)) << i << ", " << j;
+                }
               }
             }
           }
@@ -509,7 +517,9 @@ TYPED_TEST(SyevrRealTest, Lagts) {
       HWYBLAS_CALL_REAL(R, lagts, &job, &n, fa.data(), fb.data(), fc.data(),
                         fd.data(), in.data(), x.data(), &jtol, &info);
       ASSERT_EQ(info, 0);
-      if (job < 0) EXPECT_GT(jtol, 0);
+      if (job < 0) {
+        EXPECT_GT(jtol, 0);
+      }
       const bool trans = job == 2 || job == -2;
       double resid = 0, norm = 0;
       for (hwyblas_int i = 0; i < n; ++i) {
@@ -820,7 +830,9 @@ hwyblas_int Heevx(char jobz, const Subset<RealT<T>>& s, char uplo,
                       z.data(), &ldz, work.data(), &lwork, iwork.data(),
                       ifail.data(), &info);
   }
-  if (!minimal && info == 0) EXPECT_EQ(QueryResult(work[0]), lwork);
+  if (!minimal && info == 0) {
+    EXPECT_EQ(QueryResult(work[0]), lwork);
+  }
   return info;
 }
 
@@ -980,7 +992,9 @@ TYPED_TEST(SyevrTest, HeevxOrder1ValueRange) {
                     n, ifail, false),
               0);
     ASSERT_EQ(m, count);
-    if (count == 1) EXPECT_EQ(w[0], a11);
+    if (count == 1) {
+      EXPECT_EQ(w[0], a11);
+    }
     EXPECT_EQ(z[0], T(1));
     if constexpr (!IsComplex<T>::value) {
       std::vector<R> d = {a11}, e = {R(0)}, work(5), zz(1, NAN);
@@ -994,7 +1008,9 @@ TYPED_TEST(SyevrTest, HeevxOrder1ValueRange) {
                         work.data(), iwork.data(), fail.data(), &info);
       ASSERT_EQ(info, 0);
       ASSERT_EQ(m, count);
-      if (count == 1) EXPECT_EQ(w[0], a11);
+      if (count == 1) {
+        EXPECT_EQ(w[0], a11);
+      }
       EXPECT_EQ(zz[0], R(1));
     }
   }

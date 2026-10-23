@@ -362,7 +362,9 @@ TYPED_TEST(SysvTest, FactorSolve) {
                   ASSERT_EQ(std::imag(At(f, k, k, lda)), 0) << k;
                 }
               }
-              if (kind == Matrix::kSaddle && n >= 2) EXPECT_TRUE(two_by_two);
+              if (kind == Matrix::kSaddle && n >= 2) {
+                EXPECT_TRUE(two_by_two);
+              }
               if (n == 0) continue;
               const Dense<T> da = FullOf(herm, uplo, a, n, lda);
               const std::vector<T> b =

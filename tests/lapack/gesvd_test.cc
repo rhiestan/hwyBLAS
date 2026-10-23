@@ -198,7 +198,9 @@ TYPED_TEST(GesvdTest, Labrd) {
     const double tol = 50 * k * Eps<T>();
     for (hwyblas_int i = 0; i < k; ++i) {
       EXPECT_NEAR(d2[i], d1[i], tol) << i;
-      if (i + 1 < k) EXPECT_NEAR(e2[i], e1[i], tol) << i;
+      if (i + 1 < k) {
+        EXPECT_NEAR(e2[i], e1[i], tol) << i;
+      }
       EXPECT_NEAR(Abs(tq2[i] - tq1[i]), 0, tol) << i;
       EXPECT_NEAR(Abs(tp2[i] - tp1[i]), 0, tol) << i;
     }

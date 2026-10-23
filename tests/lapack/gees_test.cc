@@ -235,7 +235,9 @@ void ExpectSchurForm(const std::vector<T>& t, hwyblas_int n, hwyblas_int ld,
     const bool block =
         !IsComplex<T>::value && i + 1 < n && At(t, i + 1, i, ld) != T(0);
     if (!block) {
-      if (i + 1 < n) ASSERT_EQ(At(t, i + 1, i, ld), T(0)) << i;
+      if (i + 1 < n) {
+        ASSERT_EQ(At(t, i + 1, i, ld), T(0)) << i;
+      }
       ASSERT_EQ(w[i], Eig<T>(At(t, i, i, ld))) << i;
       ++i;
       continue;
@@ -246,7 +248,9 @@ void ExpectSchurForm(const std::vector<T>& t, hwyblas_int n, hwyblas_int ld,
     const R d = std::real(At(t, i + 1, i + 1, ld));
     ASSERT_EQ(a, d) << i;
     ASSERT_TRUE((b > 0 && c < 0) || (b < 0 && c > 0)) << i;
-    if (i + 2 < n) ASSERT_EQ(At(t, i + 2, i + 1, ld), T(0)) << i;
+    if (i + 2 < n) {
+      ASSERT_EQ(At(t, i + 2, i + 1, ld), T(0)) << i;
+    }
     const R im = std::sqrt(std::abs(b)) * std::sqrt(std::abs(c));
     const R tol = 8 * std::numeric_limits<R>::epsilon() * (std::abs(a) + im);
     EXPECT_EQ(w[i].real(), a) << i;
@@ -473,7 +477,9 @@ TYPED_TEST(GeesTest, Gebal) {
           EXPECT_GE(ilo - 1, n / 3);
           EXPECT_GE(n - ihi, n / 4);
         }
-        if (job == 'N') EXPECT_EQ(ab, a);
+        if (job == 'N') {
+          EXPECT_EQ(ab, a);
+        }
         for (hwyblas_int j = 0; j < n; ++j) {
           for (hwyblas_int i = j + 1; i < n; ++i) {
             if (j < ilo - 1 || i > ihi - 1) {
@@ -705,7 +711,9 @@ TYPED_TEST(GeesTest, Hseqr) {
               }
               // (Defective eigenvalues, as of the Jordan block, are only
               // determined to about sqrt(eps).)
-              if (kind != Kind::kJordan) EXPECT_TRUE(found) << i;
+              if (kind != Kind::kJordan) {
+                EXPECT_TRUE(found) << i;
+              }
             }
           }
         }
@@ -1376,6 +1384,22 @@ TYPED_TEST(GeesRealTest, Lasy2) {
       }
     }
   }
+  // A NaN in TL or TR: the 4 x 4 elimination of N1 = N2 = 2 finds no
+  // pivot among NaNs (the reference then swaps with the previous step's).
+  for (int pos = 0; pos < 8; ++pos) {
+    SCOPED_TRACE(pos);
+    std::vector<R> tl = rng.Vector(4), tr = rng.Vector(4), b = rng.Vector(4);
+    std::vector<R> x(4, 0);
+    (pos < 4 ? tl : tr)[static_cast<size_t>(pos % 4)] = NAN;
+    R scale = -1, xnorm = -1;
+    hwyblas_int info = -99;
+    const hwyblas_int ld = 2, two = 2, lt = 0, rt = 0, isgn = 1;
+    HWYBLAS_CALL_REAL(R, lasy2, &lt, &rt, &isgn, &two, &two, tl.data(), &ld,
+                      tr.data(), &ld, b.data(), &ld, &scale, x.data(), &ld,
+                      &xnorm, &info);
+    EXPECT_TRUE(
+        std::any_of(x.begin(), x.end(), [](R v) { return std::isnan(v); }));
+  }
 }
 
 // xLALN2 (real only): (ca A - w D) X = s B and (ca A**T - w D) X = s B.
@@ -1512,7 +1536,9 @@ TYPED_TEST(GeesTest, Trsen) {
             EXPECT_TRUE(found) << i;
           }
           if (m == 0 || m == n) {
-            if (job == 'E' || job == 'B') EXPECT_EQ(s, R(1));
+            if (job == 'E' || job == 'B') {
+              EXPECT_EQ(s, R(1));
+            }
             continue;
           }
           const hwyblas_int n1 = m, n2 = n - m;

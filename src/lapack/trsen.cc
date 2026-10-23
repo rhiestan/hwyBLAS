@@ -1436,6 +1436,14 @@ blasint TrsylComplex(char trana, char tranb, blasint isgn, blasint m, blasint n,
 //
 // Returns INFO: 0, or 1 if TL and TR have too close eigenvalues (then
 // they are perturbed).
+//
+// Deviation (a fixed reference bug): the 4-by-4 elimination chooses the
+// pivot with ABS(T16(IP, JP)) >= XMAX, which is false for NaN, so when
+// all remaining elements are NaN (a NaN in TL or TR spreads there by
+// step 3) the reference swaps with the IPSV and JPSV of the previous
+// step. (At I = 1, T16 has zero elements, so a pivot is always found
+// there, but compilers warn that IPSV may be unset.) The port starts the
+// search with IPSV = JPSV = I, i.e. no swap; X is NaN either way.
 template <typename R>
 blasint Lasy2(bool ltranl, bool ltranr, blasint isgn, blasint n1, blasint n2,
               const R* tl, blasint ldtl, const R* tr, blasint ldtr, const R* b,
@@ -1641,6 +1649,9 @@ L50:
   // Perform elimination
   for (i = 1; i <= 3; ++i) {
     xmax = zero;
+    // Not in the reference (see above): no swap if all elements are NaN.
+    ipsv = i;
+    jpsv = i;
     for (ip = i; ip <= 4; ++ip) {
       for (jp = i; jp <= 4; ++jp) {
         if (std::abs(T16(ip, jp)) >= xmax) {
@@ -2945,7 +2956,9 @@ blasint Trsen(char job, char compq, const blasint* select, blasint n, T* t,
   const Matrix<T> Tm(t, ldt);
   const Vector<T> W(w);
   const Vector<T> WORK(work);
-  blasint k, kase, ks, lwmin, n1, n2, nn;
+  blasint k, kase, ks, n1, n2, nn;
+  // Set below for every valid JOB.
+  blasint lwmin = 0;
   bool lquery, wantbh, wantq, wants, wantsp;
   // SCALE is initialized: Trsyl sets it after the first Lacn2 call, which
   // the static analyzer cannot see.

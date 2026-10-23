@@ -236,7 +236,9 @@ blasint Hgeqz(char job, char compq, char compz, blasint n, blasint ilo,
   const Matrix<R> Z(z, ldz);
   blasint icompq, icompz, ifirst, ifrstm, iiter, ilast, ilastm, in, ischur,
       istart, j, jc, jch, jiter, jr, maxit;
-  bool ilazr2, ilazro, ilpivt, ilq, ilschr, ilz, lquery;
+  bool ilazr2, ilazro, ilpivt, lquery;
+  // Set below for every valid JOB, COMPQ and COMPZ.
+  bool ilq = false, ilschr = false, ilz = false;
   R a11, a12, a1i, a1r, a21, a22, a2i, a2r, ad11, ad11l, ad12, ad12l, ad21,
       ad21l, ad22, ad22l, ad32l, an, anorm, ascale, atol, b11, b1a, b1i, b1r,
       b22, b2a, b2i, b2r, bn, bnorm, bscale, btol, c, c11i, c11r, c12, c21,

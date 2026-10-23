@@ -387,7 +387,9 @@ TYPED_TEST(SyevRealTest, Lartg) {
     const double fs = t.f / scale, gs = t.g / scale;
     EXPECT_NEAR(c * fs + s * gs, r / scale, 4 * Eps<R>());
     EXPECT_NEAR(-s * fs + c * gs, 0.0, 4 * Eps<R>());
-    if (t.f != 0) EXPECT_EQ(std::signbit(r), std::signbit(t.f));
+    if (t.f != 0) {
+      EXPECT_EQ(std::signbit(r), std::signbit(t.f));
+    }
   }
 }
 

@@ -408,7 +408,9 @@ blasint GelssReal(blasint m, blasint n, blasint nrhs, T* a, blasint lda, T* b,
   blasint bdspac, bl, chunk, i, iascl, ibscl, ie, il, itau, itaup, itauq, iwork,
       ldwork, lwork_dgebrd, lwork_dgelqf, lwork_dgeqrf, lwork_dorgbr,
       lwork_dormbr, lwork_dormlq, lwork_dormqr, maxmn, maxwrk, minmn, minwrk,
-      mm, mnthr;
+      mm;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint mnthr = 0;
   bool lquery;
   R anrm, bignum, bnrm, eps, sfmin, smlnum, thr;
   blasint info = 0;
@@ -840,7 +842,9 @@ blasint GelssComplex(blasint m, blasint n, blasint nrhs, T* a, blasint lda,
   blasint bl, chunk, i, iascl, ibscl, ie, il, irwork, itau, itaup, itauq, iwork,
       ldwork, lwork_zgebrd, lwork_zgelqf, lwork_zgeqrf, lwork_zungbr,
       lwork_zunmbr, lwork_zunmlq, lwork_zunmqr, maxmn, maxwrk, minmn, minwrk,
-      mm, mnthr;
+      mm;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint mnthr = 0;
   bool lquery;
   R anrm, bignum, bnrm, eps, sfmin, smlnum, thr;
   blasint info = 0;

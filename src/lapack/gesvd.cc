@@ -38,10 +38,14 @@ blasint GesvdReal(char jobu, char jobvt, blasint m, blasint n, T* a,
   const Matrix<R> U(u, ldu);
   const Matrix<R> VT(vt, ldvt);
   const Vector<R> WORK(work);
-  blasint bdspac, blk, chunk, i, ie, ir, iscl, itau, itaup, itauq, iu, iwork,
-      ldwrkr, ldwrku, lwork_dgebrd, lwork_dgelqf, lwork_dgeqrf, lwork_dorgbr_p,
+  blasint blk, chunk, i, ie, ir, iscl, itau, itaup, itauq, iu, iwork, ldwrkr,
+      ldwrku, lwork_dgebrd, lwork_dgelqf, lwork_dgeqrf, lwork_dorgbr_p,
       lwork_dorgbr_q, lwork_dorglq_m, lwork_dorglq_n, lwork_dorgqr_m,
-      lwork_dorgqr_n, maxwrk, minmn, minwrk, mnthr, ncu, ncvt, nru, nrvt, wrkbl;
+      lwork_dorgqr_n, maxwrk, minmn, minwrk, ncu, nrvt;
+  // Set below for every valid JOBU and JOBVT.
+  blasint ncvt = 0, nru = 0;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint bdspac = 0, mnthr = 0, wrkbl = 0;
   bool lquery, wntua, wntuas, wntun, wntuo, wntus, wntva, wntvas, wntvn, wntvo,
       wntvs;
   R anrm, bignum, eps, smlnum;
@@ -2249,7 +2253,11 @@ blasint GesvdComplex(char jobu, char jobvt, blasint m, blasint n, T* a,
   blasint blk, chunk, i, ie, ir, irwork, iscl, itau, itaup, itauq, iu, iwork,
       ldwrkr, ldwrku, lwork_zgebrd, lwork_zgelqf, lwork_zgeqrf, lwork_zungbr_p,
       lwork_zungbr_q, lwork_zunglq_m, lwork_zunglq_n, lwork_zungqr_m,
-      lwork_zungqr_n, maxwrk, minmn, minwrk, mnthr, ncu, ncvt, nru, nrvt, wrkbl;
+      lwork_zungqr_n, maxwrk, minmn, minwrk, ncu, nrvt;
+  // Set below for every valid JOBU and JOBVT.
+  blasint ncvt = 0, nru = 0;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint mnthr = 0, wrkbl = 0;
   bool lquery, wntua, wntuas, wntun, wntuo, wntus, wntva, wntvas, wntvn, wntvo,
       wntvs;
   R anrm, bignum, eps, smlnum;

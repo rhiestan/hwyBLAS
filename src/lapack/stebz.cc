@@ -302,7 +302,9 @@ blasint Stebz(char range, char order, blasint n, R vl, R vu, blasint il,
       iout, irange, itmax, itmp1, iw, iwoff, j, jb, jdisc, je, nb, nwl, nwu;
   bool ncnvrg, toofew;
   R atoli, bnorm, gl, gu, pivmin, rtoli, safemn, tmp1, tmp2, tnorm, ulp, wkill,
-      wl, wlu, wu, wul;
+      wl, wu;
+  // Set and used only for RANGE = 'I'.
+  R wlu = R(0), wul = R(0);
   blasint info = 0;
   // Decode RANGE
   if (Lsame(range, 'A')) {
@@ -1203,9 +1205,13 @@ blasint Stein(blasint n, RealT<T>* d, RealT<T>* e, blasint m, RealT<T>* w,
   const Vector<R> W(w);
   const Vector<R> WORK(work);
   const Matrix<T> Z(z, ldz);
-  blasint b1, blksiz, bn, gpind, i, indrv1, indrv2, indrv3, indrv4, indrv5, its,
-      j, j1, jblk, jmax, jr, nblk, nrmchk;
-  R dtpcrt, eps, eps1, nrm, onenrm, ortol, pertol, scl, sep, tol, xj, xjm, ztr;
+  blasint b1, blksiz, bn, i, indrv1, indrv2, indrv3, indrv4, indrv5, its, j, j1,
+      jblk, jmax, jr, nblk, nrmchk;
+  // Set for each block of more than one eigenvalue, which alone use it.
+  blasint gpind = 0;
+  R dtpcrt, eps, eps1, nrm, onenrm, ortol, pertol, scl, sep, tol, xj, ztr;
+  // Set and used from the second eigenvalue of a block on.
+  R xjm = R(0);
   blasint info = 0;
   for (i = 1; i <= m; ++i) {
     IFAIL(i) = 0;

@@ -48,7 +48,9 @@ blasint Lals0Real(blasint icompq, blasint nl, blasint nr, blasint sqre,
   const Vector<R> WORK(work);
   const Vector<R> Z(z);
   blasint i, j, m, n, nlp1;
-  R diflj, difrj, dj, dsigj, dsigjp, temp;
+  R diflj, dj, dsigj, temp;
+  // Set and used only for J < K.
+  R difrj = R(0), dsigjp = R(0);
   blasint info = 0;
   n = nl + nr + 1;
   if ((icompq < 0) || (icompq > 1)) {
@@ -227,7 +229,9 @@ blasint Lals0Complex(blasint icompq, blasint nl, blasint nr, blasint sqre,
   const Vector<R> RWORK(rwork);
   const Vector<R> Z(z);
   blasint i, j, jcol, jrow, m, n, nlp1;
-  R diflj, difrj, dj, dsigj, dsigjp, temp;
+  R diflj, dj, dsigj, temp;
+  // Set and used only for J < K.
+  R difrj = R(0), dsigjp = R(0);
   blasint info = 0;
   n = nl + nr + 1;
   if ((icompq < 0) || (icompq > 1)) {
@@ -1592,7 +1596,9 @@ blasint GelsdReal(blasint m, blasint n, blasint nrhs, T* a, blasint lda, T* b,
   const Vector<R> S(s);
   const Vector<R> WORK(work);
   blasint iascl, ibscl, ie, il, itau, itaup, itauq, ldwork, liwork, maxmn,
-      maxwrk, minmn, minwrk, mm, mnthr, nlvl, nwork, smlsiz, wlalsd;
+      maxwrk, minmn, minwrk, mm, mnthr, nlvl, nwork, smlsiz;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint wlalsd = 0;
   bool lquery;
   R anrm, bignum, bnrm, eps, sfmin, smlnum;
   blasint info = 0;
@@ -1990,7 +1996,9 @@ blasint GelsdComplex(blasint m, blasint n, blasint nrhs, T* a, blasint lda,
   const Vector<R> S(s);
   const Vector<T> WORK(work);
   blasint iascl, ibscl, ie, il, itau, itaup, itauq, ldwork, liwork, lrwork,
-      maxmn, maxwrk, minmn, minwrk, mm, mnthr, nlvl, nrwork, nwork, smlsiz;
+      maxmn, maxwrk, minmn, minwrk, mm, nlvl, nrwork, nwork;
+  // Set in the workspace computation for M, N > 0 (else the quick return).
+  blasint mnthr = 0, smlsiz = 0;
   bool lquery;
   R anrm, bignum, bnrm, eps, sfmin, smlnum;
   blasint info = 0;

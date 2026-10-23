@@ -283,7 +283,9 @@ blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
   const Vector<R> WI(wi);
   const Vector<R> WR(wr);
   const Matrix<R> Z(z, ldz);
-  blasint i, i1, i2, itmax, its, j, k, kdefl, l, m, nh, nr, nz;
+  blasint i, i1, itmax, its, j, k, kdefl, l, m, nh, nr, nz;
+  // Set below if WANTT, else in the main loop.
+  blasint i2 = 0;
   R aa, ab, ba, bb, cs, det, h11, h12, h21, h21s, h22, rt1i, rt1r, rt2i, rt2r,
       rtdisc, s, safmax, safmin, smlnum, sn, sum, t1, t2, t3, tr, tst, ulp, v2,
       v3;
@@ -583,7 +585,9 @@ blasint Lahqr(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
   const Vector<T> V(v);
   const Vector<T> W(w);
   const Matrix<T> Z(z, ldz);
-  blasint i, i1, i2, itmax, its, j, jhi, jlo, k, kdefl, l, m, nh, nz;
+  blasint i, i1, itmax, its, j, jhi, jlo, k, kdefl, l, m, nh, nz;
+  // Set below if WANTT, else in the main loop.
+  blasint i2 = 0;
   R aa, ab, ba, bb, h10, h21, rtemp, s, safmax, safmin, smlnum, sx, t2, tst,
       ulp;
   T h11, h11s, h22, sc, sum, t, t1, temp, u, v2, x, y;
@@ -2651,8 +2655,10 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
   const Matrix<R> Z(z, ldz);
   R zdum[1];
   blasint i, inf, it, itmax, k, kacc22, kbot, kdu, ks, kt, ktop, ku, kv, kwh,
-      kwtop, kwv, ld, ls, lwkopt, ndec, ndfl, nh, nho, nibble, nmin, ns, nsmax,
-      nsr, nve, nw, nwmax, nwr, nwupbd;
+      kwtop, kwv, ld, ls, lwkopt, ndfl, nh, nho, nibble, nmin, ns, nsmax, nsr,
+      nve, nw, nwmax, nwr, nwupbd;
+  // Set in the first iterations (NDFL < KEXNW).
+  blasint ndec = 0;
   bool sorted;
   R aa, bb, cc, cs, dd, sn, ss, swap;
   blasint info = 0;
@@ -2987,8 +2993,10 @@ blasint Laqr4(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
   const Matrix<T> Z(z, ldz);
   T zdum[1];
   blasint i, inf, it, itmax, k, kacc22, kbot, kdu, ks, kt, ktop, ku, kv, kwh,
-      kwtop, kwv, ld, ls, lwkopt, ndec, ndfl, nh, nho, nibble, nmin, ns, nsmax,
-      nsr, nve, nw, nwmax, nwr, nwupbd;
+      kwtop, kwv, ld, ls, lwkopt, ndfl, nh, nho, nibble, nmin, ns, nsmax, nsr,
+      nve, nw, nwmax, nwr, nwupbd;
+  // Set in the first iterations (NDFL < KEXNW).
+  blasint ndec = 0;
   bool sorted;
   R s;
   T aa, bb, cc, dd, det, rtdisc, swap, tr2;
@@ -3301,8 +3309,10 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, R* h,
   const Matrix<R> Z(z, ldz);
   R zdum[1];
   blasint i, inf, it, itmax, k, kacc22, kbot, kdu, ks, kt, ktop, ku, kv, kwh,
-      kwtop, kwv, ld, ls, lwkopt, ndec, ndfl, nh, nho, nibble, nmin, ns, nsmax,
-      nsr, nve, nw, nwmax, nwr, nwupbd;
+      kwtop, kwv, ld, ls, lwkopt, ndfl, nh, nho, nibble, nmin, ns, nsmax, nsr,
+      nve, nw, nwmax, nwr, nwupbd;
+  // Set in the first iterations (NDFL < KEXNW).
+  blasint ndec = 0;
   bool sorted;
   R aa, bb, cc, cs, dd, sn, ss, swap;
   blasint info = 0;
@@ -3642,8 +3652,10 @@ blasint Laqr0(bool wantt, bool wantz, blasint n, blasint ilo, blasint ihi, T* h,
   const Matrix<T> Z(z, ldz);
   T zdum[1];
   blasint i, inf, it, itmax, k, kacc22, kbot, kdu, ks, kt, ktop, ku, kv, kwh,
-      kwtop, kwv, ld, ls, lwkopt, ndec, ndfl, nh, nho, nibble, nmin, ns, nsmax,
-      nsr, nve, nw, nwmax, nwr, nwupbd;
+      kwtop, kwv, ld, ls, lwkopt, ndfl, nh, nho, nibble, nmin, ns, nsmax, nsr,
+      nve, nw, nwmax, nwr, nwupbd;
+  // Set in the first iterations (NDFL < KEXNW).
+  blasint ndec = 0;
   bool sorted;
   R s;
   T aa, bb, cc, dd, det, rtdisc, swap, tr2;

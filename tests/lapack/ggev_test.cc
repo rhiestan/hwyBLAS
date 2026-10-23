@@ -771,12 +771,16 @@ TYPED_TEST(GgevTest, BalanceAndBackTransform) {
         hwyblas_int ilo = -1, ihi = -1;
         std::vector<R> ls, rs;
         ASSERT_EQ(Ggbal<T>(job, n, ab, ld, bb, ld, &ilo, &ihi, ls, rs), 0);
-        if (job == 'N' || job == 'S') EXPECT_EQ(ilo, 1);
+        if (job == 'N' || job == 'S') {
+          EXPECT_EQ(ilo, 1);
+        }
         if (n == 0) {
           EXPECT_EQ(ihi, 0);
           continue;
         }
-        if (job == 'N' || job == 'S') EXPECT_EQ(ihi, n);
+        if (job == 'N' || job == 'S') {
+          EXPECT_EQ(ihi, n);
+        }
         if (job == 'N') {
           EXPECT_TRUE(SameValues(ab, a));
           EXPECT_TRUE(SameValues(bb, b));
@@ -1056,7 +1060,9 @@ TYPED_TEST(GgevTest, GgevEigenpairs) {
             ASSERT_EQ(Ggev<T>(jobvl, jobvr, n, af, ld, bf, ld, alpha, beta, vl,
                               ld, vr, ld, lwork, &opt),
                       0);
-            if (!minimal) EXPECT_EQ(opt, lwork);
+            if (!minimal) {
+              EXPECT_EQ(opt, lwork);
+            }
             if (jobvr == 'V') {
               ExpectEigenvectors(a, b, n, ld, alpha, beta, vr, ld, false);
             }
@@ -1797,7 +1803,9 @@ TYPED_TEST(GgevTest, Ggsvp3Preprocessing) {
       const bool zero =
           j < n - k - l || (i < k && j - (n - k - l) < i) ||
           (i >= k && (j < n - l || i >= k + l || j - (n - l) < i - k));
-      if (zero) EXPECT_EQ(At(af, i, j, ld), T(0)) << i << "," << j;
+      if (zero) {
+        EXPECT_EQ(At(af, i, j, ld), T(0)) << i << "," << j;
+      }
     }
     for (hwyblas_int i = 0; i < p; ++i) {
       if (j < n - l || i >= l || j - (n - l) < i) {

@@ -69,7 +69,9 @@ TYPED_TEST(GesddRealTest, Lamrg) {
             ASSERT_LE(index[i], n1 + n2);
             ASSERT_FALSE(seen[index[i] - 1]);
             seen[index[i] - 1] = true;
-            if (i > 0) ASSERT_LE(a[index[i - 1] - 1], a[index[i] - 1]) << i;
+            if (i > 0) {
+              ASSERT_LE(a[index[i - 1] - 1], a[index[i] - 1]) << i;
+            }
           }
           EXPECT_EQ(index[n1 + n2], -1);
         }
@@ -252,7 +254,9 @@ TYPED_TEST(GesddRealTest, Bdsdc) {
             EXPECT_NEAR(dp[i], d[i], 30 * n * Eps<R>() * bnorm) << i;
           }
           // IQ(N) = 1 for upper and 0 for lower B ('P').
-          if (n > 1) EXPECT_EQ(iqp[n - 1], uplo == 'U' ? 1 : 0);
+          if (n > 1) {
+            EXPECT_EQ(iqp[n - 1], uplo == 'U' ? 1 : 0);
+          }
         }
       }
     }
@@ -297,7 +301,9 @@ TYPED_TEST(GesddRealTest, Lasdq) {
         ASSERT_EQ(info, 0);
         for (hwyblas_int i = 0; i < n; ++i) {
           ASSERT_GE(d[i], R(0));
-          if (i > 0) ASSERT_LE(d[i - 1], d[i]) << i;
+          if (i > 0) {
+            ASSERT_LE(d[i - 1], d[i]) << i;
+          }
         }
         // B = U(:, 1:n) * diag(d) * VT(1:n, :) (the first n columns and
         // rows).

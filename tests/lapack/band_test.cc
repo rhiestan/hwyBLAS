@@ -447,7 +447,9 @@ TYPED_TEST(BandTest, GeneralSolve) {
           EXPECT_LT(SolveRatio(Op(op, da), xt, ldb, b, ldb, n, nrhs),
                     kLapackThreshold)
               << trans;
-          if (trans == 'N') EXPECT_EQ(xt, x);
+          if (trans == 'N') {
+            EXPECT_EQ(xt, x);
+          }
         }
       }
     }

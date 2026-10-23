@@ -924,7 +924,9 @@ TYPED_TEST(SyevdTest, WorkspaceQueriesAndErrors) {
       liwork = 6 + 6 * n + 5 * n * lgn;
     }
     EXPECT_EQ(QueryResult(wq), lwork);
-    if (kComplex) EXPECT_EQ(QueryResult(rq), lrwork);
+    if (kComplex) {
+      EXPECT_EQ(QueryResult(rq), lrwork);
+    }
     EXPECT_EQ(iq, liwork);
   }
   // xSYEVD / xHEEVD: the optimal LWORK with NB = 8.

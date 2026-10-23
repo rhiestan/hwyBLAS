@@ -1308,7 +1308,9 @@ blasint Laed8(blasint icompq, blasint* k, blasint n, blasint qsiz, R* d, R* q,
   const Matrix<R> Q2(q2, ldq2);
   const Vector<R> W(w);
   const Vector<R> Z(z);
-  blasint i, imax, j, jlam, jmax, jp, k2, n1, n1p1, n2;
+  blasint i, imax, j, jmax, jp, k2, n1, n1p1, n2;
+  // Set when the first undeflated eigenvalue is found, before any use.
+  blasint jlam = 0;
   R c, eps, s, t, tau, tol;
   blasint info = 0;
   if (icompq < 0 || icompq > 1) {
@@ -1527,7 +1529,9 @@ blasint Laed8(blasint* k, blasint n, blasint qsiz, T* q, blasint ldq,
   const Matrix<T> Q2(q2, ldq2);
   const Vector<R> W(w);
   const Vector<R> Z(z);
-  blasint i, imax, j, jlam, jmax, jp, k2, n1, n1p1, n2;
+  blasint i, imax, j, jmax, jp, k2, n1, n1p1, n2;
+  // Set when the first undeflated eigenvalue is found, before any use.
+  blasint jlam = 0;
   R c, eps, s, t, tau, tol;
   blasint info = 0;
   if (n < 0) {
@@ -1931,9 +1935,11 @@ blasint Laed0(blasint icompq, blasint qsiz, blasint n, R* d, R* e, R* q,
   const Matrix<R> Q(q, ldq);
   const Matrix<R> QSTORE(qstore, ldqs);
   const Vector<R> WORK(work);
-  blasint curlvl, curprb, curr, i, igivcl, igivnm, igivpt, indxq, iperm, iprmpt,
-      iq, iqptr, iwrem, j, k, lgn, matsiz, msd2, smlsiz, smm1, spm1, spm2,
-      submat, subpbs, tlvls;
+  blasint curlvl, curprb, curr, i, igivnm, indxq, j, k, lgn, matsiz, msd2,
+      smlsiz, smm1, spm1, spm2, submat, subpbs, tlvls;
+  // Set and used only for ICOMPQ != 2.
+  blasint igivcl = 0, igivpt = 0, iperm = 0, iprmpt = 0, iq = 0, iqptr = 0,
+          iwrem = 0;
   R temp;
   blasint info = 0;
   if (icompq < 0 || icompq > 2) {

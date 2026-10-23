@@ -2654,9 +2654,11 @@ blasint Bdsdc(char uplo, char compq, blasint n, R* d, R* e, R* u, blasint ldu,
   const Matrix<R> U(u, ldu);
   const Matrix<R> VT(vt, ldvt);
   const Vector<R> WORK(work);
-  blasint difl, difr, givcol, givnum, givptr, i, ic, icompq, ii, is, iu, iuplo,
-      ivt, j, k, kk, mlvl, nm1, nsize, perm, poles, qstart, smlsiz, smlszp,
-      sqre, start, wstart, z;
+  blasint givptr, i, icompq, ii, iu, iuplo, j, k, kk, mlvl, nm1, nsize, perm,
+      qstart, smlsiz, smlszp, sqre, start, wstart;
+  // Set and used only for ICOMPQ = 2.
+  blasint difl = 0, difr = 0, givcol = 0, givnum = 0, ic = 0, is = 0, ivt = 0,
+          poles = 0, z = 0;
   R cs, eps, orgnrm, p, r, sn;
   blasint info = 0;
   iuplo = 0;

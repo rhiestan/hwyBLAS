@@ -83,7 +83,9 @@ TYPED_TEST(PotrfTest, Factorization) {
                 for (hwyblas_int i = 0; i < lda; ++i) {
                   const bool stored =
                       i < n && ((uplo == 'U') ? (i <= j) : (i >= j));
-                  if (!stored) ASSERT_EQ(At(f, i, j, lda), At(a, i, j, lda));
+                  if (!stored) {
+                    ASSERT_EQ(At(f, i, j, lda), At(a, i, j, lda));
+                  }
                 }
               }
             }

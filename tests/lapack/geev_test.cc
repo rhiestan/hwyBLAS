@@ -934,7 +934,9 @@ TYPED_TEST(GeevRealTest, Laqtr) {
           ASSERT_EQ(info, 0);
           EXPECT_GT(scale, 0);
           EXPECT_LE(scale, 1);
-          if (factor > 1) EXPECT_LT(scale, 1);
+          if (factor > 1) {
+            EXPECT_LT(scale, 1);
+          }
           // M = T + iB (complex), op(M) z = scale * (c + id).
           std::vector<C64> mat(static_cast<size_t>(n * n));
           for (hwyblas_int j = 0; j < n; ++j) {
@@ -1307,7 +1309,9 @@ TYPED_TEST(GeevTest, Geesx) {
               if (sort == 'N') {
                 EXPECT_EQ(t, t0);
                 EXPECT_EQ(w, w0);
-                if (jobvs == 'V') EXPECT_EQ(vs, vs0);
+                if (jobvs == 'V') {
+                  EXPECT_EQ(vs, vs0);
+                }
                 EXPECT_EQ(sdim, 0);
                 continue;
               }
@@ -1341,10 +1345,16 @@ TYPED_TEST(GeevTest, Geesx) {
               w1.resize(static_cast<size_t>(n));
               EXPECT_EQ(t, t0);
               EXPECT_EQ(w, w1);
-              if (jobvs == 'V') EXPECT_EQ(vs, vs0);
+              if (jobvs == 'V') {
+                EXPECT_EQ(vs, vs0);
+              }
               EXPECT_EQ(sdim, m);
-              if (sense == 'E' || sense == 'B') EXPECT_EQ(rconde, s);
-              if (sense == 'V' || sense == 'B') EXPECT_EQ(rcondv, sep);
+              if (sense == 'E' || sense == 'B') {
+                EXPECT_EQ(rconde, s);
+              }
+              if (sense == 'V' || sense == 'B') {
+                EXPECT_EQ(rcondv, sep);
+              }
             }
           }
         }
@@ -1601,7 +1611,9 @@ TYPED_TEST(GeevTest, WorkspaceQueries) {
                      &lwork, &liwork),
             0);
   EXPECT_EQ(lwork, 1);
-  if (!IsComplex<T>::value) EXPECT_EQ(liwork, 1);
+  if (!IsComplex<T>::value) {
+    EXPECT_EQ(liwork, 1);
+  }
   // xTREVC3: N + 2*N*NB with ILAENV's NB.
   std::vector<hwyblas_int> sel(1);
   hwyblas_int m = 0, opt = 0;
@@ -1827,8 +1839,12 @@ TYPED_TEST(GeevTest, LapackeLayouts) {
     EXPECT_EQ(orow.ihi, oc.ihi);
     EXPECT_EQ(orow.scale, oc.scale);
     EXPECT_EQ(orow.abnrm, oc.abnrm);
-    if (sense == 'E' || sense == 'B') EXPECT_EQ(orow.rconde, oc.rconde);
-    if (sense == 'V' || sense == 'B') EXPECT_EQ(orow.rcondv, oc.rcondv);
+    if (sense == 'E' || sense == 'B') {
+      EXPECT_EQ(orow.rconde, oc.rconde);
+    }
+    if (sense == 'V' || sense == 'B') {
+      EXPECT_EQ(orow.rcondv, oc.rcondv);
+    }
   }
   // ?geesx.
   for (const char sense : {'N', 'E', 'V', 'B'}) {
@@ -1851,8 +1867,12 @@ TYPED_TEST(GeevTest, LapackeLayouts) {
       EXPECT_EQ(sr, sc);
       ExpectSameRowMajor(row, col, n, n, ld);
       ExpectSameRowMajor(vr, vc, n, n, ld);
-      if (sense == 'E' || sense == 'B') EXPECT_EQ(er, ec);
-      if (sense == 'V' || sense == 'B') EXPECT_EQ(vrn, vcn);
+      if (sense == 'E' || sense == 'B') {
+        EXPECT_EQ(er, ec);
+      }
+      if (sense == 'V' || sense == 'B') {
+        EXPECT_EQ(vrn, vcn);
+      }
     }
   }
   // ?trsna on the Schur form of A.

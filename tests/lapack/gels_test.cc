@@ -155,7 +155,9 @@ hwyblas_int Gels(char trans, hwyblas_int m, hwyblas_int n, hwyblas_int nrhs,
   std::vector<T> work(lwork, NaN<T>());
   HWYBLAS_CALL(T, gels, &trans, &m, &n, &nrhs, P(a.data()), &lda, P(b.data()),
                &ldb, P(work.data()), &lwork, &info);
-  if (!minimal && info == 0) EXPECT_EQ(QueryResult(work[0]), lwork);
+  if (!minimal && info == 0) {
+    EXPECT_EQ(QueryResult(work[0]), lwork);
+  }
   return info;
 }
 
@@ -373,7 +375,9 @@ hwyblas_int RankRevealing(int which, hwyblas_int m, hwyblas_int n,
                         jpvt.data(), &rcond, rank, work.data(), &lwork, &info);
     }
   }
-  if (!minimal && info == 0) EXPECT_EQ(QueryResult(work[0]), lwork);
+  if (!minimal && info == 0) {
+    EXPECT_EQ(QueryResult(work[0]), lwork);
+  }
   return info;
 }
 
@@ -1506,7 +1510,9 @@ TYPED_TEST(GelsTest, WorkspaceQueriesAndErrors) {
     }
     EXPECT_EQ(mul('L', 'N', 4, 3, 2, 1, 1, 4, big), -7 - shift);
     EXPECT_EQ(mul('L', 'N', 4, 3, 2, 1, 2, 3, big), -10 - shift);
-    if (blocked) EXPECT_EQ(mul('L', 'N', 4, 3, 2, 1, 2, 4, 2), -12 - shift);
+    if (blocked) {
+      EXPECT_EQ(mul('L', 'N', 4, 3, 2, 1, 2, 4, 2), -12 - shift);
+    }
     const char* name = rz ? (blocked ? (kComplex ? "UNMRZ" : "ORMRZ")
                                      : (kComplex ? "UNMR3" : "ORMR3"))
                           : (blocked ? (kComplex ? "UNMRQ" : "ORMRQ")

@@ -533,7 +533,9 @@ blasint Geevx(char balanc, char jobvl, char jobvr, char sense, blasint n, R* a,
   const Vector<R> WR(wr);
   blasint hswork, i, icond, itau, iwrk, k, lwork_trevc, maxwrk, minwrk, nout;
   bool lquery, scalea, wantvl, wantvr, wntsnb, wntsne, wntsnn, wntsnv;
-  R anrm, bignum, cs, cscale, eps, r, scl, smlnum, sn;
+  R anrm, bignum, cs, eps, r, scl, smlnum, sn;
+  // Set and used only if SCALEA.
+  R cscale = R(0);
   char job;
   // Set wherever it is read (eigenvectors are wanted); initialized for the
   // compiler.
@@ -812,7 +814,9 @@ blasint Geevx(char balanc, char jobvl, char jobvr, char sense, blasint n, T* a,
   const Vector<T> WORK(work);
   blasint hswork, i, icond, itau, iwrk, k, lwork_trevc, maxwrk, minwrk, nout;
   bool lquery, scalea, wantvl, wantvr, wntsnb, wntsne, wntsnn, wntsnv;
-  R anrm, bignum, cscale, eps, scl, smlnum;
+  R anrm, bignum, eps, scl, smlnum;
+  // Set and used only if SCALEA.
+  R cscale = R(0);
   T tmp;
   char job;
   // Set wherever it is read (eigenvectors are wanted); initialized for the
@@ -1099,7 +1103,9 @@ blasint Geesx(char jobvs, char sort, GeesSelectReal<R> select, char sense,
   blasint maxwrk = 1;
   bool cursl, lastsl, lquery, lst2sl, scalea, wantsb, wantse, wantsn, wantst,
       wantsv, wantvs;
-  R anrm, bignum, cscale, eps, smlnum;
+  R anrm, bignum, eps, smlnum;
+  // Set and used only if SCALEA.
+  R cscale = R(0);
   // Test the input arguments
   blasint info = 0;
   wantvs = Lsame(jobvs, 'V');

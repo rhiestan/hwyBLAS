@@ -60,8 +60,9 @@ blasint Tgevc(char side, char howmny, const blasint* select, blasint n,
   const Matrix<R> VR(vr, ldvr);
   const Vector<R> WORK(work);
   blasint i, ibeg, ieig, iend, ihwmny, im, iside, j, ja, jc, je, jr, jw, na, nw;
-  bool compl_, compr, il2by2, ilabad, ilall, ilback, ilbbad, ilcomp, ilcplx,
-      lsa, lsb;
+  bool compl_, compr, il2by2, ilabad, ilall, ilbbad, ilcomp, ilcplx, lsa, lsb;
+  // Set below for every valid HOWMNY.
+  bool ilback = false;
   R acoef, acoefa, anorm, ascale, bcoefa, bcoefi, bcoefr, big, bignum, bnorm,
       bscale, cim2a, cim2b, cimaga, cimagb, cre2a, cre2b, creala, crealb, dmin,
       safmin, salfar, sbeta, scale, small, temp, temp2, temp2i, temp2r, ulp,
@@ -781,7 +782,9 @@ blasint Tgevc(char side, char howmny, const blasint* select, blasint n,
   const Matrix<T> VR(vr, ldvr);
   const Vector<T> WORK(work);
   blasint i, ibeg, ieig, iend, ihwmny, im, iside, isrc, j, je, jr;
-  bool compl_, compr, ilall, ilback, ilbbad, ilcomp, lsa, lsb;
+  bool compl_, compr, ilall, ilbbad, ilcomp, lsa, lsb;
+  // Set below for every valid HOWMNY.
+  bool ilback = false;
   R acoefa, acoeff, anorm, ascale, bcoefa, big, bignum, bnorm, bscale, dmin,
       safmin, sbeta, scale, small, temp, ulp, xmax;
   T bcoeff, ca, cb, d, salpha, sum, suma, sumb;

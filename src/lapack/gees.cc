@@ -54,7 +54,9 @@ blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,
   blasint hswork, i, i1, i2, ibal, icond, ieval, ihi, ilo, inxt, ip, itau, iwrk,
       maxwrk, minwrk;
   bool cursl, lastsl, lquery, lst2sl, scalea, wantst, wantvs;
-  R anrm, bignum, cscale, eps, s, sep, smlnum;
+  R anrm, bignum, eps, s, sep, smlnum;
+  // Set and used only if SCALEA.
+  R cscale = R(0);
   blasint info = 0;
   lquery = (lwork == -1);
   wantvs = Lsame(jobvs, 'V');

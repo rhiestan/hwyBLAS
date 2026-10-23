@@ -652,7 +652,9 @@ blasint Larrd(char range, char order, blasint n, R vl, R vu, blasint il,
       irange, itmax, itmp1, itmp2, iw, iwoff, j, jblk, jdisc, je, jee, nb, nwl,
       nwu;
   bool ncnvrg, toofew;
-  R atoli, eps, gl, gu, rtoli, tmp1, tmp2, tnorm, uflow, wkill, wlu, wul;
+  R atoli, eps, gl, gu, rtoli, tmp1, tmp2, tnorm, uflow, wkill;
+  // Set and used only for RANGE = 'I'.
+  R wlu = R(0), wul = R(0);
   blasint info = 0;
   *m = 0;
   // Quick return if possible
@@ -1122,8 +1124,10 @@ blasint Larre(char range, blasint n, R* vl, R* vu, blasint il, blasint iu, R* d,
   const Vector<R> WERR(werr);
   const Vector<R> WGAP(wgap);
   const Vector<R> WORK(work);
-  blasint cnt, cnt1, cnt2, i, ibegin, idum, iend, iinfo, in, indl, indu, irange,
-      j, jblk, mb, mm, wbegin, wend;
+  blasint cnt, cnt1, cnt2, i, ibegin, idum, iend, iinfo, in, irange, j, jblk,
+      mm, wbegin, wend;
+  // Set for each block: when its eigenvalues are counted, or for DQDS.
+  blasint indl = 0, indu = 0, mb = 0;
   bool forceb, norep, usedqd;
   R avgap, bsrtol, clwdth, dmax, dpivot, eabs, emax, eold, eps, gl, gu, isleft,
       isrght, rtl, rtol, s1, s2, safmin, sgndef, sigma, spdiam, tau, tmp, tmp1;

@@ -258,7 +258,9 @@ TYPED_TEST(LinearTest, Solve) {
         EXPECT_LT(SolveRatio(trans, a, lda, xt, ldb, b, ldb, n, nrhs),
                   kLapackThreshold)
             << trans;
-        if (trans == 'N') EXPECT_EQ(xt, x);
+        if (trans == 'N') {
+          EXPECT_EQ(xt, x);
+        }
       }
     }
   }
@@ -290,7 +292,9 @@ TYPED_TEST(LinearTest, Inverse) {
       std::vector<T> query(1);
       ASSERT_EQ(Getri(n, lu, lda, ipiv, query, -1), 0);
       const hwyblas_int lwkopt = static_cast<hwyblas_int>(std::real(query[0]));
-      if (nb > 0) EXPECT_EQ(lwkopt, std::max<hwyblas_int>(1, n * nb));
+      if (nb > 0) {
+        EXPECT_EQ(lwkopt, std::max<hwyblas_int>(1, n * nb));
+      }
       for (const hwyblas_int lwork : {lwkopt, std::max<hwyblas_int>(1, n),
                                       std::max<hwyblas_int>(1, 2 * n)}) {
         SCOPED_TRACE(::testing::Message()
@@ -922,7 +926,9 @@ TYPED_TEST(LinearTest, LapackeLayouts) {
                              ldb, &rc2, f2.data(), e2.data(), &g2),
                 0);
       EXPECT_EQ(eq2, eq1);
-      if (fact == 'E') EXPECT_NE(eq1, 'N');
+      if (fact == 'E') {
+        EXPECT_NE(eq1, 'N');
+      }
       same(arr, ac, n, n, lda, lda);
       same(afr, afc, n, n, lda, lda);
       same(brw, bcc, n, nrhs, ldb, ldb);

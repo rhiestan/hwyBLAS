@@ -87,7 +87,9 @@ template <typename R>
 void ExpectDecreasing(const std::vector<R>& s) {
   for (size_t i = 0; i < s.size(); ++i) {
     ASSERT_GE(s[i], R(0)) << i;
-    if (i > 0) ASSERT_GE(s[i - 1], s[i]) << i;
+    if (i > 0) {
+      ASSERT_GE(s[i - 1], s[i]) << i;
+    }
   }
 }
 
