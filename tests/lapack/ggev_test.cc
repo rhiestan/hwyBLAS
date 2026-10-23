@@ -1909,22 +1909,23 @@ TYPED_TEST(GgevTest, Lapll) {
           y[i * inc] = x[i * inc] * T(R(2)) + T(R(1e-3));
         }
       }
-      // The smallest singular value of ( x y ) from its Gram matrix.
-      C64 xx = 0, xy = 0, yy = 0;
+      // The smallest singular value of ( x y ) from its Gram matrix, whose
+      // determinant is the sum of the squared 2 x 2 minors (Cauchy-Binet),
+      // and the smaller eigenvalue 2 det / (tr + sqrt(tr^2 - 4 det)): the
+      // textbook xx yy - |xy|^2 and (tr - sqrt(...)) / 2 cancel for nearly
+      // parallel x and y.
+      double tr = 0, det = 0;
       for (hwyblas_int i = 0; i < n; ++i) {
         const C64 xi = static_cast<C64>(x[i * inc]);
         const C64 yi = static_cast<C64>(y[i * inc]);
-        xx += std::conj(xi) * xi;
-        xy += std::conj(xi) * yi;
-        yy += std::conj(yi) * yi;
+        tr += std::norm(xi) + std::norm(yi);
+        for (hwyblas_int j = i + 1; j < n; ++j) {
+          det += std::norm(xi * static_cast<C64>(y[j * inc]) -
+                           static_cast<C64>(x[j * inc]) * yi);
+        }
       }
-      const double tr = (xx + yy).real();
-      const double det = (xx * yy).real() - std::norm(xy);
-      const double smin =
-          n == 1 ? 0
-                 : std::sqrt(std::max(
-                       0.0,
-                       (tr - std::sqrt(std::max(0.0, tr * tr - 4 * det))) / 2));
+      const double smin = std::sqrt(
+          2 * det / (tr + std::sqrt(std::max(0.0, tr * tr - 4 * det))));
       R ssmin = -1;
       CALL_RC(T, lapll, lapll, &n, P(x.data()), &inc, P(y.data()), &inc,
               &ssmin);
