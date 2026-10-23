@@ -380,26 +380,33 @@ routines, which conjugate a copy of the vectors as the reference CBLAS does.
 ## Performance
 
 Single-threaded GFLOP/s on an AMD Ryzen 9 5950X (Zen 3, AVX2), compared
-with OpenBLAS 0.3.34 and MKL, square matrices, `trans = NN`:
+with OpenBLAS 0.3.34, MKL and AOCL-BLAS, square matrices, `trans = NN`:
 
-| | n | hwyBLAS | OpenBLAS | MKL |
-|---|---:|---:|---:|---:|
-| sgemm | 128 | 121 | 97 | 129 |
-| | 2048 | 122 | 122 | 128 |
-| dgemm | 128 | 59 | 53 | 47 |
-| | 2048 | 64 | 55 | 59 |
-| cgemm | 128 | 127 | 109 | 132 |
-| | 2048 | 120 | 115 | 121 |
-| zgemm | 128 | 62 | 61 | 64 |
-| | 2048 | 63 | 59 | 58 |
+| | n | hwyBLAS | OpenBLAS | MKL | AOCL-BLAS |
+|---|---:|---:|---:|---:|---:|
+| sgemm | 128 | 132 | 96 | 129 | 132 |
+| | 2048 | 135 | 135 | 129 | 132 |
+| dgemm | 128 | 65 | 56 | 49 | 68 |
+| | 2048 | 66 | 58 | 62 | 65 |
+| cgemm | 128 | 135 | 114 | 135 | 131 |
+| | 2048 | 135 | 133 | 140 | 134 |
+| zgemm | 128 | 67 | 63 | 67 | 63 |
+| | 2048 | 67 | 67 | 68 | 66 |
+
+OpenBLAS and MKL are their multithreaded release binaries, limited to one
+thread at runtime (see below); AOCL-BLAS (the BLIS-based AMD library) is
+built from source single-threaded (`ENABLE_THREADING=no`) for the `amdzen`
+configuration.
 
 The other routines (`symm`, `syrk`, `syr2k`, `gemmt`, `trmm`, `trsm`, `gemv`,
 `symv`/`hemv`, `trmv`, `trsv`) perform on par with OpenBLAS at medium and
 large sizes, and mostly better than MKL on this AMD CPU. From n = 256 up, the rank updates
 (`ger`, `syr`, `syr2`, `her`, `her2`) are mostly the fastest of the four
 libraries, up to 2x ahead of the next best (`cher2`); at n = 64, MKL or AOCL
-is sometimes ahead. AOCL-BLAS, which has special code paths
-for small matrices, is the fastest for small (n ≤ 128) GEMM and TRSM.
+is sometimes ahead. For small GEMM (n = 16 to 64), hwyBLAS and AOCL-BLAS,
+which has special code paths for small matrices, are on par and up to
+3.5x faster than OpenBLAS and MKL, except for zgemm, where AOCL-BLAS is about
+10% faster at n ≤ 32. AOCL-BLAS is the fastest for small (n ≤ 128) TRSM.
 
 The packed routines and banded routines with wide bands are mostly the
 fastest of the four libraries (e.g. `dspmv` at n = 1000: 39 GFLOP/s vs. 22
@@ -409,12 +416,15 @@ faster: there the columns are too short for the vector kernels to pay off.
 To reproduce, pass other BLAS DLLs as `name=path`:
 
 ```sh
-build/bin/blas_bench gemm --types=sdcz OpenBLAS=path/to/libopenblas.dll MKL=path/to/mkl_rt.2.dll
+build/bin/blas_bench gemm --types=sdcz OpenBLAS=path/to/libopenblas.dll MKL=path/to/mkl_rt.2.dll AOCL=path/to/AOCL-LibBlis-Win-dll.dll
 build/bin/blas_bench trsm --side=R --uplo=U --sizes=256,1024
 ```
 
-The benchmark forces every library to a single thread. It interleaves the
-libraries over several rounds and reports each one's best time.
+The benchmark forces every library to a single thread
+(`openblas_set_num_threads(1)`, `MKL_Set_Num_Threads(1)`,
+`bli_thread_set_num_threads(1)`); the process's CPU time equals its wall
+time with each of them. It interleaves the libraries over several rounds
+and reports each one's best time.
 
 ## Design
 
