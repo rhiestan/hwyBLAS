@@ -168,6 +168,13 @@ blasint Gebal(char job, blasint n, T* a, blasint lda, blasint* ilo,
       if (std::isnan(c + ca + r + ra)) {
         info = -3;
         Xerbla<T>("GEBAL", -info);
+        // The reference leaves ILO and IHI undefined here, and its callers
+        // (xGEEV, xGEEVX, xGEES, ...) ignore INFO and go on with them: an
+        // illegal ILO makes xHSEQR fail with INFO < 0, and the undoing of
+        // the scaling then reads and writes before WR. They are set to the
+        // limits found so far.
+        *ilo = k;
+        *ihi = l;
         return info;
       }
 

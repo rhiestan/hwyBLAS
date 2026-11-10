@@ -778,13 +778,17 @@ blasint Ggev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* b,
     }
     // Undo balancing on VL and VR and normalization
     // (Workspace: none needed)
+    // (The reference tests ALPHAI(JC) == 0 for a real eigenvalue and takes
+    // anything else after ALPHAI(JC) < 0 for the first of a complex pair, also
+    // a NaN, and then reads column JC + 1: past N for JC = N. A NaN is
+    // treated as real here: the tests are ALPHAI(JC) < 0, not > 0.)
     if (ilvl) {
       ierr = Ggbak('P', 'L', n, ilo, ihi, WORK.ptr(ileft), WORK.ptr(iright), n,
                    vl, ldvl);
       for (jc = 1; jc <= n; ++jc) {
         if (ALPHAI(jc) < zero) goto L50;
         temp = zero;
-        if (ALPHAI(jc) == zero) {
+        if (!(ALPHAI(jc) > zero)) {  // == zero (NaN: real, see above)
           for (jr = 1; jr <= n; ++jr) {
             temp = Max(temp, std::abs(VL(jr, jc)));
           }
@@ -795,7 +799,7 @@ blasint Ggev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* b,
         }
         if (temp < smlnum) goto L50;
         temp = one / temp;
-        if (ALPHAI(jc) == zero) {
+        if (!(ALPHAI(jc) > zero)) {  // == zero (NaN: real, see above)
           for (jr = 1; jr <= n; ++jr) {
             VL(jr, jc) = VL(jr, jc) * temp;
           }
@@ -814,7 +818,7 @@ blasint Ggev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* b,
       for (jc = 1; jc <= n; ++jc) {
         if (ALPHAI(jc) < zero) goto L100;
         temp = zero;
-        if (ALPHAI(jc) == zero) {
+        if (!(ALPHAI(jc) > zero)) {  // == zero (NaN: real, see above)
           for (jr = 1; jr <= n; ++jr) {
             temp = Max(temp, std::abs(VR(jr, jc)));
           }
@@ -825,7 +829,7 @@ blasint Ggev(char jobvl, char jobvr, blasint n, R* a, blasint lda, R* b,
         }
         if (temp < smlnum) goto L100;
         temp = one / temp;
-        if (ALPHAI(jc) == zero) {
+        if (!(ALPHAI(jc) > zero)) {  // == zero (NaN: real, see above)
           for (jr = 1; jr <= n; ++jr) {
             VR(jr, jc) = VR(jr, jc) * temp;
           }

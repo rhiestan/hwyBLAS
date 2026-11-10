@@ -1,7 +1,7 @@
 // Compares the ported LAPACK drivers with the reference LAPACK on the same
 // inputs, loading both libraries at runtime:
 //
-//   compare_reference <hwyblas library> <reference liblapack> [cases]
+//   compare_reference <hwyblas library> <reference liblapack> [cases] [special]
 //
 // The reference library must be a shared library built with hwyBLAS as its
 // BLAS (so that both use the same BLAS kernels) and without floating-point
@@ -44,6 +44,23 @@
 // distributions 3 to 5 use LOG, COS and EXP, of the C runtime in hwyBLAS
 // and of flang's in the reference (the real results are the same).
 //
+// A fourth argument selects special values in all matrices (see Special):
+//  - tiny, zero: all routines are compared as above.
+//  - huge, subnormal: the same for the real routines; the complex ones are
+//    left out, as flang's complex arithmetic differs from the port's near
+//    the limits of the range (beyond any tolerance).
+//  - nan, inf: only hwyBLAS runs, to see that it returns without crashing
+//    or hanging. Their results are not defined, and the reference itself
+//    reads and writes out of bounds in places (xGEBAL's NaN exit leaves
+//    ILO and IHI undefined, xGETC2 and xLASY2 find no pivot, xGGEV
+//    normalizes a NaN as a complex pair), or never returns (xSYEVR of a
+//    matrix with a NaN or an Inf). The cases of the latter are left out.
+// COMPARE_REFERENCE_ONLY=hwy or ref runs one library only, and
+// COMPARE_REFERENCE_TRACE=1 names each case before it runs, to find a crash;
+// COMPARE_REFERENCE_SKIP=name,... leaves routines out (e.g. syevr); a case
+// that takes longer than COMPARE_REFERENCE_TIMEOUT seconds (default 60) ends
+// the program with exit code 3 and its name.
+//
 // The comparison catches changes that keep the results valid, which the
 // residual tests cannot: a different shift strategy, deflation criterion,
 // pivot choice or scaling. It is not part of the build or of ctest.
@@ -51,6 +68,8 @@
 // Copyright (c) 2026, Roman Hiestand. BSD 3-Clause License.
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -60,6 +79,7 @@
 #include <map>
 #include <random>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -153,10 +173,80 @@ T Random() {
   }
 }
 
+// Special values: every matrix of TestMatrix (and so the Hermitian and
+// positive definite ones, and the right-hand sides) is changed as follows.
+// The results are compared as usual, so this checks the handling of values
+// the drivers must scale or propagate, against the reference.
+enum class Special {
+  kNone,
+  kHuge,       // scaled above the drivers' overflow threshold, so they scale
+  kTiny,       // scaled below their underflow threshold
+  kSubnormal,  // entries subnormal
+  kZero,       // all zero
+  kNan,        // one NaN in the middle
+  kInf,        // one Inf in the middle
+};
+Special g_special = Special::kNone;
+
+const char* const kSpecialNames[] = {"none", "huge", "tiny", "subnormal",
+                                     "zero", "nan",  "inf"};
+
+template <typename R>
+double SpecialScale() {
+  using L = std::numeric_limits<R>;
+  // Thresholds of the drivers: SMLNUM = sqrt(safmin) / eps (BIGNUM = 1 /
+  // SMLNUM), 2^-38 for float and 2^-457 for double. The factors are 2^6
+  // beyond them, but not so large that products of two entries (the positive
+  // definite matrices, also scaled by up to 2^24 and summed) overflow.
+  const int threshold = -L::min_exponent / 2 - L::digits;
+  double scale = 1;
+  switch (g_special) {
+    case Special::kHuge:
+      scale = std::ldexp(1.0, threshold + 6);
+      break;
+    case Special::kTiny:
+      scale = std::ldexp(1.0, -threshold - 6);
+      break;
+    case Special::kSubnormal:
+      scale = std::ldexp(1.0, L::min_exponent - 1 - L::digits / 2);
+      break;
+    case Special::kZero:
+      scale = 0;
+      break;
+    default:
+      break;
+  }
+  return scale;
+}
+
+template <typename T>
+void ApplySpecial(std::vector<T>& a, I m, I n) {
+  using R = Real<T>;
+  using L = std::numeric_limits<R>;
+  if (g_special == Special::kNone || a.empty()) return;
+  const double scale = SpecialScale<R>();
+  for (T& x : a) x *= static_cast<R>(scale);
+  const size_t middle =
+      static_cast<size_t>(m / 2) + static_cast<size_t>(n / 2) * m;
+  if (g_special == Special::kNan) a[middle] = T(L::quiet_NaN());
+  if (g_special == Special::kInf) a[middle] = T(L::infinity());
+}
+
 // An m x n matrix of the given kind: 0 random, 1 cyclic permutation,
-// 2 graded, 3 Jordan block with noise, 4 small integers (ties).
+// 2 graded, 3 Jordan block with noise, 4 small integers (ties); then
+// changed as g_special says.
+template <typename T>
+std::vector<T> BaseTestMatrix(int kind, I m, I n);
+
 template <typename T>
 std::vector<T> TestMatrix(int kind, I m, I n) {
+  std::vector<T> a = BaseTestMatrix<T>(kind, m, n);
+  ApplySpecial(a, m, n);
+  return a;
+}
+
+template <typename T>
+std::vector<T> BaseTestMatrix(int kind, I m, I n) {
   using R = Real<T>;
   std::vector<T> a(static_cast<size_t>(m) * n);
   for (I j = 0; j < n; ++j) {
@@ -205,7 +295,11 @@ std::vector<T> PositiveDefinite(I n) {
   std::vector<T> a(static_cast<size_t>(n) * n);
   for (I j = 0; j < n; ++j) {
     for (I i = 0; i < n; ++i) {
-      T s = i == j ? T(Real<T>(n)) : T(0);
+      // The diagonal grows with the entries of B (huge values), so that
+      // the matrix stays positive definite beyond rounding.
+      const double grow =
+          g_special == Special::kHuge ? SpecialScale<Real<T>>() : 1;
+      T s = i == j ? T(static_cast<Real<T>>(n * grow * grow)) : T(0);
       for (I k = 0; k < n; ++k) {
         s += Conj(b[k + static_cast<size_t>(i) * n]) *
              b[k + static_cast<size_t>(j) * n];
@@ -1301,12 +1395,109 @@ void Compare(const std::string& routine, const std::string& what, I n,
 
 std::map<std::string, Tally>* g_tallies;
 
+// The case being run and when it started (0: none), for the watchdog: with
+// special values some routines of the reference loop forever (see below).
+char g_case[200];
+int g_cases_without_comparison = 0;
+std::atomic<long long> g_case_start{0};
+
+long long NowSeconds() {
+  return std::chrono::duration_cast<std::chrono::seconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+             .count() +
+         1;
+}
+
+// Ends the program if a case takes longer than COMPARE_REFERENCE_TIMEOUT
+// seconds (default 60; 0: no limit), naming it. Exit code 3.
+void StartWatchdog() {
+  const char* env = getenv("COMPARE_REFERENCE_TIMEOUT");
+  const long long limit = env != nullptr ? atoll(env) : 60;
+  if (limit <= 0) return;
+  std::thread([limit] {
+    for (;;) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      const long long start = g_case_start.load();
+      if (start != 0 && NowSeconds() - start > limit) {
+        fprintf(stderr, "HANG: %s\n", g_case);
+        fflush(stderr);
+        _Exit(3);
+      }
+    }
+  }).detach();
+}
+
+// COMPARE_REFERENCE_SKIP=name,name,... leaves out the cases of these
+// routines (without the precision prefix, e.g. syevr).
+bool Skipped(const std::string& routine, const std::string& what) {
+  // xSYEVR and xHEEVR (the MRRR algorithm of xSTEMR) can loop forever on a
+  // NaN or an Inf in the matrix, in the reference as well (xLARRB's bisection
+  // never ends; seen for a NaN from order 3 and for an Inf at order 64).
+  if ((g_special == Special::kNan || g_special == Special::kInf) &&
+      (routine == "syevr" || routine == "heevr")) {
+    return true;
+  }
+  // Subnormal values: the leaf kernels of xGETRF2 round differently (see the
+  // top), and the entries keep about 10 significant bits, so that the pivots
+  // change at near-ties.
+  if (g_special == Special::kSubnormal &&
+      (routine == "getrf" || routine == "gesv" || routine == "gesvx")) {
+    return true;
+  }
+  // Huge values: itype 2 and 3 of xSYGV and xSYGVD form the product of A and
+  // B, which overflows (where the Inf and NaN end up differs).
+  if (g_special == Special::kHuge &&
+      (routine == "sygv" || routine == "sygvd" || routine == "hegv" ||
+       routine == "hegvd") &&
+      (what.find("itype=2") != std::string::npos ||
+       what.find("itype=3") != std::string::npos)) {
+    return true;
+  }
+  static const std::string skip =
+      getenv("COMPARE_REFERENCE_SKIP") != nullptr
+          ? "," + std::string(getenv("COMPARE_REFERENCE_SKIP")) + ","
+          : "";
+  return !skip.empty() && skip.find("," + routine + ",") != std::string::npos;
+}
+
 // Runs one case in both libraries with the same workspace (the larger of
 // the two queries) and compares the results.
 template <typename T, typename Run>
 void Case(const BlasLibrary& hwy, const BlasLibrary& ref,
           const std::string& routine, const std::string& what, I n,
           const Run& run) {
+  if (Skipped(routine, what)) return;
+  snprintf(g_case, sizeof(g_case), "%s%s %s", Prefix<T>(), routine.c_str(),
+           what.c_str());
+  g_case_start = NowSeconds();
+  struct Done {
+    ~Done() { g_case_start = 0; }
+  } done;
+  // COMPARE_REFERENCE_TRACE=1 names each case before it runs (to find a
+  // crash).
+  static const bool trace = getenv("COMPARE_REFERENCE_TRACE") != nullptr;
+  if (trace) {
+    fprintf(stderr, "case %s%s %s\n", Prefix<T>(), routine.c_str(),
+            what.c_str());
+    fflush(stderr);
+  }
+  // COMPARE_REFERENCE_ONLY=hwy or ref runs one library only (no comparison),
+  // to tell which one crashes.
+  // NaN and Inf in the matrices: the results are not defined (and the
+  // reference writes out of bounds in places), so only hwyBLAS runs, to see
+  // that it returns.
+  static const char* const only =
+      getenv("COMPARE_REFERENCE_ONLY") != nullptr
+          ? getenv("COMPARE_REFERENCE_ONLY")
+      : (g_special == Special::kNan || g_special == Special::kInf) ? "hwy"
+                                                                   : nullptr;
+  if (only != nullptr) {
+    ++g_cases_without_comparison;
+    const BlasLibrary& lib = strcmp(only, "hwy") == 0 ? hwy : ref;
+    const I lw1 = static_cast<I>(std::max(run(lib, -1).lwork, 1.0));
+    run(lib, lw1);
+    return;
+  }
   const double lwork = std::max(run(hwy, -1).lwork, run(ref, -1).lwork);
   const I lw = static_cast<I>(std::max(lwork, 1.0));
   const Result x = run(hwy, lw);
@@ -2765,6 +2956,9 @@ void RunSyevr(const BlasLibrary& hwy, const BlasLibrary& ref, I n) {
       ScaleThreshold<R>(false) * R(0.3) / (amax > 0 ? amax : R(1));
   const R near_rmax = ScaleThreshold<R>(true) * 3 / (amax > 0 ? amax : R(1));
   for (const R scale : {R(1), tiny / 4, 1 / tiny, near_rmin, near_rmax}) {
+    // Special values can make the factors overflow (amax subnormal): then the
+    // matrix would be all Inf and NaN.
+    if (!std::isfinite(scale) || scale == 0) continue;
     std::vector<T> as = a;
     for (T& x : as) x *= scale;
     for (const Wanted<R>& s : WantedSets<R>(n, g * scale)) {
@@ -3898,10 +4092,20 @@ Result Ggbal(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
   AddInt(r, "info", info);
   AddInt(r, "ilo", ilo);
   AddInt(r, "ihi", ihi);
-  Add(r, "a", Kind::kOther, a);
-  Add(r, "b", Kind::kOther, b);
-  Add(r, "lscale", Kind::kOther, ls);
-  Add(r, "rscale", Kind::kOther, rs);
+  // The scale factors SCLFAC**IR (SCLFAC = 10) round differently with the
+  // Fortran runtime once |IR| is large and the power inexact (flang gives
+  // nearly correctly rounded values, gfortran the repeated squaring that
+  // hwyBLAS computes): with huge or tiny values, the results are compared
+  // with a tolerance.
+  const Kind scaled = g_special == Special::kHuge ||
+                              g_special == Special::kTiny ||
+                              g_special == Special::kSubnormal
+                          ? Kind::kRounded
+                          : Kind::kOther;
+  Add(r, "a", scaled, a);
+  Add(r, "b", scaled, b);
+  Add(r, "lscale", scaled, ls);
+  Add(r, "rscale", scaled, rs);
   // xGGBAK with the balancing of this library.
   using G =
       void (*)(const char*, const char*, const I*, const I*, const I*, const R*,
@@ -3912,7 +4116,7 @@ Result Ggbal(const BlasLibrary& lib, std::vector<T> a, std::vector<T> b, I n,
                                        rs.data(), &m, x.data(), &ld, &info, 1,
                                        1);
     AddInt(r, "info", info);
-    Add(r, side == 'L' ? "vl" : "vr", Kind::kOther, x);
+    Add(r, side == 'L' ? "vl" : "vr", scaled, x);
   }
   return r;
 }
@@ -4808,7 +5012,7 @@ int main(int argc, char** argv) {
   if (argc < 3) {
     fprintf(stderr,
             "usage: compare_reference <hwyblas library> <reference liblapack> "
-            "[sizes, at most 13]\n");
+            "[sizes, at most 13] [none|huge|tiny|subnormal|zero|nan|inf]\n");
     return 2;
   }
   const BlasLibrary hwy("hwyBLAS", argv[1]), ref("reference", argv[2]);
@@ -4823,12 +5027,36 @@ int main(int argc, char** argv) {
   }
   set_ilaenv(ref_ilaenv);
   const int cases = argc > 3 ? atoi(argv[3]) : 13;
+  if (argc > 4) {
+    bool found = false;
+    for (size_t i = 0; i < std::size(kSpecialNames); ++i) {
+      if (strcmp(argv[4], kSpecialNames[i]) == 0) {
+        g_special = static_cast<Special>(i);
+        found = true;
+      }
+    }
+    if (!found) {
+      fprintf(stderr, "unknown special values: %s\n", argv[4]);
+      return 2;
+    }
+  }
+  printf("Special values: %s\n", kSpecialNames[static_cast<int>(g_special)]);
+  StartWatchdog();
   std::map<std::string, Tally> tallies;
   g_tallies = &tallies;
   RunAll<float>(hwy, ref, cases);
   RunAll<double>(hwy, ref, cases);
-  RunAll<std::complex<float>>(hwy, ref, cases);
-  RunAll<std::complex<double>>(hwy, ref, cases);
+  // The complex routines of flang divide and multiply otherwise than the
+  // port near the limits of the range (see the top): with huge and subnormal
+  // values their results differ beyond any tolerance.
+  if (g_special != Special::kHuge && g_special != Special::kSubnormal) {
+    RunAll<std::complex<float>>(hwy, ref, cases);
+    RunAll<std::complex<double>>(hwy, ref, cases);
+  }
+  if (g_cases_without_comparison > 0) {
+    printf("%d cases ran without a comparison: hwyBLAS returned from all.\n",
+           g_cases_without_comparison);
+  }
 
   printf("%-8s %6s %10s %11s %13s\n", "routine", "cases", "identical",
          "mismatches", "max diff/eps");

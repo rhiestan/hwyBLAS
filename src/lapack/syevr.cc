@@ -273,7 +273,9 @@ L30:
     if (info == 0) {
       imax = *m;
     } else {
-      imax = info - 1;
+      // The reference scales W(1:INFO-1), but INFO is up to 4 from xSTEBZ (NaN
+      // or Inf in the matrix), also beyond the N elements of W: at most N.
+      imax = Min<blasint>(info - 1, n);
     }
     Rscal(imax, one / sigma, w, 1);
   }
@@ -566,7 +568,9 @@ L30:
     if (info == 0) {
       imax = *m;
     } else {
-      imax = info - 1;
+      // The reference scales W(1:INFO-1), but INFO is up to 4 from xSTEBZ (NaN
+      // or Inf in the matrix), also beyond the N elements of W: at most N.
+      imax = Min<blasint>(info - 1, n);
     }
     Scal(imax, one / sigma, w, 1);
   }
@@ -828,7 +832,9 @@ L10:
     if (info == 0) {
       imax = *m;
     } else {
-      imax = info - 1;
+      // The reference scales W(1:INFO-1), but INFO is up to 4 from xSTEBZ (NaN
+      // or Inf in the matrix), also beyond the N elements of W: at most N.
+      imax = Min<blasint>(info - 1, n);
     }
     Scal(imax, one / sigma, w, 1);
   }

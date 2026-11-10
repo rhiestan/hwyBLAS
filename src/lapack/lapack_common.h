@@ -174,9 +174,13 @@ blasint Nint(R x) {
   return static_cast<blasint>(std::lround(x));
 }
 
-// X**N for an integer N as flang's runtime (and gfortran's __builtin_powi)
+// X**N for an integer N as gfortran's __builtin_powi (libgcc's __powidf2)
 // computes it: by repeated squaring, and 1 / X**(-N) for N < 0. For a base
-// such as 10, std::pow rounds X**N differently once it is not exact.
+// such as 10, std::pow rounds X**N differently once it is not exact. (The
+// flang runtime used to build the reference of compare_reference gives nearly
+// correctly rounded powers instead, which differ in the last bit for
+// inexact ones, 10**N with |N| >= 32 or so: only then do the scale factors
+// of xGGBAL differ.)
 template <typename R>
 R Powi(R x, blasint n) {
   if (n == 0) return R(1);

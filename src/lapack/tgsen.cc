@@ -44,8 +44,9 @@ blasint Getc2(blasint n, T* a, blasint lda, blasint* ipiv, blasint* jpiv) {
   const Vector<blasint> IPIV(ipiv);
   const Vector<blasint> JPIV(jpiv);
   blasint i, ip, j, jp;
-  // Set wherever they are read (A has a largest element); undefined in
-  // LAPACK if A(i:n,i:n) holds only NaNs.
+  // The pivot: the largest element of A(i:n,i:n). If that holds only NaNs, it
+  // is undefined in LAPACK (the rows and columns swapped are whatever the
+  // variables held, out of bounds the first time); here (i, i): no swap.
   blasint ipv = 0, jpv = 0;
   R eps, smlnum, xmax;
   // Set in the first iteration.
@@ -71,6 +72,8 @@ blasint Getc2(blasint n, T* a, blasint lda, blasint* ipiv, blasint* jpiv) {
   for (i = 1; i <= n - 1; ++i) {
     // Find max element in matrix A
     xmax = zero;
+    ipv = i;
+    jpv = i;
     for (jp = i; jp <= n; ++jp) {
       for (ip = i; ip <= n; ++ip) {
         if (std::abs(A(ip, jp)) >= xmax) {

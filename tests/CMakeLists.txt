@@ -122,6 +122,7 @@ if(HWYBLAS_LAPACK)
     lapack/posv_test.cc
     lapack/potrf_test.cc
     lapack/qr_test.cc
+    lapack/special_values_test.cc
     lapack/syev_test.cc
     lapack/sysv_test.cc
     lapack/syevd_test.cc

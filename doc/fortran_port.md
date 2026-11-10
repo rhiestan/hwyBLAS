@@ -52,9 +52,13 @@ The translator produces the conventions described in
   `Maxloc` of `lapack_common.h`, with flang's NaN rule (the first largest
   element, ignoring NaNs unless all are NaN); the translator does not know
   it. A real to an integer power (`SCLFAC**IR` in xGGBAL) is `Powi`,
-  which computes it by repeated squaring as flang's runtime (and
-  gfortran) do: `std::pow` rounds powers of 10 differently once they are
-  not exact.
+  which computes it by repeated squaring as gfortran does
+  (`__builtin_powi`): `std::pow` rounds powers of 10 differently once they
+  are not exact. flang's runtime gives nearly correctly rounded powers,
+  which differ in the last bit for 10**IR with large |IR|: compared with a
+  flang-built reference, xGGBAL's scale factors (and the matrices scaled
+  with them) then differ in the last bit (`compare_reference.cc` uses a
+  tolerance for them with huge and tiny values).
 - **Calls**: one template per real/complex pair, named after the complex
   routine (`DORGBR` and `ZUNGBR` both become `Ungbr`). A real routine called
   from a complex one gets `<R>`. `INFO` is not an argument: internal routines
@@ -335,3 +339,22 @@ differs (another fixed bug, visible only in the complex results, which
 are counted). The reference xGEQRT3 calls itself until the stack
 overflows for N = 0 (fixed in the port, see `Geqrt3`), so it is only
 compared for N > 0.
+
+An optional argument gives all matrices special values: scaled beyond the
+drivers' overflow threshold (`huge`) or below their underflow threshold
+(`tiny`), subnormal, zero, or with one NaN or Inf. They exercise the
+scaling paths of the drivers and the handling of values they must
+propagate. Huge, tiny, subnormal and zero matrices are compared like the
+others (but only the real routines for huge and subnormal ones: flang's
+complex arithmetic differs from the port's beyond any tolerance near the
+limits of the range); the results are identical, with one exception:
+xGGBAL's scale factors SCLFAC\*\*IR are powers of 10, which flang's runtime
+rounds differently from the port (as gfortran's `__builtin_powi`) once
+|IR| is large, so xGGBAL's results are compared with a tolerance there.
+With a NaN or an Inf the results are not defined, and the reference reads
+or writes out of bounds, or never returns, in several places (see
+"Fixed reference bugs" in [deviations.md](deviations.md)): there only
+hwyBLAS runs, to see that it returns without crashing (the cases of
+xSYEVR and xHEEVR are left out: the MRRR algorithm can loop forever, in
+the reference too). The unit tests `special_values_test.cc`
+keep the fixes in place; the sanitizer job runs them.

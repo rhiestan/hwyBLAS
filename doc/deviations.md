@@ -47,6 +47,10 @@ The results differ from the reference only in the cases described.
 | `clatbs`, `zlatbs` | Lower triangular, TRANS = 'T' or 'C', in the scaled solve: leaves out A(j+1, j) when one element is below the diagonal (JLEN = 1), so x is wrong | includes it, as `slatbs` and `dlatbs` do | `LatbsComplex`, `gbsv.cc` |
 | `?tgsen` | IJOB = 1, 2 or 4: the minimum LWORK (also returned by the workspace query) leaves `?tgsyl` a workspace of 0, which it rejects, so PL, PR or DIF are not computed | minimum and query are one element larger | `Tgsen`, `tgsen.cc` |
 | `ctgsen`, `ztgsen` | IJOB = 3 or 5: the transposed solve of the Difl estimate passes B11 and B22 in the wrong order, so DIF(2) is the estimate of a different operator | passes them as `stgsen` and `dtgsen` do | `Tgsen`, `tgsen.cc` |
+| `?gebal` (and `?geev`, `?geevx`, `?gees`, `?geesx`, `?ggev`, ... that call it) | A has a NaN (found while scaling): returns INFO = -3 without setting ILO and IHI, which the callers use anyway; xHSEQR then fails with INFO = -4 and undoing the scaling accesses WR before its first element | sets ILO and IHI to the limits found so far (the INFO returned is the same) | `Gebal` in `hessenberg.cc` |
+| `?getc2` (and `?tgsy2`, `?tgsyl`, `?tgsen`, ...) | A(i:n,i:n) holds only NaNs: no pivot is found and the rows and columns of an undefined (uninitialized) index are swapped | no swap | `Getc2` in `tgsen.cc` |
+| `sggev`, `dggev` | Eigenvectors, ALPHAI(J) is NaN: it is taken for the first of a complex pair, and the normalization reads column J + 1 of VL and VR, past N for J = N | a NaN is a real eigenvalue | `Ggev` in `ggev.cc` |
+| `?syevx`, `?heevx`, `?stevx`, `?syevr`, `?heevr`, `?stevr` | Matrix with NaN or Inf, scaled by the driver: INFO > 0 comes from `?stebz` (up to 4), and the final rescaling of W covers INFO - 1 elements, more than the N of W if N < 4: reads and writes past W | at most N elements | `Heevx`, `Stevx` in `syevx.cc`; `SyevrReal`, `HeevrComplex`, `Stevr` in `syevr.cc` |
 | `slasy2`, `dlasy2` | When NaNs fill the rest of the 4 x 4 system (N1 = N2 = 2), no pivot is found and the rows and columns of the previous step's pivot are swapped | no swap (X is NaN in both) | `Lasy2`, `trsen.cc` |
 
 ### Faster kernels
@@ -62,6 +66,13 @@ The results differ from the reference only in the cases described.
   both with the same operations on each element in the same order as the
   reference: the results are identical (`rotation_kernels.cc`,
   `steqr.cc`).
+
+### Behavior kept from the reference
+
+- `?syevr` and `?heevr` may not return for a matrix with a NaN or an Inf (a
+  NaN from order 3, an Inf at order 64): the MRRR algorithm (`?stemr`, in
+  `?larrb`) loops forever. The reference does the same, so callers should
+  check their matrices for NaN and Inf first.
 
 ## LAPACKE
 
