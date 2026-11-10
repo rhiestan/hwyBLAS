@@ -29,6 +29,16 @@
 #include "hwyblas/hwyblas.h"
 #include "src/common.h"
 
+// The enum arguments (CBLAS_LAYOUT, ...) of the CBLAS functions may hold any
+// int: callers, such as the Netlib CBLAS testers, pass invalid values to
+// check the error exits, and the standard C declarations cannot change their
+// types. Out-of-range values are reported as invalid arguments, so
+// clang's -fsanitize=enum (UBSan) is switched off in this file.
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((no_sanitize("enum"))), \
+                             apply_to = function)
+#endif
+
 namespace hwyblas {
 namespace {
 
@@ -2122,3 +2132,7 @@ HWYBLAS_API void cblas_zimatcopy(const CBLAS_LAYOUT layout,
 }
 
 }  // extern "C"
+
+#if defined(__clang__)
+#pragma clang attribute pop
+#endif

@@ -412,7 +412,9 @@ hwyblas_int Tgsen(hwyblas_int ijob, bool wantq, bool wantz,
   }
   alpha.resize(static_cast<size_t>(std::max<hwyblas_int>(0, n)));
   beta.resize(static_cast<size_t>(std::max<hwyblas_int>(0, n)));
-  out.work0 = static_cast<hwyblas_int>(std::real(work[0]));
+  // WORK(1) stays NaN when the routine leaves it alone (an invalid argument).
+  const R work0 = std::real(work[0]);
+  out.work0 = std::isnan(work0) ? -1 : static_cast<hwyblas_int>(work0);
   out.iwork0 = iwork[0];
   return info;
 }

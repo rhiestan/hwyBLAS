@@ -519,8 +519,8 @@ blasint Gges(char jobvsl, char jobvsr, char sort,
     if (ilbscl) ierr = Lascl('G', 0, 0, bnrm, bnrmto, n, 1, beta, n);
     // Select eigenvalues
     for (i = 1; i <= n; ++i) {
-      BWORK(i) = selctg(reinterpret_cast<const R*>(ALPHA.ptr(i)),
-                        reinterpret_cast<const R*>(BETA.ptr(i)));
+      BWORK(i) = CallSelect(selctg, reinterpret_cast<const R*>(ALPHA.ptr(i)),
+                            reinterpret_cast<const R*>(BETA.ptr(i)));
     }
     ierr = Tgsen(0, ilvsl, ilvsr, bwork, n, a, lda, b, ldb, alpha, beta, vsl,
                  ldvsl, vsr, ldvsr, sdim, &pvsl, &pvsr, dif, WORK.ptr(iwrk),
@@ -549,8 +549,8 @@ blasint Gges(char jobvsl, char jobvsr, char sort,
     lastsl = true;
     *sdim = 0;
     for (i = 1; i <= n; ++i) {
-      cursl = selctg(reinterpret_cast<const R*>(ALPHA.ptr(i)),
-                     reinterpret_cast<const R*>(BETA.ptr(i))) != 0;
+      cursl = CallSelect(selctg, reinterpret_cast<const R*>(ALPHA.ptr(i)),
+                         reinterpret_cast<const R*>(BETA.ptr(i))) != 0;
       if (cursl) *sdim = *sdim + 1;
       if (cursl && !lastsl) info = n + 2;
       lastsl = cursl;

@@ -1280,6 +1280,22 @@ using GeesSelectReal = blasint (*)(const R*, const R*);
 template <typename R>
 using GeesSelectComplex = blasint (*)(const R*);
 
+// Calls a SELECT function of a complex routine. The LAPACKE functions take
+// callbacks of type `int (*)(const std::complex<R>*)` and the Fortran
+// interface `int (*)(const R*)`, as the reference does; both are passed on as
+// one type. A pointer to a complex number and to its real part are passed the
+// same way, so the call works, but clang's -fsanitize=function (UBSan) reports
+// the different function type: it is switched off for this call.
+#if defined(__clang__)
+#define HWYBLAS_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
+#else
+#define HWYBLAS_NO_SANITIZE_FUNCTION
+#endif
+template <typename F, typename... Args>
+HWYBLAS_NO_SANITIZE_FUNCTION inline blasint CallSelect(F select, Args... args) {
+  return select(args...);
+}
+
 // BWORK is a LOGICAL array of N elements (used if SORT = 'S').
 template <typename R>
 blasint Gees(char jobvs, char sort, GeesSelectReal<R> select, blasint n, R* a,

@@ -387,7 +387,7 @@ blasint Gees(char jobvs, char sort, GeesSelectComplex<RealT<T>> select,
   if (wantst && info == 0) {
     if (scalea) Lascl('G', 0, 0, cscale, anrm, n, 1, w, n);
     for (i = 1; i <= n; ++i) {
-      BWORK(i) = select(reinterpret_cast<const R*>(W.ptr(i)));
+      BWORK(i) = CallSelect(select, reinterpret_cast<const R*>(W.ptr(i)));
     }
     // Reorder eigenvalues and transform Schur vectors
     // (CWorkspace: none)

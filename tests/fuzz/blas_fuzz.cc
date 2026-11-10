@@ -211,8 +211,17 @@ struct Case {
   std::function<void(const Lib&, const std::string& symbol, T* const*)> call;
 };
 
+// The libraries' functions are declared with other (const, void*) argument
+// types than the ones of the call: the same ABI, but clang's
+// -fsanitize=function (UBSan) reports it.
+#if defined(__clang__)
+#define FUZZ_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
+#else
+#define FUZZ_NO_SANITIZE_FUNCTION
+#endif
 template <typename R = void, typename... Args>
-R Call(const Lib& lib, const std::string& symbol, Args... args) {
+FUZZ_NO_SANITIZE_FUNCTION R Call(const Lib& lib, const std::string& symbol,
+                                 Args... args) {
   return lib.Get<R (*)(Args...)>(symbol.c_str())(args...);
 }
 
