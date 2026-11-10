@@ -33,7 +33,7 @@ jobs:
   test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +50,8 @@ jobs:
             cc: clang
             cxx: clang++
             flags: -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer
+            # The build alone takes about 85 minutes with UBSan.
+            timeout: 180
             openblas_target: HASWELL
           - name: Linux ARM64 GCC
             os: ubuntu-24.04-arm
