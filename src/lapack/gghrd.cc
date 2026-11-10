@@ -304,16 +304,16 @@ L350:
     rab = std::abs(A(i, irab + *ilo - 1));
     irab = Iamax(n - *ilo + 1, B.ptr(i, *ilo), ldb);
     rab = Max(rab, std::abs(B(i, irab + *ilo - 1)));
-    lrab = static_cast<blasint>(std::log10(rab + sfmin) / basl + one);
-    ir = static_cast<blasint>(LSCALE(i) + std::copysign(half, LSCALE(i)));
+    lrab = IntOf(std::log10(rab + sfmin) / basl + one);
+    ir = IntOf(LSCALE(i) + std::copysign(half, LSCALE(i)));
     ir = Min<blasint>(Max<blasint>(ir, lsfmin), lsfmax, lsfmax - lrab);
     LSCALE(i) = Powi(sclfac, ir);
     icab = Iamax(*ihi, A.ptr(1, i), 1);
     cab = std::abs(A(icab, i));
     icab = Iamax(*ihi, B.ptr(1, i), 1);
     cab = Max(cab, std::abs(B(icab, i)));
-    lcab = static_cast<blasint>(std::log10(cab + sfmin) / basl + one);
-    jc = static_cast<blasint>(RSCALE(i) + std::copysign(half, RSCALE(i)));
+    lcab = IntOf(std::log10(cab + sfmin) / basl + one);
+    jc = IntOf(RSCALE(i) + std::copysign(half, RSCALE(i)));
     jc = Min<blasint>(Max<blasint>(jc, lsfmin), lsfmax, lsfmax - lcab);
     RSCALE(i) = Powi(sclfac, jc);
   }

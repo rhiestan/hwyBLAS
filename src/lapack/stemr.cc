@@ -391,9 +391,8 @@ blasint Larrb(blasint n, R* d, R* lld, blasint ifirst, blasint ilast, R rtol1,
   if (n <= 0) {
     return info;
   }
-  maxitr = static_cast<blasint>((std::log(spdiam + pivmin) - std::log(pivmin)) /
-                                std::log(two)) +
-           2;
+  maxitr =
+      IntOf((std::log(spdiam + pivmin) - std::log(pivmin)) / std::log(two)) + 2;
   mnwdth = two * pivmin;
   r = twist;
   if ((r < 1) || (r > n)) r = n;
@@ -743,9 +742,9 @@ blasint Larrd(char range, char order, blasint n, R vl, R vu, blasint il,
     // RANGE='I': Compute an interval containing eigenvalues
     // IL through IU. The initial interval [GL,GU] from the global
     // Gerschgorin bounds GL and GU is refined by DLAEBZ.
-    itmax = static_cast<blasint>((std::log(tnorm + pivmin) - std::log(pivmin)) /
-                                 std::log(two)) +
-            2;
+    itmax =
+        IntOf((std::log(tnorm + pivmin) - std::log(pivmin)) / std::log(two)) +
+        2;
     WORK(n + 1) = gl;
     WORK(n + 2) = gl;
     WORK(n + 3) = gu;
@@ -902,10 +901,9 @@ blasint Larrd(char range, char order, blasint n, R vl, R vu, blasint il,
       nwu = nwu + IWORK(in + 1);
       iwoff = *m - IWORK(1);
       // Compute Eigenvalues
-      itmax =
-          static_cast<blasint>((std::log(gu - gl + pivmin) - std::log(pivmin)) /
-                               std::log(two)) +
-          2;
+      itmax = IntOf((std::log(gu - gl + pivmin) - std::log(pivmin)) /
+                    std::log(two)) +
+              2;
       iinfo = Laebz(2, itmax, in, in, 1, nb, atoli, rtoli, pivmin,
                     D.ptr(ibegin), E.ptr(ibegin), E2.ptr(ibegin), idumma,
                     WORK.ptr(n + 1), WORK.ptr(n + 2 * in + 1), &iout, iwork,
@@ -1906,9 +1904,8 @@ blasint Larrj(blasint n, R* d, R* e2, blasint ifirst, blasint ilast, R rtol,
   if (n <= 0) {
     return info;
   }
-  maxitr = static_cast<blasint>((std::log(spdiam + pivmin) - std::log(pivmin)) /
-                                std::log(two)) +
-           2;
+  maxitr =
+      IntOf((std::log(spdiam + pivmin) - std::log(pivmin)) / std::log(two)) + 2;
   // Initialize unconverged intervals in [ WORK(2*I-1), WORK(2*I) ].
   // The Sturm Count, Count( WORK(2*I-1) ) is arranged to be I-1, while
   // Count( WORK(2*I) ) is stored in IWORK( 2*I ). The integer IWORK( 2*I-1 )
@@ -2076,9 +2073,8 @@ blasint Larrk(blasint n, blasint iw, R gl, R gu, R* d, R* e2, R pivmin,
   tnorm = Max(std::abs(gl), std::abs(gu));
   rtoli = reltol;
   atoli = fudge * two * pivmin;
-  itmax = static_cast<blasint>((std::log(tnorm + pivmin) - std::log(pivmin)) /
-                               std::log(two)) +
-          2;
+  itmax =
+      IntOf((std::log(tnorm + pivmin) - std::log(pivmin)) / std::log(two)) + 2;
   info = -1;
   left = gl - fudge * tnorm * eps * n - fudge * two * pivmin;
   right = gu + fudge * tnorm * eps * n + fudge * two * pivmin;

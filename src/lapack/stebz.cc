@@ -410,9 +410,9 @@ blasint Stebz(char range, char order, blasint n, R vl, R vu, blasint il,
     gl = gl - fudge * tnorm * ulp * n - fudge * two * pivmin;
     gu = gu + fudge * tnorm * ulp * n + fudge * pivmin;
     // Compute Iteration parameters
-    itmax = static_cast<blasint>((std::log(tnorm + pivmin) - std::log(pivmin)) /
-                                 std::log(two)) +
-            2;
+    itmax =
+        IntOf((std::log(tnorm + pivmin) - std::log(pivmin)) / std::log(two)) +
+        2;
     if (abstol <= zero) {
       atoli = ulp * tnorm;
     } else {
@@ -539,10 +539,9 @@ blasint Stebz(char range, char order, blasint n, R vl, R vu, blasint il,
       nwu = nwu + IWORK(in + 1);
       iwoff = *m - IWORK(1);
       // Compute Eigenvalues
-      itmax =
-          static_cast<blasint>((std::log(gu - gl + pivmin) - std::log(pivmin)) /
-                               std::log(two)) +
-          2;
+      itmax = IntOf((std::log(gu - gl + pivmin) - std::log(pivmin)) /
+                    std::log(two)) +
+              2;
       iinfo = Laebz(2, itmax, in, in, 1, nb, atoli, rtoli, pivmin,
                     D.ptr(ibegin), E.ptr(ibegin), WORK.ptr(ibegin), idumma,
                     WORK.ptr(n + 1), WORK.ptr(n + 2 * in + 1), &iout, iwork,

@@ -174,6 +174,18 @@ blasint Nint(R x) {
   return static_cast<blasint>(std::lround(x));
 }
 
+// INT(X) of Fortran for a real X, truncating. For a NaN, an Inf, or a value
+// beyond the range of blasint the conversion is undefined in C++ (and in
+// Fortran); this returns the most negative blasint, which is what x86 gives
+// (cvttss2si), so that the results stay as the reference's.
+template <typename R>
+blasint IntOf(R x) {
+  // 2**31 or 2**63, exact in float and double.
+  const R limit = std::ldexp(R(1), std::numeric_limits<blasint>::digits);
+  if (!(x > -limit && x < limit)) return std::numeric_limits<blasint>::min();
+  return static_cast<blasint>(x);
+}
+
 // X**N for an integer N as gfortran's __builtin_powi (libgcc's __powidf2)
 // computes it: by repeated squaring, and 1 / X**(-N) for N < 0. For a base
 // such as 10, std::pow rounds X**N differently once it is not exact. (The
