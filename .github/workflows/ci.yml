@@ -3,7 +3,8 @@
 # the build looks for them: Eigen (../eigen, for the Eigen test), OpenBLAS's
 # sources (../OpenBLAS, for the Netlib CBLAS testers) and an OpenBLAS library
 # (the reference of the fuzz tests). Highway 1.4.0 is downloaded by the build.
-# Two jobs also run the AVX-512 targets in Intel SDE. One job runs the tests
+# Two jobs also run the AVX-512 targets in Intel SDE. The ARM64 jobs run each
+# NEON target the CPU supports. One job runs the tests
 # with AddressSanitizer and UndefinedBehaviorSanitizer.
 #
 # The jobs with a `package` name pack their installation as an archive

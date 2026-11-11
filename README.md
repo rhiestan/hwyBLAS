@@ -220,7 +220,9 @@ specific one instead.
 Most unit tests loop over all targets that the CPU supports. In addition,
 every test program runs once per target with `HWYBLAS_TARGET` set; these
 tests are named after the target (`SSE4.hwyblas_tests.0`, ...) and labeled,
-e.g. `ctest -L target_SSE4`. Targets that the CPU cannot run are skipped.
+e.g. `ctest -L target_SSE4`. Targets that the CPU cannot run are skipped. On
+ARM64 these are `NEON_WITHOUT_AES`, `NEON` and `NEON_BF16` (the SVE targets are
+disabled: the micro-kernels have a fixed vector size).
 
 To test the AVX-512 targets on a CPU without AVX-512, use the
 [Intel Software Development Emulator](https://www.intel.com/content/www/us/en/developer/articles/tool/software-development-emulator.html):

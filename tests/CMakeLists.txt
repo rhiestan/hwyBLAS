@@ -27,6 +27,9 @@ include(GoogleTest)
 # AVX-512 targets then run in SDE, emulating HWYBLAS_SDE_CPU.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|x86|i[3-6]86)$")
   set(_targets "SSE2;SSE4;AVX2;AVX3;AVX3_ZEN4")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|AARCH64|arm64|ARM64)$")
+  # The SVE targets are disabled in the library (fixed-size micro-kernels).
+  set(_targets "NEON_WITHOUT_AES;NEON;NEON_BF16")
 else()
   set(_targets "")
 endif()
