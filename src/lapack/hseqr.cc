@@ -1082,6 +1082,7 @@ void Laqr5(bool wantt, bool wantz, blasint kacc22, blasint n, blasint ktop,
             Larfg(3, &alpha, VT.ptr(2), 1, VT.ptr(1));
             t1 = VT(1);
             t2 = t1 * VT(2);
+            // slaqr5 has T2 * VT(3) here (a typo; see doc/deviations.md).
             t3 = t1 * VT(3);
             refsum = H(k + 1, k) + VT(2) * H(k + 2, k);
             if (std::abs(H(k + 2, k) - refsum * t2) + std::abs(refsum * t3) >

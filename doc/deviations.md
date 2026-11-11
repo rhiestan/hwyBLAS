@@ -52,6 +52,7 @@ The results differ from the reference only in the cases described.
 | `sggev`, `dggev` | Eigenvectors, ALPHAI(J) is NaN: it is taken for the first of a complex pair, and the normalization reads column J + 1 of VL and VR, past N for J = N | a NaN is a real eigenvalue | `Ggev` in `ggev.cc` |
 | `?syevx`, `?heevx`, `?stevx`, `?syevr`, `?heevr`, `?stevr` | Matrix with NaN or Inf, scaled by the driver: INFO > 0 comes from `?stebz` (up to 4), and the final rescaling of W covers INFO - 1 elements, more than the N of W if N < 4: reads and writes past W | at most N elements | `Heevx`, `Stevx` in `syevx.cc`; `SyevrReal`, `HeevrComplex`, `Stevr` in `syevr.cc` |
 | `slasy2`, `dlasy2` | When NaNs fill the rest of the 4 x 4 system (N1 = N2 = 2), no pivot is found and the rows and columns of the previous step's pivot are swapped | no swap (X is NaN in both) | `Lasy2`, `trsen.cc` |
+| `slaqr5` | Near the top of the matrix, the check whether to start a new bulge uses `T3 = T2*VT(3)` where `dlaqr5`, `claqr5` and `zlaqr5` use `T1*VT(3)` (a typo: T2 = T1*VT(2)) | uses `T1*VT(3)` as the other three do, so the check is the one the algorithm describes | `Laqr5` in `hseqr.cc` |
 
 ### Faster kernels
 

@@ -2,6 +2,7 @@
 // inputs, loading both libraries at runtime:
 //
 //   compare_reference <hwyblas library> <reference liblapack> [cases] [special]
+//   [variant]
 //
 // The reference library must be a shared library built with hwyBLAS as its
 // BLAS (so that both use the same BLAS kernels) and without floating-point
@@ -55,9 +56,18 @@
 //    ILO and IHI undefined, xGETC2 and xLASY2 find no pivot, xGGEV
 //    normalizes a NaN as a complex pair), or never returns (xSYEVR of a
 //    matrix with a NaN or an Inf). The cases of the latter are left out.
+//  - adversarial: matrices that are hard for the algorithms instead of random
+//    ones (see AdversarialMatrix), one family per run (the fifth argument
+//    selects one, else all). The real routines are compared bitwise, except
+//    xGETRF, xPOTRF and what factors with them, whose different rounding
+//    (above) changes the pivots and, amplified by the condition number, the
+//    factors. The complex ones are left out: the differences of flang's
+//    complex arithmetic are amplified in the same way (eigenvalues of
+//    Frank and triangular matrices, pivots of singular matrices).
 // COMPARE_REFERENCE_ONLY=hwy or ref runs one library only, and
 // COMPARE_REFERENCE_TRACE=1 names each case before it runs, to find a crash;
-// COMPARE_REFERENCE_SKIP=name,... leaves routines out (e.g. syevr); a case
+// COMPARE_REFERENCE_SKIP=name,... leaves routines out (e.g. syevr) and
+// COMPARE_REFERENCE_ROUTINES=name,... runs only these; a case
 // that takes longer than COMPARE_REFERENCE_TIMEOUT seconds (default 60) ends
 // the program with exit code 3 and its name.
 //
@@ -185,11 +195,17 @@ enum class Special {
   kZero,       // all zero
   kNan,        // one NaN in the middle
   kInf,        // one Inf in the middle
+  // Hard matrices instead of random ones (AdversarialMatrix), one family
+  // per run of all drivers (g_variant).
+  kAdversarial,
 };
 Special g_special = Special::kNone;
+// The family of adversarial matrices that TestMatrix(0, ...) returns.
+int g_variant = 0;
+constexpr int kVariants = 14;
 
 const char* const kSpecialNames[] = {"none", "huge", "tiny", "subnormal",
-                                     "zero", "nan",  "inf"};
+                                     "zero", "nan",  "inf",  "adversarial"};
 
 template <typename R>
 double SpecialScale() {
@@ -238,8 +254,21 @@ void ApplySpecial(std::vector<T>& a, I m, I n) {
 template <typename T>
 std::vector<T> BaseTestMatrix(int kind, I m, I n);
 
+// " variant=N" in the adversarial mode, else empty.
+std::string Variant() {
+  return g_special == Special::kAdversarial
+             ? " variant=" + std::to_string(g_variant)
+             : "";
+}
+
+template <typename T>
+std::vector<T> AdversarialMatrix(int variant, I m, I n);
+
 template <typename T>
 std::vector<T> TestMatrix(int kind, I m, I n) {
+  if (g_special == Special::kAdversarial && kind == 0) {
+    return AdversarialMatrix<T>(g_variant, m, n);
+  }
   std::vector<T> a = BaseTestMatrix<T>(kind, m, n);
   ApplySpecial(a, m, n);
   return a;
@@ -274,6 +303,87 @@ std::vector<T> BaseTestMatrix(int kind, I m, I n) {
   return a;
 }
 
+// Matrices that are hard for the algorithms (the "adversarial" mode); they
+// replace the random matrices of kind 0, so that every driver sees them, as
+// m x n matrices (the Hermitian and positive definite ones are made of them):
+//  0 Hilbert (ill-conditioned)       1 Vandermonde (nodes in [0.8, 1])
+//  2 Kahan (triangular, tiny pivots) 3 duplicate columns (rank-deficient)
+//  4 rank 1                          5 clustered (I + sqrt(eps) noise)
+//  6 diagonal with zeros, graded     7 upper triangular
+//  8 lower triangular                9 Frank (ill-conditioned eigenvalues)
+// 10 all ones                       11 nearly dependent columns
+// 12 second difference (2, -1)      13 zero row and column in the middle
+template <typename T>
+std::vector<T> AdversarialMatrix(int variant, I m, I n) {
+  using R = Real<T>;
+  const R noise = std::sqrt(std::numeric_limits<R>::epsilon());
+  std::vector<T> a(static_cast<size_t>(m) * n);
+  std::vector<T> u(static_cast<size_t>(std::max<I>(m, 1)));
+  for (T& x : u) x = Random<T>();
+  for (I j = 0; j < n; ++j) {
+    for (I i = 0; i < m; ++i) {
+      T& x = a[i + static_cast<size_t>(j) * m];
+      const double di = i, dj = j;
+      switch (variant) {
+        case 0:
+          x = T(static_cast<R>(1.0 / (di + dj + 1)));
+          break;
+        case 1:
+          x = T(
+              static_cast<R>(std::pow(1.0 - 0.2 * di / std::max<I>(m, 1), dj)));
+          break;
+        case 2: {
+          const double s = std::sin(1.2), c = std::cos(1.2);
+          x = T(static_cast<R>(i == j  ? std::pow(s, di)
+                               : j > i ? -c * std::pow(s, di)
+                                       : 0));
+          break;
+        }
+        case 3:
+          // The second half of the columns repeats the first.
+          x = Random<T>();
+          if (j >= (n + 1) / 2)
+            x = a[i + static_cast<size_t>(j - (n + 1) / 2) * m];
+          break;
+        case 4:
+          x = u[i] * T(static_cast<R>(1.0 + 0.5 * std::sin(dj)));
+          break;
+        case 5:
+          x = T(i == j ? 1 : 0) + Random<T>() * noise;
+          break;
+        case 6:
+          x = T(i == j && i % 3 != 2
+                    ? static_cast<R>(std::ldexp(1.0, -(i % 30)))
+                    : 0);
+          break;
+        case 7:
+          x = i <= j ? Random<T>() : T(0);
+          break;
+        case 8:
+          x = i >= j ? Random<T>() : T(0);
+          break;
+        case 9:
+          x = T(static_cast<R>(
+              j + 1 >= i ? std::max<I>(m, n) + 1 - std::max(i, j) : 0));
+          break;
+        case 10:
+          x = T(1);
+          break;
+        case 11:
+          x = u[i] + Random<T>() * noise;
+          break;
+        case 12:
+          x = T(i == j ? 2 : (i + 1 == j || j + 1 == i ? -1 : 0));
+          break;
+        default:
+          x = (i == m / 2 || j == n / 2) ? T(0) : Random<T>();
+          break;
+      }
+    }
+  }
+  return a;
+}
+
 // A Hermitian (symmetric) matrix, both triangles set.
 template <typename T>
 std::vector<T> Hermitian(I n) {
@@ -299,7 +409,13 @@ std::vector<T> PositiveDefinite(I n) {
       // the matrix stays positive definite beyond rounding.
       const double grow =
           g_special == Special::kHuge ? SpecialScale<Real<T>>() : 1;
-      T s = i == j ? T(static_cast<Real<T>>(n * grow * grow)) : T(0);
+      // Adversarial: just a small shift, so that B^H B is often barely
+      // positive definite or singular.
+      const double shift =
+          g_special == Special::kAdversarial
+              ? n * std::sqrt(std::numeric_limits<Real<T>>::epsilon())
+              : n * grow * grow;
+      T s = i == j ? T(static_cast<Real<T>>(shift)) : T(0);
       for (I k = 0; k < n; ++k) {
         s += Conj(b[k + static_cast<size_t>(i) * n]) *
              b[k + static_cast<size_t>(j) * n];
@@ -441,6 +557,72 @@ Result Syev(const BlasLibrary& lib, std::vector<T> a, I n, char jobz, char uplo,
 }
 
 // gesvd (jobu, jobvt) and gesdd (jobz in jobu).
+// The bidiagonal form of a square matrix (computed by hwyBLAS), for xBDSDC.
+template <typename T>
+void Bidiagonal(const BlasLibrary& lib, std::vector<T> a, I n,
+                std::vector<Real<T>>& d, std::vector<Real<T>>& e) {
+  using F = void (*)(const I*, const I*, T*, const I*, Real<T>*, Real<T>*, T*,
+                     T*, T*, const I*, I*);
+  const auto f = lib.Get<F>((std::string(Prefix<T>()) + "gebrd_").c_str());
+  const I lda = std::max<I>(n, 1);
+  d.assign(std::max<I>(n, 1), 0);
+  e.assign(std::max<I>(n, 1), 0);
+  std::vector<T> tauq(std::max<I>(n, 1)), taup(std::max<I>(n, 1));
+  std::vector<T> work(static_cast<size_t>(64) * std::max<I>(n, 1) + 64);
+  const I lwork = static_cast<I>(work.size());
+  I info = 0;
+  f(&n, &n, a.data(), &lda, d.data(), e.data(), tauq.data(), taup.data(),
+    work.data(), &lwork, &info);
+}
+
+// xBDSDC (real only) with COMPQ = 'I' or 'N' of the bidiagonal d, e.
+template <typename R>
+Result Bdsdc(const BlasLibrary& lib, std::vector<R> d, std::vector<R> e, I n,
+             char compq) {
+  using F = void (*)(const char*, const char*, const I*, R*, R*, R*, const I*,
+                     R*, const I*, R*, I*, R*, I*, I*, size_t, size_t);
+  const auto f = lib.Get<F>((std::string(Prefix<R>()) + "bdsdc_").c_str());
+  const char uplo = 'U';
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> u(Size(n, n)), vt(Size(n, n)), q(1);
+  std::vector<I> iq(1);
+  std::vector<R> work(static_cast<size_t>(4) * ld * ld + 8 * ld + 64);
+  std::vector<I> iwork(static_cast<size_t>(8) * ld + 8);
+  I info = 0;
+  f(&uplo, &compq, &n, d.data(), e.data(), u.data(), &ld, vt.data(), &ld,
+    q.data(), iq.data(), work.data(), iwork.data(), &info, 1, 1);
+  Result r;
+  r.lwork = 0;
+  AddInt(r, "info", info);
+  Add(r, "d", Kind::kValues, d);
+  Add(r, "u", Kind::kOther, u);
+  Add(r, "vt", Kind::kOther, vt);
+  return r;
+}
+
+// xLASD0 (real only) of the bidiagonal d, e (SQRE = 0, SMLSIZ = 25).
+template <typename R>
+Result Lasd0(const BlasLibrary& lib, std::vector<R> d, std::vector<R> e, I n) {
+  using F = void (*)(const I*, const I*, R*, R*, R*, const I*, R*, const I*,
+                     const I*, I*, R*, I*);
+  const auto f = lib.Get<F>((std::string(Prefix<R>()) + "lasd0_").c_str());
+  const I sqre = 0, smlsiz = 25;
+  const I ld = std::max<I>(n, 1);
+  std::vector<R> u(Size(n, n)), vt(Size(n, n));
+  std::vector<R> work(static_cast<size_t>(4) * ld * ld + 8 * ld + 64);
+  std::vector<I> iwork(static_cast<size_t>(8) * ld + 8);
+  I info = 0;
+  f(&n, &sqre, d.data(), e.data(), u.data(), &ld, vt.data(), &ld, &smlsiz,
+    iwork.data(), work.data(), &info);
+  Result r;
+  r.lwork = 0;
+  AddInt(r, "info", info);
+  Add(r, "d", Kind::kValues, d);
+  Add(r, "u", Kind::kOther, u);
+  Add(r, "vt", Kind::kOther, vt);
+  return r;
+}
+
 template <typename T>
 Result Svd(const BlasLibrary& lib, bool dc, std::vector<T> a, I m, I n,
            char jobu, char jobvt, I lwork) {
@@ -1385,8 +1567,8 @@ void Compare(const std::string& routine, const std::string& what, I n,
       }
     }
     if (!detail.empty() && tally.mismatches < 5) {
-      printf("  %s%s %s: %s\n", Prefix<T>(), routine.c_str(), what.c_str(),
-             detail.c_str());
+      printf("  %s%s %s%s: %s\n", Prefix<T>(), routine.c_str(), what.c_str(),
+             Variant().c_str(), detail.c_str());
     }
   }
   if (identical) ++tally.identical;
@@ -1444,6 +1626,16 @@ bool Skipped(const std::string& routine, const std::string& what) {
       (routine == "getrf" || routine == "gesv" || routine == "gesvx")) {
     return true;
   }
+  // Adversarial matrices (ill-conditioned or singular): the different
+  // rounding of the leaf kernels of xGETRF2 and xPOTRF2 (see the top) changes
+  // the pivots and, amplified by the condition number, the factors.
+  if (g_special == Special::kAdversarial &&
+      (routine == "getrf" || routine == "gesv" || routine == "gesvx" ||
+       routine == "potrf" || routine == "posv" || routine == "posvx" ||
+       routine == "sygv" || routine == "sygvd" || routine == "hegv" ||
+       routine == "hegvd")) {
+    return true;
+  }
   // Huge values: itype 2 and 3 of xSYGV and xSYGVD form the product of A and
   // B, which overflows (where the Inf and NaN end up differs).
   if (g_special == Special::kHuge &&
@@ -1451,6 +1643,14 @@ bool Skipped(const std::string& routine, const std::string& what) {
        routine == "hegvd") &&
       (what.find("itype=2") != std::string::npos ||
        what.find("itype=3") != std::string::npos)) {
+    return true;
+  }
+  // COMPARE_REFERENCE_ROUTINES=name,name,... runs only these.
+  static const std::string only =
+      getenv("COMPARE_REFERENCE_ROUTINES") != nullptr
+          ? "," + std::string(getenv("COMPARE_REFERENCE_ROUTINES")) + ","
+          : "";
+  if (!only.empty() && only.find("," + routine + ",") == std::string::npos) {
     return true;
   }
   static const std::string skip =
@@ -4966,6 +5166,43 @@ void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
           return Svd(lib, true, a, m, n, jobz, ' ', lw);
         });
       }
+      if constexpr (!kComplex<T>) {
+        if (m == n) {
+          // The divide and conquer SVD of the bidiagonal form itself.
+          std::vector<Real<T>> bd, be;
+          Bidiagonal<T>(hwy, a, n, bd, be);
+          if (n > 0) {
+            snprintf(what, sizeof(what), "n=%d", int(n));
+            Case<T>(hwy, ref, "lasd0", what, n, [&](const BlasLibrary& lib, I) {
+              return Lasd0<Real<T>>(lib, bd, be, n);
+            });
+            // Scaled as xBDSDC does (by 1 / the largest entry).
+            Real<T> big = 0;
+            for (I i = 0; i < n; ++i) {
+              big = std::max({big, std::abs(bd[i]), std::abs(be[i])});
+            }
+            std::vector<Real<T>> sd = bd, se = be;
+            for (I i = 0; i < n; ++i) {
+              sd[i] *= Real<T>(1) / big;
+              se[i] *= Real<T>(1) / big;
+            }
+            const Real<T> clamp =
+                Real<T>(0.9) * (std::numeric_limits<Real<T>>::epsilon() / 2);
+            for (I i = 0; i < n; ++i) {
+              if (std::abs(sd[i]) < clamp) sd[i] = std::copysign(clamp, sd[i]);
+            }
+            Case<T>(hwy, ref, "lasd0", what, n, [&](const BlasLibrary& lib, I) {
+              return Lasd0<Real<T>>(lib, sd, se, n);
+            });
+          }
+          for (const char compq : {'I', 'N'}) {
+            snprintf(what, sizeof(what), "n=%d compq=%c", int(n), compq);
+            Case<T>(hwy, ref, "bdsdc", what, n, [&](const BlasLibrary& lib, I) {
+              return Bdsdc<Real<T>>(lib, bd, be, n, compq);
+            });
+          }
+        }
+      }
     }
     const I n = s;
     for (const char uplo : {'L', 'U'}) {
@@ -5012,7 +5249,8 @@ int main(int argc, char** argv) {
   if (argc < 3) {
     fprintf(stderr,
             "usage: compare_reference <hwyblas library> <reference liblapack> "
-            "[sizes, at most 13] [none|huge|tiny|subnormal|zero|nan|inf]\n");
+            "[sizes, at most 13] "
+            "[none|huge|tiny|subnormal|zero|nan|inf|adversarial] [variant]\n");
     return 2;
   }
   const BlasLibrary hwy("hwyBLAS", argv[1]), ref("reference", argv[2]);
@@ -5040,18 +5278,30 @@ int main(int argc, char** argv) {
       return 2;
     }
   }
+  // The fifth argument selects one family of adversarial matrices.
+  int first_variant = 0, variants_end = kVariants;
+  if (argc > 5) {
+    first_variant = atoi(argv[5]);
+    variants_end = first_variant + 1;
+  }
   printf("Special values: %s\n", kSpecialNames[static_cast<int>(g_special)]);
   StartWatchdog();
   std::map<std::string, Tally> tallies;
   g_tallies = &tallies;
-  RunAll<float>(hwy, ref, cases);
-  RunAll<double>(hwy, ref, cases);
+  const int variants = g_special == Special::kAdversarial ? variants_end : 1;
+  for (g_variant = first_variant; g_variant < variants; ++g_variant) {
+    RunAll<float>(hwy, ref, cases);
+    RunAll<double>(hwy, ref, cases);
+  }
   // The complex routines of flang divide and multiply otherwise than the
   // port near the limits of the range (see the top): with huge and subnormal
   // values their results differ beyond any tolerance.
-  if (g_special != Special::kHuge && g_special != Special::kSubnormal) {
-    RunAll<std::complex<float>>(hwy, ref, cases);
-    RunAll<std::complex<double>>(hwy, ref, cases);
+  if (g_special != Special::kHuge && g_special != Special::kSubnormal &&
+      g_special != Special::kAdversarial) {
+    for (g_variant = first_variant; g_variant < variants; ++g_variant) {
+      RunAll<std::complex<float>>(hwy, ref, cases);
+      RunAll<std::complex<double>>(hwy, ref, cases);
+    }
   }
   if (g_cases_without_comparison > 0) {
     printf("%d cases ran without a comparison: hwyBLAS returned from all.\n",

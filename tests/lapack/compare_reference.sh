@@ -10,7 +10,7 @@
 # hwyBLAS must be built as a shared library (the default). Needs a Fortran
 # compiler (FC, or one that CMake finds); CC and CXX select the C and C++
 # compilers. sizes (default 13) limits the matrix sizes, from 0 up to 200.
-# special is one of huge, tiny, subnormal, zero, nan, inf (all matrices get
+# special is one of huge, tiny, subnormal, zero, nan, inf, adversarial (all matrices get
 # such values, see compare_reference.cc), or all (every one of them and then
 # the ordinary matrices); the default is the ordinary matrices.
 #
@@ -104,7 +104,7 @@ cmake --build "$work/compare-build" >> "$work/compare.log"
 
 echo "== 3. Comparison"
 if [ "$special" = all ]; then
-  modes="huge tiny subnormal zero nan inf none"
+  modes="huge tiny subnormal zero nan inf adversarial none"
 else
   modes=$special
 fi

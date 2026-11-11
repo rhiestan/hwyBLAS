@@ -2765,7 +2765,9 @@ blasint Bdsdc(char uplo, char compq, blasint n, R* d, R* e, R* u, blasint ldu,
   if (orgnrm == zero) return info;
   Lascl('G', 0, 0, orgnrm, one, n, 1, d, n);
   Lascl('G', 0, 0, orgnrm, one, nm1, 1, e, nm1);
-  eps = (R(0.9e+0)) * Lamch<R>('E');
+  // As in the reference, where DBDSDC takes 0.9 * DLAMCH('Epsilon') but
+  // SBDSDC takes SLAMCH('Epsilon') as it is.
+  eps = std::is_same_v<R, double> ? R(0.9e+0) * Lamch<R>('E') : Lamch<R>('E');
   mlvl =
       static_cast<blasint>(std::log(R(n) / R(smlsiz + 1)) / std::log(two)) + 1;
   smlszp = smlsiz + 1;

@@ -358,3 +358,17 @@ hwyBLAS runs, to see that it returns without crashing (the cases of
 xSYEVR and xHEEVR are left out: the MRRR algorithm can loop forever, in
 the reference too). The unit tests `special_values_test.cc`
 keep the fixes in place; the sanitizer job runs them.
+
+The `adversarial` mode replaces the random matrices by families that are hard
+for the algorithms: Hilbert, Vandermonde, Kahan, matrices with repeated
+columns, of rank 1, with a cluster of eigenvalues, diagonal with zeros,
+triangular, Frank, all ones, nearly dependent columns, the second difference
+matrix and a matrix with a zero row and column (one run per family, selected
+by the fifth argument of `compare_reference`). The real routines are compared
+bitwise, apart from xGETRF, xPOTRF and what factors with them: their rounding
+differs (see above), and the condition number amplifies it into different
+pivots. The complex routines are left out for the same reason (flang's
+complex arithmetic). This found that `SBDSDC` takes `EPS = SLAMCH('E')`
+where `DBDSDC` takes `0.9 * DLAMCH('E')`: a port that treats the two as one
+returns different singular values from order 26 on (the divide and conquer
+path) once a bidiagonal entry falls below that threshold.

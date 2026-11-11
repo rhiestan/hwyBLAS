@@ -183,6 +183,28 @@ hwyblas_int Bdsdc(char uplo, char compq, hwyblas_int n, std::vector<R>& d,
   return info;
 }
 
+// xBDSDC raises the diagonal entries below a threshold to it: EPS in single
+// precision (SBDSDC), 0.9 * EPS in double (DBDSDC). With the other entries
+// zero the singular values are those entries, and the largest is 1.
+TYPED_TEST(GesddRealTest, BdsdcRaisesTinyDiagonalEntries) {
+  using R = TypeParam;
+  const R eps = Eps<R>() / 2;  // xLAMCH('E')
+  const R floor = std::is_same_v<R, double> ? R(0.9) * eps : eps;
+  for (const char compq : {'N', 'I'}) {
+    const hwyblas_int n = 30;  // beyond SMLSIZ = 25: divide and conquer
+    std::vector<R> d(n, R(1e-20)), e(n, R(0));
+    d[0] = 1;
+    const size_t nn = static_cast<size_t>(n) * n;
+    std::vector<R> u(nn), vt(nn), q(1);
+    std::vector<hwyblas_int> iq(1);
+    ASSERT_EQ(0, Bdsdc<R>('U', compq, n, d, e, u, n, vt, n, q, iq));
+    EXPECT_EQ(R(1), d[0]) << compq;
+    for (hwyblas_int i = 1; i < n; ++i) {
+      if (compq == 'I') EXPECT_EQ(floor, d[i]) << compq << " " << i;
+    }
+  }
+}
+
 // xBDSDC: B = U * S * VT for upper and lower B with orthonormal U and VT
 // (COMPQ = 'I'), singular values in decreasing order, and the same singular
 // values without vectors ('N', with xLASDQ) and with the vectors in compact
