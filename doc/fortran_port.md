@@ -384,3 +384,19 @@ directly (the script runs one seed, 1: `compare_reference.sh 10 fuzz`, not part 
 `?geqp3` with M = 0, N > 0 and a leading column returns the INFO = -12 of the
 reference's `?unmqr` call (a workspace query that is too small), see
 `doc/deviations.md`.
+
+`compare_arguments.cc` (`compare_reference.sh ... arguments`) compares the
+argument validation instead of the results. It reads the declarations of
+`lapack.h`, finds for each routine whose reference source calls XERBLA a valid
+call (changing the arguments that the reference reports, INFO = -k, and
+filling arrays it rejects, such as a Schur form, with an identity or ones),
+and then changes one to three of the arguments that the source checks
+(characters, dimensions, leading dimensions, workspace sizes) to random values,
+valid or not. INFO must be the one of the reference, which also compares the
+order of the checks, and a workspace query (LWORK = -1) must return the same
+WORK(1). The divide and conquer kernels (`?laed1`, `?laed2`, `?laeda`,
+`?lasd1`, `?lasd2`, `?lasq2`) need structured data and are left out, as are
+`?tgsja` (the reference reads out of bounds when K + L > N, which it does not
+check) and `?geqrt3` (the reference recurses forever for N = 0). The other
+650 or so routines agree (two seeds of 400 and 1000 calls each), except for
+the documented `?geqp3` with M = 0.

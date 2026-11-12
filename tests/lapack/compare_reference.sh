@@ -14,7 +14,10 @@
 # such values, see compare_reference.cc), or all (every one of them and then
 # the ordinary matrices); the default is the ordinary matrices. fuzz (random
 # sizes, shapes and kinds; sizes is how many orders; seed 1, other seeds: run
-# compare_reference directly) is not part of all.
+# compare_reference directly) is not part of all. arguments compares the
+# argument validation instead (see compare_arguments.cc: INFO of invalid
+# calls, and workspace queries; sizes is the number of trials per routine,
+# default 400) and is not part of all either.
 #
 # The steps:
 #  1. Build the reference LAPACK as a shared library, with hwyBLAS as its
@@ -98,11 +101,46 @@ target_include_directories(compare_reference PRIVATE
   "$(native "$here/../../include")" "$(native "$here/../../bench")")
 find_package(Threads REQUIRED)
 target_link_libraries(compare_reference PRIVATE \${CMAKE_DL_LIBS} Threads::Threads)
+add_executable(compare_arguments "$(native "$here/compare_arguments.cc")")
+target_include_directories(compare_arguments PRIVATE
+  "$(native "$here/../../include")" "$(native "$here/../../bench")")
+target_link_libraries(compare_arguments PRIVATE \${CMAKE_DL_LIBS} Threads::Threads)
 EOF
 cmake -S "$work/compare-src" -B "$work/compare-build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release ${CXX:+"-DCMAKE_CXX_COMPILER=$CXX"} \
   > "$work/compare.log"
 cmake --build "$work/compare-build" >> "$work/compare.log"
+
+if [ "$special" = arguments ]; then
+  echo "== 3. Argument validation"
+  trials=${4:-400}
+  [ "$trials" != 13 ] || trials=400
+  header=$(native "$here/../../include/hwyblas/lapack.h")
+  args=("$(native "$hwy_shared")" "$(native "$ref_lib")" "$header")
+  # Only routines that validate their arguments (the reference calls XERBLA),
+  # except the divide and conquer kernels, which need structured data
+  # (xLAED1, xLAED2, xLAEDA, xLASD1, xLASD2, xLASQ2), xTGSJA (the reference
+  # reads out of bounds when K + L > N, which it does not check), and xGEQRT3,
+  # whose reference recurses forever for N = 0 (see doc/deviations.md).
+  status=0
+  checked=0
+  for name in $("$work/compare-build/compare_arguments$exe" "${args[@]}" list | sed "s/[[:space:]]*$//"); do
+    base=${name%_}
+    case "${base#?}" in laed1 | laed2 | laeda | lasd1 | lasd2 | lasq2 | tgsja | geqrt3) continue ;; esac
+    src="$work/lapack-src/SRC/$base.f"
+    grep -qi 'CALL XERBLA' "$src" 2>/dev/null || continue
+    checked=$((checked + 1))
+    code=0
+    out=$(timeout 90 "$work/compare-build/compare_arguments$exe" "${args[@]}" run "$name" "$trials" 1 "$(native "$src")" 2>/dev/null | grep -v 'On entry') || code=$?
+    if [ "$code" -ne 0 ]; then
+      status=1
+      echo "$name: exit code $code"
+      echo "$out" | grep -v ' 0 mismatches' | head -8
+    fi
+  done
+  echo "$checked routines compared: $([ $status = 0 ] && echo PASSED || echo FAILED)"
+  exit $status
+fi
 
 echo "== 3. Comparison"
 if [ "$special" = all ]; then
