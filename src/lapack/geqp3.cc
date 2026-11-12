@@ -256,9 +256,12 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
 //
 // LWORK >= 3*N+1 (real) or N+1 (complex); the optimal LWORK is
 // 2*N+(N+1)*NB (real) or (N+1)*NB (complex); LWORK = -1 is a workspace
-// query. RWORK (2*N elements, complex T only) holds the column norms, which
-// the real routine keeps in WORK. On exit, WORK(1) is the optimal LWORK, or
-// (real T) the workspace size that the routine used.
+// query. (Deviation from the reference, see doc/deviations.md: for M = 0 and
+// N > 0 the reference reports the INFO = -12 of its xUNMQR call, which asks
+// for LWORK >= N, although the workspace query returned 1; here INFO is 0.)
+// RWORK (2*N elements, complex T only) holds the column norms, which the real
+// routine keeps in WORK. On exit, WORK(1) is the optimal LWORK, or (real T) the
+// workspace size that the routine used.
 template <typename T>
 blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
               T* work, blasint lwork, RealT<T>* rwork) {

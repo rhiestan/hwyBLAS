@@ -64,6 +64,10 @@
 //    factors. The complex ones are left out: the differences of flang's
 //    complex arithmetic are amplified in the same way (eigenvalues of
 //    Frank and triangular matrices, pivots of singular matrices).
+//  - fuzz: random orders (the third argument is how many), random shapes
+//    and, per matrix, a random kind (random, scaled, sparse, scaled rows and
+//    columns, or one of the adversarial families), from the seed in the
+//    fifth argument; a mismatch names the seed. Compared as in adversarial.
 // COMPARE_REFERENCE_ONLY=hwy or ref runs one library only, and
 // COMPARE_REFERENCE_TRACE=1 names each case before it runs, to find a crash;
 // COMPARE_REFERENCE_SKIP=name,... leaves routines out (e.g. syevr) and
@@ -198,14 +202,26 @@ enum class Special {
   // Hard matrices instead of random ones (AdversarialMatrix), one family
   // per run of all drivers (g_variant).
   kAdversarial,
+  // Random sizes and shapes, and a random kind of matrix for each (random,
+  // one of the adversarial families, scaled, sparse), from the seed g_seed.
+  kFuzz,
 };
 Special g_special = Special::kNone;
 // The family of adversarial matrices that TestMatrix(0, ...) returns.
 int g_variant = 0;
 constexpr int kVariants = 14;
+// The seed of a fuzz run (the fifth argument).
+unsigned g_seed = 0;
 
-const char* const kSpecialNames[] = {"none", "huge", "tiny", "subnormal",
-                                     "zero", "nan",  "inf",  "adversarial"};
+// Hard matrices, on which the leaf kernels of xGETRF2 and xPOTRF2 change the
+// pivots (see Skipped).
+bool IsHard() {
+  return g_special == Special::kAdversarial || g_special == Special::kFuzz;
+}
+
+const char* const kSpecialNames[] = {"none",      "huge",        "tiny",
+                                     "subnormal", "zero",        "nan",
+                                     "inf",       "adversarial", "fuzz"};
 
 template <typename R>
 double SpecialScale() {
@@ -256,6 +272,7 @@ std::vector<T> BaseTestMatrix(int kind, I m, I n);
 
 // " variant=N" in the adversarial mode, else empty.
 std::string Variant() {
+  if (g_special == Special::kFuzz) return " seed=" + std::to_string(g_seed);
   return g_special == Special::kAdversarial
              ? " variant=" + std::to_string(g_variant)
              : "";
@@ -264,11 +281,40 @@ std::string Variant() {
 template <typename T>
 std::vector<T> AdversarialMatrix(int variant, I m, I n);
 
+// The matrix of kind 0 in the fuzz mode: one of the adversarial families, a
+// random one, scaled by a power of 2, with about half of the entries zero, or
+// with rows and columns scaled.
+template <typename T>
+std::vector<T> FuzzMatrix(I m, I n) {
+  using R = Real<T>;
+  const unsigned pick = static_cast<unsigned>(rng() % (kVariants + 6));
+  if (pick < kVariants)
+    return AdversarialMatrix<T>(static_cast<int>(pick), m, n);
+  std::vector<T> a = BaseTestMatrix<T>(0, m, n);
+  if (pick == kVariants + 1) {
+    const int e = static_cast<int>(rng() % 21) - 10;
+    for (T& x : a) x *= static_cast<R>(std::ldexp(1.0, e));
+  } else if (pick == kVariants + 2) {
+    for (T& x : a) {
+      if (rng() % 2) x = T(0);
+    }
+  } else if (pick == kVariants + 3) {
+    for (I j = 0; j < n; ++j) {
+      for (I i = 0; i < m; ++i) {
+        a[i + static_cast<size_t>(j) * m] *=
+            static_cast<R>(std::ldexp(1.0, (i % 5) - (j % 3)));
+      }
+    }
+  }
+  return a;
+}
+
 template <typename T>
 std::vector<T> TestMatrix(int kind, I m, I n) {
   if (g_special == Special::kAdversarial && kind == 0) {
     return AdversarialMatrix<T>(g_variant, m, n);
   }
+  if (g_special == Special::kFuzz && kind == 0) return FuzzMatrix<T>(m, n);
   std::vector<T> a = BaseTestMatrix<T>(kind, m, n);
   ApplySpecial(a, m, n);
   return a;
@@ -412,9 +458,8 @@ std::vector<T> PositiveDefinite(I n) {
       // Adversarial: just a small shift, so that B^H B is often barely
       // positive definite or singular.
       const double shift =
-          g_special == Special::kAdversarial
-              ? n * std::sqrt(std::numeric_limits<Real<T>>::epsilon())
-              : n * grow * grow;
+          IsHard() ? n * std::sqrt(std::numeric_limits<Real<T>>::epsilon())
+                   : n * grow * grow;
       T s = i == j ? T(static_cast<Real<T>>(shift)) : T(0);
       for (I k = 0; k < n; ++k) {
         s += Conj(b[k + static_cast<size_t>(i) * n]) *
@@ -1629,11 +1674,16 @@ bool Skipped(const std::string& routine, const std::string& what) {
   // Adversarial matrices (ill-conditioned or singular): the different
   // rounding of the leaf kernels of xGETRF2 and xPOTRF2 (see the top) changes
   // the pivots and, amplified by the condition number, the factors.
-  if (g_special == Special::kAdversarial &&
+  if (IsHard() &&
       (routine == "getrf" || routine == "gesv" || routine == "gesvx" ||
        routine == "potrf" || routine == "posv" || routine == "posvx" ||
        routine == "sygv" || routine == "sygvd" || routine == "hegv" ||
        routine == "hegvd")) {
+    return true;
+  }
+  // M = 0 and N > 0 (a shape of the fuzz mode): the reference returns the
+  // INFO = -12 of its xUNMQR call with fixed columns (doc/deviations.md).
+  if (routine == "geqp3" && what.rfind("m=0 n=", 0) == 0 && what != "m=0 n=0") {
     return true;
   }
   // Huge values: itype 2 and 3 of xSYGV and xSYGVD form the product of A and
@@ -5122,15 +5172,30 @@ void RunQrt(const BlasLibrary& hwy, const BlasLibrary& ref, I s) {
 
 template <typename T>
 void RunAll(const BlasLibrary& hwy, const BlasLibrary& ref, int cases) {
-  static const I kSizes[] = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
+  std::vector<I> sizes = {0, 1, 2, 3, 5, 8, 16, 31, 64, 65, 100, 150, 200};
+  // Fuzz: `cases` random orders (a quarter of them below 5), from an
+  // generator of its own, so that they do not depend on the matrices drawn.
+  std::mt19937_64 size_rng(g_seed * 7919ull + 1);
+  if (g_special == Special::kFuzz) {
+    sizes.clear();
+    for (int i = 0; i < cases; ++i) {
+      sizes.push_back(size_rng() % 4 == 0
+                          ? static_cast<I>(size_rng() % 5)
+                          : static_cast<I>(5 + size_rng() % 76));
+    }
+  }
   int count = 0;
-  for (const I s : kSizes) {
-    if (count++ >= cases) break;
+  for (const I s : sizes) {
+    if (g_special != Special::kFuzz && count++ >= cases) break;
     char what[64];
     // Square, tall and wide shapes (tall enough for the QR-first paths of
-    // the SVDs, which start at m >= 1.6 n).
-    const I shapes[][2] = {{s, s}, {2 * s + 1, s}, {s, 2 * s + 1}};
-    for (const auto& shape : shapes) {
+    // the SVDs, which start at m >= 1.6 n). Fuzz: also a random one.
+    const I other = static_cast<I>(size_rng() % 81);
+    const I shapes[][2] = {{s, s}, {2 * s + 1, s}, {s, 2 * s + 1}, {s, other}};
+    const size_t shape_count =
+        g_special == Special::kFuzz ? std::size(shapes) : 3;
+    for (size_t shape_index = 0; shape_index < shape_count; ++shape_index) {
+      const auto& shape = shapes[shape_index];
       const I m = shape[0], n = shape[1];
       snprintf(what, sizeof(what), "m=%d n=%d", int(m), int(n));
       const std::vector<T> a = TestMatrix<T>(s % 5 == 4 ? 4 : 0, m, n);
@@ -5278,9 +5343,15 @@ int main(int argc, char** argv) {
       return 2;
     }
   }
-  // The fifth argument selects one family of adversarial matrices.
+  // The fifth argument selects one family of adversarial matrices (fuzz:
+  // the seed).
   int first_variant = 0, variants_end = kVariants;
-  if (argc > 5) {
+  if (g_special == Special::kFuzz) {
+    g_seed = argc > 5 ? static_cast<unsigned>(atoll(argv[5])) : 1;
+    rng.seed(g_seed);
+    first_variant = 0;
+    variants_end = 1;
+  } else if (argc > 5) {
     first_variant = atoi(argv[5]);
     variants_end = first_variant + 1;
   }
@@ -5288,7 +5359,7 @@ int main(int argc, char** argv) {
   StartWatchdog();
   std::map<std::string, Tally> tallies;
   g_tallies = &tallies;
-  const int variants = g_special == Special::kAdversarial ? variants_end : 1;
+  const int variants = IsHard() ? variants_end : 1;
   for (g_variant = first_variant; g_variant < variants; ++g_variant) {
     RunAll<float>(hwy, ref, cases);
     RunAll<double>(hwy, ref, cases);
@@ -5297,7 +5368,7 @@ int main(int argc, char** argv) {
   // port near the limits of the range (see the top): with huge and subnormal
   // values their results differ beyond any tolerance.
   if (g_special != Special::kHuge && g_special != Special::kSubnormal &&
-      g_special != Special::kAdversarial) {
+      !IsHard()) {
     for (g_variant = first_variant; g_variant < variants; ++g_variant) {
       RunAll<std::complex<float>>(hwy, ref, cases);
       RunAll<std::complex<double>>(hwy, ref, cases);

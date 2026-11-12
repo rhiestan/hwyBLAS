@@ -372,3 +372,15 @@ complex arithmetic). This found that `SBDSDC` takes `EPS = SLAMCH('E')`
 where `DBDSDC` takes `0.9 * DLAMCH('E')`: a port that treats the two as one
 returns different singular values from order 26 on (the divide and conquer
 path) once a bidiagonal entry falls below that threshold.
+
+The `fuzz` mode draws random orders (the third argument is how many) and
+shapes, and for each matrix a random kind: random, scaled by a power of 2,
+about half zeros, rows and columns scaled, or one of the adversarial families.
+The fifth argument is the seed, and a mismatch names it, so that one seed
+reproduces it (with `COMPARE_REFERENCE_ROUTINES` to narrow it down). It is
+compared as the adversarial mode is. Run it over many seeds with the program
+directly (the script runs one seed, 1: `compare_reference.sh 10 fuzz`, not part of
+`all`). 300 seeds of 10 orders each found only that
+`?geqp3` with M = 0, N > 0 and a leading column returns the INFO = -12 of the
+reference's `?unmqr` call (a workspace query that is too small), see
+`doc/deviations.md`.

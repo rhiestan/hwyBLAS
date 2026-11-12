@@ -12,7 +12,9 @@
 # compilers. sizes (default 13) limits the matrix sizes, from 0 up to 200.
 # special is one of huge, tiny, subnormal, zero, nan, inf, adversarial (all matrices get
 # such values, see compare_reference.cc), or all (every one of them and then
-# the ordinary matrices); the default is the ordinary matrices.
+# the ordinary matrices); the default is the ordinary matrices. fuzz (random
+# sizes, shapes and kinds; sizes is how many orders; seed 1, other seeds: run
+# compare_reference directly) is not part of all.
 #
 # The steps:
 #  1. Build the reference LAPACK as a shared library, with hwyBLAS as its
