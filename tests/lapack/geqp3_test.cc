@@ -273,6 +273,19 @@ TYPED_TEST(Geqp3Test, WorkspaceQuery) {
   EXPECT_EQ(std::real(work[0]), 1);
 }
 
+// M = 0 with leading columns and the workspace of the query (1): INFO = 0
+// and no error report. The reference returns the INFO = -12 of its xUNMQR
+// call there (doc/deviations.md).
+TYPED_TEST(Geqp3Test, NoRowsWithLeadingColumns) {
+  using T = TypeParam;
+  ErrorCapture errors;
+  std::vector<T> a(1), tau(1);
+  std::vector<hwyblas_int> jpvt = {0, 7, 0, 7, 0};
+  EXPECT_EQ(Geqp3<T>(0, 5, a, 1, jpvt, tau, 1), 0);
+  EXPECT_EQ(jpvt, (std::vector<hwyblas_int>{2, 4, 3, 1, 5}));
+  EXPECT_TRUE(errors.Take().empty());
+}
+
 TYPED_TEST(Geqp3Test, InvalidArguments) {
   using T = TypeParam;
   std::vector<T> a(64, T(1)), tau(8);

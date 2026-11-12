@@ -257,8 +257,9 @@ blasint Laqps(blasint m, blasint n, blasint offset, blasint nb, T* a,
 // LWORK >= 3*N+1 (real) or N+1 (complex); the optimal LWORK is
 // 2*N+(N+1)*NB (real) or (N+1)*NB (complex); LWORK = -1 is a workspace
 // query. (Deviation from the reference, see doc/deviations.md: for M = 0 and
-// N > 0 the reference reports the INFO = -12 of its xUNMQR call, which asks
-// for LWORK >= N, although the workspace query returned 1; here INFO is 0.)
+// N > 0 the reference reports the INFO = -12 of its xUNMQR call (and calls
+// XERBLA), which asks for LWORK >= N, although the workspace query returned 1;
+// here INFO is 0 and xUNMQR is not called.)
 // RWORK (2*N elements, complex T only) holds the column norms, which the real
 // routine keeps in WORK. On exit, WORK(1) is the optimal LWORK, or (real T) the
 // workspace size that the routine used.
@@ -335,7 +336,9 @@ blasint Geqp3(blasint m, blasint n, T* a, blasint lda, blasint* jpvt, T* tau,
     const blasint na = Min(m, nfxd);
     Geqrf(m, na, a, lda, tau, work, lwork);
     iws = Max(iws, static_cast<blasint>(std::real(WORK(1))));
-    if (na < n) {
+    // No reflectors (M = 0): nothing to apply. The reference calls xUNMQR
+    // anyway, which rejects the workspace of the query (see above).
+    if (na > 0 && na < n) {
       Unmqr('L', ConjTrans<T>(), m, n - na, na, a, lda, tau, A.ptr(1, na + 1),
             lda, work, lwork);
       iws = Max(iws, static_cast<blasint>(std::real(WORK(1))));
