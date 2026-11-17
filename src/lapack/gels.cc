@@ -1799,7 +1799,8 @@ HWYBLAS_LAPACK_GELS(z, c64, double)
       const R* rcond, hwyblas_int* rank, R* work, const hwyblas_int* lwork,    \
       hwyblas_int* info) {                                                     \
     *info =                                                                    \
-        hwyblas::lapack::Gelss(*m, *n, *nrhs, a, *lda, b, *ldb, s, *rcond,     \
+        hwyblas::lapack::Gelss(*m, *n, *nrhs, a, *lda, b, *ldb, s,             \
+                               hwyblas::lapack::ArgIf(*lwork != -1, rcond),    \
                                rank, work, *lwork, static_cast<R*>(nullptr));  \
   }                                                                            \
   HWYBLAS_API void prefix##gelsy_(                                             \
@@ -1808,7 +1809,8 @@ HWYBLAS_LAPACK_GELS(z, c64, double)
       hwyblas_int* jpvt, const R* rcond, hwyblas_int* rank, R* work,           \
       const hwyblas_int* lwork, hwyblas_int* info) {                           \
     *info =                                                                    \
-        hwyblas::lapack::Gelsy(*m, *n, *nrhs, a, *lda, b, *ldb, jpvt, *rcond,  \
+        hwyblas::lapack::Gelsy(*m, *n, *nrhs, a, *lda, b, *ldb, jpvt,          \
+                               hwyblas::lapack::ArgIf(*lwork != -1, rcond),    \
                                rank, work, *lwork, static_cast<R*>(nullptr));  \
   }
 
@@ -1831,16 +1833,18 @@ HWYBLAS_LAPACK_GELS_REAL(d, double)
       R* rwork, hwyblas_int* info) {                                           \
     *info =                                                                    \
         hwyblas::lapack::Gelss(*m, *n, *nrhs, As<T>(a), *lda, As<T>(b), *ldb,  \
-                               s, *rcond, rank, As<T>(work), *lwork, rwork);   \
+                               s, hwyblas::lapack::ArgIf(*lwork != -1, rcond), \
+                               rank, As<T>(work), *lwork, rwork);              \
   }                                                                            \
   HWYBLAS_API void prefix##gelsy_(                                             \
       const hwyblas_int* m, const hwyblas_int* n, const hwyblas_int* nrhs,     \
       R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb,              \
       hwyblas_int* jpvt, const R* rcond, hwyblas_int* rank, R* work,           \
       const hwyblas_int* lwork, R* rwork, hwyblas_int* info) {                 \
-    *info = hwyblas::lapack::Gelsy(*m, *n, *nrhs, As<T>(a), *lda, As<T>(b),    \
-                                   *ldb, jpvt, *rcond, rank, As<T>(work),      \
-                                   *lwork, rwork);                             \
+    *info = hwyblas::lapack::Gelsy(                                            \
+        *m, *n, *nrhs, As<T>(a), *lda, As<T>(b), *ldb, jpvt,                   \
+        hwyblas::lapack::ArgIf(*lwork != -1, rcond), rank, As<T>(work),        \
+        *lwork, rwork);                                                        \
   }
 
 HWYBLAS_LAPACK_GELS_COMPLEX(c, c32, float)

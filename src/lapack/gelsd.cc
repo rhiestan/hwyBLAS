@@ -2473,9 +2473,10 @@ extern "C" {
       R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb, R* s,        \
       const R* rcond, hwyblas_int* rank, R* work, const hwyblas_int* lwork,    \
       hwyblas_int* iwork, hwyblas_int* info) {                                 \
-    *info = hwyblas::lapack::Gelsd(*m, *n, *nrhs, a, *lda, b, *ldb, s, *rcond, \
-                                   rank, work, *lwork,                         \
-                                   static_cast<R*>(nullptr), iwork);           \
+    *info = hwyblas::lapack::Gelsd(                                            \
+        *m, *n, *nrhs, a, *lda, b, *ldb, s,                                    \
+        hwyblas::lapack::ArgIf(*lwork != -1, rcond), rank, work, *lwork,       \
+        static_cast<R*>(nullptr), iwork);                                      \
   }
 
 HWYBLAS_LAPACK_GELSD_REAL(s, float)
@@ -2524,9 +2525,10 @@ HWYBLAS_LAPACK_GELSD_REAL(d, double)
       R* a, const hwyblas_int* lda, R* b, const hwyblas_int* ldb, R* s,        \
       const R* rcond, hwyblas_int* rank, R* work, const hwyblas_int* lwork,    \
       R* rwork, hwyblas_int* iwork, hwyblas_int* info) {                       \
-    *info = hwyblas::lapack::Gelsd(*m, *n, *nrhs, As<T>(a), *lda, As<T>(b),    \
-                                   *ldb, s, *rcond, rank, As<T>(work), *lwork, \
-                                   rwork, iwork);                              \
+    *info =                                                                    \
+        hwyblas::lapack::Gelsd(*m, *n, *nrhs, As<T>(a), *lda, As<T>(b), *ldb,  \
+                               s, hwyblas::lapack::ArgIf(*lwork != -1, rcond), \
+                               rank, As<T>(work), *lwork, rwork, iwork);       \
   }
 
 HWYBLAS_LAPACK_GELSD_COMPLEX(c, c32, float)

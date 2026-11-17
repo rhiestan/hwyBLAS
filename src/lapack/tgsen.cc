@@ -3388,9 +3388,11 @@ extern "C" {
       const hwyblas_int* ldf, R* scale, R* dif, R* work,                       \
       const hwyblas_int* lwork, hwyblas_int* iwork, hwyblas_int* info) {       \
     *info = hwyblas::lapack::Tgsyl(                                            \
-        *trans, *ijob, *m, *n, As<const T>(a), *lda, As<const T>(b), *ldb,     \
-        As<T>(c), *ldc, As<const T>(d), *ldd, As<const T>(e), *lde, As<T>(f),  \
-        *ldf, scale, dif, As<T>(work), *lwork, iwork);                         \
+        *trans,                                                                \
+        hwyblas::lapack::ArgIf(hwyblas::lapack::Lsame(*trans, 'N'), ijob), *m, \
+        *n, As<const T>(a), *lda, As<const T>(b), *ldb, As<T>(c), *ldc,        \
+        As<const T>(d), *ldd, As<const T>(e), *lde, As<T>(f), *ldf, scale,     \
+        dif, As<T>(work), *lwork, iwork);                                      \
   }
 
 HWYBLAS_LAPACK_TGSEN(s, float, float)

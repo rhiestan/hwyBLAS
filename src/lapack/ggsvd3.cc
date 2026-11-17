@@ -1021,9 +1021,10 @@ HWYBLAS_LAPACK_GGSVD3(z, c64, double)
       const hwyblas_int* ldq, hwyblas_int* iwork, R* tau, R* work,             \
       const hwyblas_int* lwork, hwyblas_int* info) {                           \
     *info = hwyblas::lapack::Ggsvp3(                                           \
-        *jobu, *jobv, *jobq, *m, *p, *n, a, *lda, b, *ldb, *tola, *tolb, k, l, \
-        u, *ldu, v, *ldv, q, *ldq, iwork, static_cast<R*>(nullptr), tau, work, \
-        *lwork);                                                               \
+        *jobu, *jobv, *jobq, *m, *p, *n, a, *lda, b, *ldb,                     \
+        hwyblas::lapack::ArgIf(*lwork != -1, tola),                            \
+        hwyblas::lapack::ArgIf(*lwork != -1, tolb), k, l, u, *ldu, v, *ldv, q, \
+        *ldq, iwork, static_cast<R*>(nullptr), tau, work, *lwork);             \
   }                                                                            \
   HWYBLAS_API void prefix##ggsvd3_(                                            \
       const char* jobu, const char* jobv, const char* jobq,                    \
@@ -1062,8 +1063,10 @@ HWYBLAS_LAPACK_GGSVD3_REAL(d, double)
       const hwyblas_int* lwork, hwyblas_int* info) {                           \
     *info = hwyblas::lapack::Ggsvp3(                                           \
         *jobu, *jobv, *jobq, *m, *p, *n, As<T>(a), *lda, As<T>(b), *ldb,       \
-        *tola, *tolb, k, l, As<T>(u), *ldu, As<T>(v), *ldv, As<T>(q), *ldq,    \
-        iwork, rwork, As<T>(tau), As<T>(work), *lwork);                        \
+        hwyblas::lapack::ArgIf(*lwork != -1, tola),                            \
+        hwyblas::lapack::ArgIf(*lwork != -1, tolb), k, l, As<T>(u), *ldu,      \
+        As<T>(v), *ldv, As<T>(q), *ldq, iwork, rwork, As<T>(tau), As<T>(work), \
+        *lwork);                                                               \
   }                                                                            \
   HWYBLAS_API void prefix##ggsvd3_(                                            \
       const char* jobu, const char* jobv, const char* jobq,                    \

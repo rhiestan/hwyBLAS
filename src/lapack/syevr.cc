@@ -896,28 +896,38 @@ using hwyblas::lapack::As;
 
 extern "C" {
 
-#define HWYBLAS_LAPACK_SYEVR_REAL(p, R)                                       \
-  HWYBLAS_API void p##syevr_(                                                 \
-      const char* jobz, const char* range, const char* uplo,                  \
-      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,        \
-      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,              \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,    \
-      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork,                 \
-      hwyblas_int* iwork, const hwyblas_int* liwork, hwyblas_int* info) {     \
-    *info = hwyblas::lapack::Heevr(                                           \
-        *jobz, *range, *uplo, *n, a, *lda, *vl, *vu, *il, *iu, *abstol, m, w, \
-        z, *ldz, isuppz, work, *lwork, static_cast<R*>(nullptr), 0, iwork,    \
-        *liwork);                                                             \
-  }                                                                           \
-  HWYBLAS_API void p##stevr_(                                                 \
-      const char* jobz, const char* range, const hwyblas_int* n, R* d, R* e,  \
-      const R* vl, const R* vu, const hwyblas_int* il, const hwyblas_int* iu, \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,    \
-      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork,                 \
-      hwyblas_int* iwork, const hwyblas_int* liwork, hwyblas_int* info) {     \
-    *info = hwyblas::lapack::Stevr(*jobz, *range, *n, d, e, *vl, *vu, *il,    \
-                                   *iu, *abstol, m, w, z, *ldz, isuppz, work, \
-                                   *lwork, iwork, *liwork);                   \
+#define HWYBLAS_LAPACK_SYEVR_REAL(p, R)                                        \
+  HWYBLAS_API void p##syevr_(                                                  \
+      const char* jobz, const char* range, const char* uplo,                   \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,         \
+      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,               \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,     \
+      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork,                  \
+      hwyblas_int* iwork, const hwyblas_int* liwork, hwyblas_int* info) {      \
+    using hwyblas::lapack::ArgIf;                                              \
+    using hwyblas::lapack::Lsame;                                              \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');         \
+    const bool query = *lwork == -1 || *liwork == -1;                          \
+    *info = hwyblas::lapack::Heevr(                                            \
+        *jobz, *range, *uplo, *n, a, *lda, ArgIf(value, vl), ArgIf(value, vu), \
+        ArgIf(index, il), ArgIf(index, iu), ArgIf(!query, abstol), m, w, z,    \
+        *ldz, isuppz, work, *lwork, static_cast<R*>(nullptr), 0, iwork,        \
+        *liwork);                                                              \
+  }                                                                            \
+  HWYBLAS_API void p##stevr_(                                                  \
+      const char* jobz, const char* range, const hwyblas_int* n, R* d, R* e,   \
+      const R* vl, const R* vu, const hwyblas_int* il, const hwyblas_int* iu,  \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,     \
+      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork,                  \
+      hwyblas_int* iwork, const hwyblas_int* liwork, hwyblas_int* info) {      \
+    using hwyblas::lapack::ArgIf;                                              \
+    using hwyblas::lapack::Lsame;                                              \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');         \
+    const bool query = *lwork == -1 || *liwork == -1;                          \
+    *info = hwyblas::lapack::Stevr(                                            \
+        *jobz, *range, *n, d, e, ArgIf(value, vl), ArgIf(value, vu),           \
+        ArgIf(index, il), ArgIf(index, iu), ArgIf(!query, abstol), m, w, z,    \
+        *ldz, isuppz, work, *lwork, iwork, *liwork);                           \
   }
 
 HWYBLAS_LAPACK_SYEVR_REAL(s, float)
@@ -925,19 +935,24 @@ HWYBLAS_LAPACK_SYEVR_REAL(d, double)
 
 #undef HWYBLAS_LAPACK_SYEVR_REAL
 
-#define HWYBLAS_LAPACK_HEEVR(p, T, R)                                        \
-  HWYBLAS_API void p##heevr_(                                                \
-      const char* jobz, const char* range, const char* uplo,                 \
-      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,       \
-      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,             \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,   \
-      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork, R* rwork,      \
-      const hwyblas_int* lrwork, hwyblas_int* iwork,                         \
-      const hwyblas_int* liwork, hwyblas_int* info) {                        \
-    *info = hwyblas::lapack::Heevr(*jobz, *range, *uplo, *n, As<T>(a), *lda, \
-                                   *vl, *vu, *il, *iu, *abstol, m, w,        \
-                                   As<T>(z), *ldz, isuppz, As<T>(work),      \
-                                   *lwork, rwork, *lrwork, iwork, *liwork);  \
+#define HWYBLAS_LAPACK_HEEVR(p, T, R)                                      \
+  HWYBLAS_API void p##heevr_(                                              \
+      const char* jobz, const char* range, const char* uplo,               \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,     \
+      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,           \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz, \
+      hwyblas_int* isuppz, R* work, const hwyblas_int* lwork, R* rwork,    \
+      const hwyblas_int* lrwork, hwyblas_int* iwork,                       \
+      const hwyblas_int* liwork, hwyblas_int* info) {                      \
+    using hwyblas::lapack::ArgIf;                                          \
+    using hwyblas::lapack::Lsame;                                          \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');     \
+    const bool query = *lwork == -1 || *lrwork == -1 || *liwork == -1;     \
+    *info = hwyblas::lapack::Heevr(                                        \
+        *jobz, *range, *uplo, *n, As<T>(a), *lda, ArgIf(value, vl),        \
+        ArgIf(value, vu), ArgIf(index, il), ArgIf(index, iu),              \
+        ArgIf(!query, abstol), m, w, As<T>(z), *ldz, isuppz, As<T>(work),  \
+        *lwork, rwork, *lrwork, iwork, *liwork);                           \
   }
 
 HWYBLAS_LAPACK_HEEVR(c, c32, float)

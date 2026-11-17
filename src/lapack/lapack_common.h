@@ -186,6 +186,16 @@ blasint IntOf(R x) {
   return static_cast<blasint>(x);
 }
 
+// The value of an argument that the reference LAPACK references only in some
+// cases (`referenced`), else zero. Callers leave the other cases unset or null
+// (NumPy's lstsq passes an uninitialized RCOND in its workspace query), so the
+// C entry points must not read them either: a Fortran routine reads an
+// argument only where its code does.
+template <typename V>
+V ArgIf(bool referenced, const V* p) {
+  return referenced ? *p : V();
+}
+
 // X**N for an integer N as gfortran's __builtin_powi (libgcc's __powidf2)
 // computes it: by repeated squaring, and 1 / X**(-N) for N < 0. For a base
 // such as 10, std::pow rounds X**N differently once it is not exact. (The

@@ -3459,11 +3459,16 @@ HWYBLAS_LAPACK_STEMR_REAL(d, double)
       const hwyblas_int* nzc, hwyblas_int* isuppz, hwyblas_int* tryrac,        \
       R* work, const hwyblas_int* lwork, hwyblas_int* iwork,                   \
       const hwyblas_int* liwork, hwyblas_int* info) {                          \
-    bool rac = *tryrac != 0;                                                   \
-    *info = hwyblas::lapack::Stemr(*jobz, *range, *n, d, e, *vl, *vu, *il,     \
-                                   *iu, m, w, As<T>(z), *ldz, *nzc, isuppz,    \
-                                   &rac, work, *lwork, iwork, *liwork);        \
-    *tryrac = rac ? 1 : 0;                                                     \
+    using hwyblas::lapack::ArgIf;                                              \
+    using hwyblas::lapack::Lsame;                                              \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');         \
+    const bool query = *lwork == -1 || *liwork == -1;                          \
+    bool rac = !query && *tryrac != 0;                                         \
+    *info = hwyblas::lapack::Stemr(                                            \
+        *jobz, *range, *n, d, e, ArgIf(value, vl), ArgIf(value, vu),           \
+        ArgIf(index, il), ArgIf(index, iu), m, w, As<T>(z), *ldz, *nzc,        \
+        isuppz, &rac, work, *lwork, iwork, *liwork);                           \
+    if (!query) *tryrac = rac ? 1 : 0;                                         \
   }
 
 HWYBLAS_LAPACK_STEMR(s, float, float)

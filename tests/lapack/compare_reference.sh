@@ -137,6 +137,15 @@ if [ "$special" = arguments ]; then
       echo "$name: exit code $code"
       echo "$out" | grep -v ' 0 mismatches' | head -8
     fi
+    # Workspace queries with one null argument at a time (the reference does
+    # not read most of them there, and NumPy's lstsq leaves RCOND unset).
+    code=0
+    out=$(timeout 90 "$work/compare-build/compare_arguments$exe" "${args[@]}" queries "$name" 2>/dev/null | grep -v 'On entry') || code=$?
+    if [ "$code" -ne 0 ]; then
+      status=1
+      echo "$name (null arguments in a workspace query): exit code $code"
+      echo "$out" | grep -v ' 0 mismatches' | head -8
+    fi
   done
   echo "$checked routines compared: $([ $status = 0 ] && echo PASSED || echo FAILED)"
   exit $status

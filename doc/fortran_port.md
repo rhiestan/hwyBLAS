@@ -400,3 +400,14 @@ WORK(1). The divide and conquer kernels (`?laed1`, `?laed2`, `?laeda`,
 check) and `?geqrt3` (the reference recurses forever for N = 0). The other
 650 or so routines agree (two seeds of 400 and 1000 calls each), except for
 the documented `?geqp3` with M = 0.
+
+The same program checks workspace queries with a null pointer in place of one
+argument at a time (`queries`): where the reference survives, hwyBLAS must
+too. This found that the C entry points of `?gelsd`, `?gelss`, `?gelsy`,
+`?ggsvp3`, `?syevr`, `?heevr`, `?stevr`, `?syevx`, `?heevx`, `?stemr` and
+`?tgsyl` read arguments that the Fortran routines do not read in a query
+(RCOND, the tolerances, VL, VU, IL, IU, ABSTOL, TRYRAC, IJOB), which crashed
+NumPy's `lstsq` intermittently: it leaves RCOND uninitialized in its workspace
+query. The entry points now read an argument only where the reference does
+(`ArgIf` in `lapack_common.h`: VL and VU for RANGE = 'V', IL and IU for 'I',
+the rest not in a query), and `workspace_query_test.cc` keeps it so.

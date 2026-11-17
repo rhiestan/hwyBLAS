@@ -131,6 +131,7 @@ if(HWYBLAS_LAPACK)
     lapack/syevd_test.cc
     lapack/syevr_test.cc
     lapack/triangular_test.cc
+    lapack/workspace_query_test.cc
   )
 endif()
 

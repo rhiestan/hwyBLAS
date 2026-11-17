@@ -4,6 +4,8 @@
 //   compare_arguments <hwyblas library> <reference liblapack> <lapack.h> list
 //   compare_arguments <hwyblas library> <reference liblapack> <lapack.h> run
 //                     <routine> [trials] [seed] [Fortran source]
+//   compare_arguments <hwyblas library> <reference liblapack> <lapack.h>
+//                     queries <routine>
 //
 // The routines and their arguments come from the declarations in lapack.h:
 // every routine that returns void and takes only integers, characters and
@@ -21,16 +23,24 @@
 // permutations); the dimensions stay below 10 and the buffers are generous,
 // so that a valid call stays in bounds. Routines that need structured input
 // (the divide and conquer kernels, for example) can still crash the
-// reference or hwyBLAS: the program names the call before it runs with
-// COMPARE_ARGUMENTS_TRACE=1, a case that takes longer than 20 seconds ends
-// it with exit code 3 and its name, and tests/lapack/compare_arguments.sh
-// runs one process per routine. Not part of the build or of ctest.
+// reference or hwyBLAS: a crash is caught and reported, the program names
+// each call before it runs with COMPARE_ARGUMENTS_TRACE=1, a case that takes
+// longer than 20 seconds ends it with exit code 3 and its name, and
+// compare_reference.sh (mode "arguments") runs one process per routine.
+//
+// "queries" is a second check: a workspace query with one argument at a time
+// replaced by a null pointer. Callers leave arguments that the reference does
+// not read in a query unset (NumPy's lstsq hands xGELSD an uninitialized
+// RCOND), so where the reference survives a null argument, hwyBLAS must too
+// and return the same INFO. Not part of the build or of ctest.
 //
 // Copyright (c) 2026, Roman Hiestand. BSD 3-Clause License.
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <csetjmp>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -183,6 +193,41 @@ void Dispatch(size_t n, void* fn, void** a) {
   }
 }
 
+// Calls the routine; false if it crashed (an access violation or a signal),
+// so that a routine that dereferences an argument it should not is reported
+// instead of ending the program.
+#if defined(_WIN32)
+bool GuardedDispatch(size_t n, void* fn, void** a) {
+  __try {
+    Dispatch<80>(n, fn, a);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+  return true;
+}
+#else
+sigjmp_buf g_jump;
+void OnSignal(int) { siglongjmp(g_jump, 1); }
+bool GuardedDispatch(size_t n, void* fn, void** a) {
+  struct sigaction action{};
+  struct sigaction old_segv{}, old_bus{};
+  action.sa_handler = OnSignal;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = SA_NODEFER;
+  sigaction(SIGSEGV, &action, &old_segv);
+  sigaction(SIGBUS, &action, &old_bus);
+  bool ok = true;
+  if (sigsetjmp(g_jump, 1) == 0) {
+    Dispatch<80>(n, fn, a);
+  } else {
+    ok = false;
+  }
+  sigaction(SIGSEGV, &old_segv, nullptr);
+  sigaction(SIGBUS, &old_bus, nullptr);
+  return ok;
+}
+#endif
+
 std::mt19937_64 rng;
 
 constexpr size_t kBufferBytes = 4096 * 16;
@@ -244,6 +289,7 @@ struct Call {
 };
 
 struct Outcome {
+  bool crashed = false;
   I info = kInfoUnset;
   double work = 0;
 };
@@ -312,7 +358,8 @@ class Buffers {
   }
 
   // Runs the call in the library on copies of the buffers.
-  Outcome Run(const BlasLibrary& lib, const Call& call) const {
+  Outcome Run(const BlasLibrary& lib, const Call& call,
+              int null_param = -1) const {
     const Routine& r = *call.routine;
     std::vector<std::vector<unsigned char>> work = pristine_;
     std::vector<char> chars(r.params.size());
@@ -329,9 +376,13 @@ class Buffers {
         args[k] = work[k].data();
       }
     }
+    if (null_param >= 0) args[null_param] = nullptr;
     void* fn = lib.Find(r.name.c_str());
-    Dispatch<80>(r.params.size(), fn, args.data());
     Outcome o;
+    if (!GuardedDispatch(r.params.size(), fn, args.data())) {
+      o.crashed = true;
+      return o;
+    }
     memcpy(&o.info, work[r.info].data(), sizeof(I));
     if (r.work >= 0) {
       if (r.params[r.work].element == 4) {
@@ -394,7 +445,8 @@ struct Runner {
   const BlasLibrary& ref;
   bool trace = getenv("COMPARE_ARGUMENTS_TRACE") != nullptr;
 
-  Outcome Execute(const BlasLibrary& lib, const Buffers& b, const Call& call) {
+  Outcome Execute(const BlasLibrary& lib, const Buffers& b, const Call& call,
+                  int null_param = -1) {
     snprintf(g_case, sizeof(g_case), "%s %s: %s", lib.name().c_str(),
              call.routine->name.c_str(), Describe(call).c_str());
     if (trace) {
@@ -402,7 +454,7 @@ struct Runner {
       fflush(stderr);
     }
     g_case_start = Now();
-    const Outcome o = b.Run(lib, call);
+    const Outcome o = b.Run(lib, call, null_param);
     g_case_start = 0;
     return o;
   }
@@ -424,6 +476,7 @@ struct Runner {
     }
     for (int step = 0; step < 300; ++step) {
       const Outcome o = Execute(ref, b, call);
+      if (o.crashed) return false;
       if (o.info >= 0) return true;
       const long k = -static_cast<long>(o.info) - 1;
       if (k < 0 || k >= static_cast<long>(r.params.size())) return false;
@@ -525,6 +578,15 @@ int Run(const std::vector<Routine>& routines, const BlasLibrary& hwy,
       const Outcome x = runner.Execute(hwy, buffers, call);
       const Outcome y = runner.Execute(ref, buffers, call);
       ++calls;
+      if (y.crashed) continue;  // the reference rejects nothing here: skip
+      if (x.crashed) {
+        ++mismatches;
+        if (mismatches <= 5) {
+          printf("%s: hwyBLAS crashed, the reference returned INFO %d: %s\n",
+                 name.c_str(), int(y.info), Describe(call).c_str());
+        }
+        continue;
+      }
       if (y.info >= 0) ++accepted;
       if (KnownDeviation(*routine, call)) continue;
       bool query = routine->lwork >= 0 && call.values[routine->lwork].i == -1 &&
@@ -550,6 +612,62 @@ int Run(const std::vector<Routine>& routines, const BlasLibrary& hwy,
   }
   printf("%s: %d calls (%d accepted by the reference), %d mismatches\n",
          name.c_str(), calls, accepted, mismatches);
+  return mismatches ? 1 : 0;
+}
+
+// Workspace queries (LWORK = -1) with one argument at a time replaced by a
+// null pointer: callers (NumPy's lstsq, for one) leave arguments that the
+// reference does not reference in a query unset. If the reference survives a
+// null argument, hwyBLAS must too and return the same INFO.
+int RunQueries(const std::vector<Routine>& routines, const BlasLibrary& hwy,
+               const BlasLibrary& ref, const std::string& name) {
+  const Routine* routine = nullptr;
+  for (const Routine& r : routines) {
+    if (r.name == name) routine = &r;
+  }
+  if (routine == nullptr || !hwy.Find(name.c_str()) ||
+      !ref.Find(name.c_str())) {
+    printf("%s: not found\n", name.c_str());
+    return 2;
+  }
+  std::vector<size_t> sizes;  // the workspace size arguments
+  for (size_t k = 0; k < routine->params.size(); ++k) {
+    if (routine->params[k].kind == Kind::kInt &&
+        routine->params[k].int_class == IntClass::kWorkspace) {
+      sizes.push_back(k);
+    }
+  }
+  if (sizes.empty()) return 0;  // no workspace query
+  rng.seed(1);
+  StartWatchdog();
+  Runner runner{hwy, ref};
+  Buffers buffers(*routine);
+  Call query{routine, std::vector<Value>(routine->params.size())};
+  if (!runner.FindValid(buffers, query)) {
+    printf("%s: no valid call found\n", name.c_str());
+    return 0;
+  }
+  for (const size_t k : sizes) query.values[k].i = -1;
+  int mismatches = 0, tried = 0;
+  for (size_t k = 0; k < routine->params.size(); ++k) {
+    if (static_cast<int>(k) == routine->info) continue;
+    const Outcome y = runner.Execute(ref, buffers, query, static_cast<int>(k));
+    if (y.crashed) continue;  // the reference references it
+    ++tried;
+    const Outcome x = runner.Execute(hwy, buffers, query, static_cast<int>(k));
+    if (x.crashed || x.info != y.info) {
+      ++mismatches;
+      printf(
+          "%s: %s is null in a workspace query: hwyBLAS %s, reference INFO "
+          "%d\n",
+          name.c_str(), routine->params[k].name.c_str(),
+          x.crashed ? "crashed"
+                    : ("returned INFO " + std::to_string(int(x.info))).c_str(),
+          int(y.info));
+    }
+  }
+  printf("%s: %d null arguments survived by the reference, %d mismatches\n",
+         name.c_str(), tried, mismatches);
   return mismatches ? 1 : 0;
 }
 
@@ -583,6 +701,9 @@ int main(int argc, char** argv) {
     return Run(routines, hwy, ref, argv[5], argc > 6 ? atoi(argv[6]) : 400,
                argc > 7 ? static_cast<unsigned>(atoll(argv[7])) : 1,
                argc > 8 ? argv[8] : "");
+  }
+  if (strcmp(argv[4], "queries") == 0 && argc > 5) {
+    return RunQueries(routines, hwy, ref, argv[5]);
   }
   fprintf(stderr, "unknown command\n");
   return 2;

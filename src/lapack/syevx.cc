@@ -561,26 +561,34 @@ using hwyblas::lapack::As;
 
 extern "C" {
 
-#define HWYBLAS_LAPACK_SYEVX_REAL(p, R)                                       \
-  HWYBLAS_API void p##syevx_(                                                 \
-      const char* jobz, const char* range, const char* uplo,                  \
-      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,        \
-      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,              \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,    \
-      R* work, const hwyblas_int* lwork, hwyblas_int* iwork,                  \
-      hwyblas_int* ifail, hwyblas_int* info) {                                \
-    *info = hwyblas::lapack::Heevx(                                           \
-        *jobz, *range, *uplo, *n, a, *lda, *vl, *vu, *il, *iu, *abstol, m, w, \
-        z, *ldz, work, *lwork, static_cast<R*>(nullptr), iwork, ifail);       \
-  }                                                                           \
-  HWYBLAS_API void p##stevx_(                                                 \
-      const char* jobz, const char* range, const hwyblas_int* n, R* d, R* e,  \
-      const R* vl, const R* vu, const hwyblas_int* il, const hwyblas_int* iu, \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,    \
-      R* work, hwyblas_int* iwork, hwyblas_int* ifail, hwyblas_int* info) {   \
-    *info =                                                                   \
-        hwyblas::lapack::Stevx(*jobz, *range, *n, d, e, *vl, *vu, *il, *iu,   \
-                               *abstol, m, w, z, *ldz, work, iwork, ifail);   \
+#define HWYBLAS_LAPACK_SYEVX_REAL(p, R)                                        \
+  HWYBLAS_API void p##syevx_(                                                  \
+      const char* jobz, const char* range, const char* uplo,                   \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,         \
+      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,               \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,     \
+      R* work, const hwyblas_int* lwork, hwyblas_int* iwork,                   \
+      hwyblas_int* ifail, hwyblas_int* info) {                                 \
+    using hwyblas::lapack::ArgIf;                                              \
+    using hwyblas::lapack::Lsame;                                              \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');         \
+    *info = hwyblas::lapack::Heevx(                                            \
+        *jobz, *range, *uplo, *n, a, *lda, ArgIf(value, vl), ArgIf(value, vu), \
+        ArgIf(index, il), ArgIf(index, iu), ArgIf(*lwork != -1, abstol), m, w, \
+        z, *ldz, work, *lwork, static_cast<R*>(nullptr), iwork, ifail);        \
+  }                                                                            \
+  HWYBLAS_API void p##stevx_(                                                  \
+      const char* jobz, const char* range, const hwyblas_int* n, R* d, R* e,   \
+      const R* vl, const R* vu, const hwyblas_int* il, const hwyblas_int* iu,  \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,     \
+      R* work, hwyblas_int* iwork, hwyblas_int* ifail, hwyblas_int* info) {    \
+    using hwyblas::lapack::ArgIf;                                              \
+    using hwyblas::lapack::Lsame;                                              \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');         \
+    *info = hwyblas::lapack::Stevx(*jobz, *range, *n, d, e, ArgIf(value, vl),  \
+                                   ArgIf(value, vu), ArgIf(index, il),         \
+                                   ArgIf(index, iu), *abstol, m, w, z, *ldz,   \
+                                   work, iwork, ifail);                        \
   }
 
 HWYBLAS_LAPACK_SYEVX_REAL(s, float)
@@ -588,17 +596,22 @@ HWYBLAS_LAPACK_SYEVX_REAL(d, double)
 
 #undef HWYBLAS_LAPACK_SYEVX_REAL
 
-#define HWYBLAS_LAPACK_HEEVX(p, T, R)                                          \
-  HWYBLAS_API void p##heevx_(                                                  \
-      const char* jobz, const char* range, const char* uplo,                   \
-      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,         \
-      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,               \
-      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz,     \
-      R* work, const hwyblas_int* lwork, R* rwork, hwyblas_int* iwork,         \
-      hwyblas_int* ifail, hwyblas_int* info) {                                 \
-    *info = hwyblas::lapack::Heevx(                                            \
-        *jobz, *range, *uplo, *n, As<T>(a), *lda, *vl, *vu, *il, *iu, *abstol, \
-        m, w, As<T>(z), *ldz, As<T>(work), *lwork, rwork, iwork, ifail);       \
+#define HWYBLAS_LAPACK_HEEVX(p, T, R)                                      \
+  HWYBLAS_API void p##heevx_(                                              \
+      const char* jobz, const char* range, const char* uplo,               \
+      const hwyblas_int* n, R* a, const hwyblas_int* lda, const R* vl,     \
+      const R* vu, const hwyblas_int* il, const hwyblas_int* iu,           \
+      const R* abstol, hwyblas_int* m, R* w, R* z, const hwyblas_int* ldz, \
+      R* work, const hwyblas_int* lwork, R* rwork, hwyblas_int* iwork,     \
+      hwyblas_int* ifail, hwyblas_int* info) {                             \
+    using hwyblas::lapack::ArgIf;                                          \
+    using hwyblas::lapack::Lsame;                                          \
+    const bool value = Lsame(*range, 'V'), index = Lsame(*range, 'I');     \
+    *info = hwyblas::lapack::Heevx(                                        \
+        *jobz, *range, *uplo, *n, As<T>(a), *lda, ArgIf(value, vl),        \
+        ArgIf(value, vu), ArgIf(index, il), ArgIf(index, iu),              \
+        ArgIf(*lwork != -1, abstol), m, w, As<T>(z), *ldz, As<T>(work),    \
+        *lwork, rwork, iwork, ifail);                                      \
   }
 
 HWYBLAS_LAPACK_HEEVX(c, c32, float)
