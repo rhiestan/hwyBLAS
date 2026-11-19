@@ -853,6 +853,8 @@ TYPED_TEST(PosvTest, PivotedCholesky) {
 TYPED_TEST(PosvTest, PivotedCholeskySpecialCases) {
   using T = TypeParam;
   using R = RealT<T>;
+  // (Block size 2 < n = 3 makes xPSTRF blocked rather than unblocked.)
+  const ScopedBlockSize block_size(2);
   for (const bool unblocked : {false, true}) {
     SCOPED_TRACE(unblocked);
     std::vector<T> a(1, T(3));

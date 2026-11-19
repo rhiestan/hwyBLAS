@@ -588,7 +588,7 @@ Svd<T> Gesvd(char jobu, char jobvt, hwyblas_int m, hwyblas_int n,
     if (r.info != 0) return r;
     lwork = static_cast<hwyblas_int>(std::real(query));
   }
-  r.work.assign(std::max<hwyblas_int>(1, lwork), NaN<T>());
+  r.work.assign(std::max<hwyblas_int>(1, lwork) + 16, NaN<T>());
   if constexpr (IsComplex<T>::value) {
     HWYBLAS_CALL_COMPLEX(T, gesvd, &jobu, &jobvt, &m, &n, P(r.a.data()), &lda,
                          r.s.data(), P(r.u.data()), &ldu, P(r.vt.data()), &ldvt,
@@ -598,6 +598,14 @@ Svd<T> Gesvd(char jobu, char jobvt, hwyblas_int m, hwyblas_int n,
                       r.s.data(), P(r.u.data()), &ldu, P(r.vt.data()), &ldvt,
                       P(r.work.data()), &lwork, &r.info);
   }
+  // The guard elements after the workspace are NaN; a write there is a
+  // routine using more than LWORK.
+  for (size_t i = static_cast<size_t>(std::max<hwyblas_int>(1, lwork));
+       i < r.work.size(); ++i) {
+    EXPECT_TRUE(std::isnan(std::real(r.work[i])))
+        << "work[" << i << "] was written (lwork=" << lwork << ")";
+  }
+  r.work.resize(static_cast<size_t>(std::max<hwyblas_int>(1, lwork)));
   return r;
 }
 
@@ -1109,6 +1117,60 @@ TYPED_TEST(GesvdTest, LapackeErrors) {
       LAPACKE_CALL(T, bdsqr, bdsqr, LAPACK_COL_MAJOR, 'U', 4, 4, 0, 0, d.data(),
                    e.data(), vt.data(), 4, u.data(), 1, a.data(), 1),
       -9);
+}
+
+// Every LWORK from the minimum to the optimal one: the workspace thresholds
+// of xGESVD select the paths (and the leading dimensions of the workspace
+// matrices); with a padded LDA the thresholds of WORK(IU) and WORK(IR) differ.
+// Out-of-bounds use of a too-small workspace shows under a sanitizer.
+TYPED_TEST(GesvdTest, LworkSweep) {
+  using T = TypeParam;
+  ForEachTarget([] {
+    Random<T> rng(271);
+    for (const Shape2 sh : std::vector<Shape2>{
+             {4, 4}, {9, 4}, {4, 9}, {7, 4}, {4, 7}, {7, 6}, {6, 7}}) {
+      const hwyblas_int m = sh.m, n = sh.n, mn = std::min(m, n);
+      for (const hwyblas_int pad : {0, 2}) {
+        const hwyblas_int lda = m + pad, ldu = m + 1, ldvt = n + 1;
+        const std::vector<T> a = rng.Vector(lda * n);
+        const Svd<T> ref = Gesvd<T>('N', 'N', m, n, a, lda, 1, 1, -1);
+        ASSERT_EQ(ref.info, 0);
+        const hwyblas_int minimum = MinimumGesvdLwork<T>(m, n);
+        for (const char jobu : {'A', 'S', 'O', 'N'}) {
+          for (const char jobvt : {'A', 'S', 'O', 'N'}) {
+            if (jobu == 'O' && jobvt == 'O') continue;
+            const Svd<T> query =
+                Gesvd<T>(jobu, jobvt, m, n, a, lda, ldu, ldvt, -1);
+            ASSERT_EQ(query.info, 0);
+            const hwyblas_int optimal = std::max(
+                minimum, static_cast<hwyblas_int>(std::real(query.work[0])));
+            for (hwyblas_int lwork = minimum; lwork <= optimal; ++lwork) {
+              SCOPED_TRACE(::testing::Message()
+                           << "m=" << m << " n=" << n << " jobu=" << jobu
+                           << " jobvt=" << jobvt << " lwork=" << lwork);
+              const Svd<T> r =
+                  Gesvd<T>(jobu, jobvt, m, n, a, lda, ldu, ldvt, lwork);
+              ASSERT_EQ(r.info, 0);
+              for (hwyblas_int i = 0; i < mn; ++i) {
+                EXPECT_NEAR(r.s[i], ref.s[i], 30 * std::max(m, n) * Eps<T>())
+                    << i;
+              }
+              if (jobu == 'A' || jobu == 'S') {
+                EXPECT_LT(OrthogonalityRatio(
+                              ToDense(r.u, m, jobu == 'A' ? m : mn, ldu)),
+                          kLapackThreshold);
+              }
+              if (jobvt == 'A' || jobvt == 'S') {
+                EXPECT_LT(OrthogonalityRatio(Adjoint(
+                              ToDense(r.vt, jobvt == 'A' ? n : mn, n, ldvt))),
+                          kLapackThreshold);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 }  // namespace

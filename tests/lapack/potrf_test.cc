@@ -122,10 +122,32 @@ TYPED_TEST(PotrfTest, NotPositiveDefinite) {
               for (hwyblas_int i = 0; i < k - 1; ++i) {
                 EXPECT_EQ(At(a, i, i, n), T(2));
               }
+              // The failing diagonal element holds the (non-positive or NaN)
+              // pivot, as in the reference.
+              if (std::isnan(value)) {
+                EXPECT_TRUE(std::isnan(std::real(At(a, k - 1, k - 1, n))));
+              } else {
+                EXPECT_EQ(At(a, k - 1, k - 1, n),
+                          T(static_cast<RealT<T>>(value)));
+              }
             }
           }
         }
       }
+    }
+  }
+}
+
+// A singular matrix: the failing diagonal element holds the pivot after the
+// update with the factored columns, here 1 - 1 = 0 (not the original 1).
+TYPED_TEST(PotrfTest, SingularKeepsPivot) {
+  using T = TypeParam;
+  for (const bool recursive : {false, true}) {
+    for (const char uplo : {'U', 'L'}) {
+      std::vector<T> a(4, T(1));
+      EXPECT_EQ(Potrf(recursive, uplo, 2, a, 2), 2);
+      EXPECT_EQ(At(a, 0, 0, 2), T(1));
+      EXPECT_EQ(At(a, 1, 1, 2), T(0));
     }
   }
 }

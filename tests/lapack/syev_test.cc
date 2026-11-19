@@ -228,7 +228,14 @@ TYPED_TEST(SyevTest, Heev) {
       const ScopedBlockSize block_size(b.nb, b.nx);
       for (const char uplo : {'U', 'L'}) {
         for (const hwyblas_int n : {1, 2, 5, 17, 40}) {
-          for (const double scale : {1.0, rmin * 1e-3, 1 / (rmin * 1e-3)}) {
+          // Also scales whose squares underflow or overflow, which the
+          // unscaled routine would not survive.
+          for (const double scale :
+               {1.0, rmin * 1e-3, 1 / (rmin * 1e-3),
+                std::sqrt(static_cast<double>(std::numeric_limits<R>::min())) *
+                    1e-3,
+                4 * std::sqrt(
+                        static_cast<double>(std::numeric_limits<R>::max()))}) {
             for (const bool minimal : {false, true}) {
               SCOPED_TRACE(::testing::Message()
                            << "uplo=" << uplo << " n=" << n << " nb=" << b.nb
@@ -295,6 +302,17 @@ TYPED_TEST(SyevTest, WorkspaceQueriesAndErrors) {
   CALL_RC(T, orgtr, ungtr, &uplo, &n, P(a.data()), &n, P(tau.data()),
           P(work.data()), &lwork, &info);
   EXPECT_EQ(std::real(work[0]), (n - 1) * 8);
+
+  // n = 0 is a quick return: no error, and W and A are not referenced.
+  {
+    std::vector<T> a0(1, T(7));
+    std::vector<R> w0(1, R(5));
+    for (const char job : {'N', 'V'}) {
+      EXPECT_EQ(Heev<T>(job, 'U', 0, a0, 1, w0, 64), 0);
+      EXPECT_EQ(a0[0], T(7));
+      EXPECT_EQ(w0[0], R(5));
+    }
+  }
 
   // Invalid arguments.
   ErrorCapture errors;

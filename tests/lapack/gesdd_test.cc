@@ -432,8 +432,16 @@ Sdd<T> Gesdd(char jobz, hwyblas_int m, hwyblas_int n, const std::vector<T>& a,
     if (r.info != 0) return r;
     lwork = static_cast<hwyblas_int>(std::real(query));
   }
-  r.work.assign(std::max<hwyblas_int>(1, lwork), NaN<T>());
+  r.work.assign(std::max<hwyblas_int>(1, lwork) + 16, NaN<T>());
   call(r.work.data(), lwork);
+  // The guard elements after the workspace are NaN; a write there is a
+  // routine using more than LWORK.
+  for (size_t i = static_cast<size_t>(std::max<hwyblas_int>(1, lwork));
+       i < r.work.size(); ++i) {
+    EXPECT_TRUE(std::isnan(std::real(r.work[i])))
+        << "work[" << i << "] was written (lwork=" << lwork << ")";
+  }
+  r.work.resize(static_cast<size_t>(std::max<hwyblas_int>(1, lwork)));
   return r;
 }
 
@@ -1021,6 +1029,50 @@ TYPED_TEST(GesddTest, LapackeErrors) {
                               u.data(), 1, vt.data(), 1, q.data(), iq.data()),
               -6);
   }
+}
+
+// Every LWORK from the minimum to the optimal one: the workspace thresholds
+// of xGESDD select the paths. Out-of-bounds use of a too-small workspace
+// shows under a sanitizer.
+TYPED_TEST(GesddTest, LworkSweep) {
+  using T = TypeParam;
+  ForEachTarget([] {
+    Random<T> rng(272);
+    for (const Shape2 sh : std::vector<Shape2>{
+             {4, 4}, {9, 4}, {4, 9}, {7, 6}, {6, 7}, {12, 3}, {3, 12}}) {
+      const hwyblas_int m = sh.m, n = sh.n, mn = std::min(m, n);
+      const hwyblas_int lda = m + 2, ldu = m + 1;
+      const std::vector<T> a = rng.Vector(lda * n);
+      const Sdd<T> ref = Gesdd<T>('N', m, n, a, lda, 1, 1, -1);
+      ASSERT_EQ(ref.info, 0);
+      for (const char jobz : {'A', 'S', 'O', 'N'}) {
+        const hwyblas_int ldvt = jobz == 'A' ? n + 1 : mn + 1;
+        const hwyblas_int minimum = MinimumGesddLwork<T>(jobz, m, n);
+        const Sdd<T> query = Gesdd<T>(jobz, m, n, a, lda, ldu, ldvt, -1);
+        ASSERT_EQ(query.info, 0);
+        const hwyblas_int optimal = std::max(
+            minimum, static_cast<hwyblas_int>(std::real(query.work[0])));
+        for (hwyblas_int lwork = minimum; lwork <= optimal; ++lwork) {
+          SCOPED_TRACE(::testing::Message()
+                       << "m=" << m << " n=" << n << " jobz=" << jobz
+                       << " lwork=" << lwork);
+          const Sdd<T> r = Gesdd<T>(jobz, m, n, a, lda, ldu, ldvt, lwork);
+          ASSERT_EQ(r.info, 0);
+          for (hwyblas_int i = 0; i < mn; ++i) {
+            EXPECT_NEAR(r.s[i], ref.s[i], 30 * std::max(m, n) * Eps<T>()) << i;
+          }
+          if (jobz == 'A' || jobz == 'S') {
+            EXPECT_LT(
+                OrthogonalityRatio(ToDense(r.u, m, jobz == 'A' ? m : mn, ldu)),
+                kLapackThreshold);
+            EXPECT_LT(OrthogonalityRatio(Adjoint(
+                          ToDense(r.vt, jobz == 'A' ? n : mn, n, ldvt))),
+                      kLapackThreshold);
+          }
+        }
+      }
+    }
+  });
 }
 
 }  // namespace
