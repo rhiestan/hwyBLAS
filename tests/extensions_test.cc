@@ -381,5 +381,40 @@ TEST(ExtensionsErrors, Matcopy) {
             std::string::npos);
 }
 
+// The same for the single-precision CBLAS routines, which have their own
+// parameter numbering (the Fortran one shifted by the layout argument).
+TEST(ExtensionsErrors, MatcopySingle) {
+  static float a[64], b[64];
+  EXPECT_NE(ErrorOf([] {
+              cblas_somatcopy(static_cast<CBLAS_LAYOUT>(0), CblasNoTrans, 2, 3,
+                              1.0f, a, 3, b, 2);
+            }).find("Parameter 1 to routine cblas_somatcopy"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf([] {
+              cblas_somatcopy(CblasColMajor, static_cast<CBLAS_TRANSPOSE>(0), 2,
+                              3, 1.0f, a, 2, b, 3);
+            }).find("Parameter 2 to routine cblas_somatcopy"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf([] {
+              cblas_somatcopy(CblasRowMajor, CblasNoTrans, 2, 3, 1.0f, a, 3, b,
+                              2);
+            }).find("Parameter 9 to routine cblas_somatcopy"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf([] {
+              cblas_simatcopy(static_cast<CBLAS_LAYOUT>(0), CblasNoTrans, 2, 3,
+                              1.0f, a, 3, 3);
+            }).find("Parameter 1 to routine cblas_simatcopy"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf([] {
+              cblas_simatcopy(CblasColMajor, static_cast<CBLAS_TRANSPOSE>(0), 2,
+                              3, 1.0f, a, 2, 3);
+            }).find("Parameter 2 to routine cblas_simatcopy"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf([] {
+              cblas_simatcopy(CblasColMajor, CblasTrans, 2, 3, 1.0f, a, 2, 2);
+            }).find("Parameter 8 to routine cblas_simatcopy"),
+            std::string::npos);
+}
+
 }  // namespace
 }  // namespace hwyblas_test
