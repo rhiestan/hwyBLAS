@@ -124,6 +124,18 @@ jobs:
             Select-String '^[^=]+=' | ForEach-Object { $_.Line } |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      # MSVC's standard library rejects a Clang older than it expects
+      # (STL1000), and the runner's own LLVM can lag behind. The clang-cl
+      # that comes with Visual Studio matches its library.
+      - name: Use the clang-cl of Visual Studio
+        if: matrix.cc == 'clang-cl'
+        shell: pwsh
+        run: |
+          $bin = "${env:VCINSTALLDIR}Tools\Llvm\x64\bin"
+          & "$bin\clang-cl.exe" --version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Set up Intel SDE
         if: matrix.sde
         uses: petarpetrovt/setup-sde@v6.0
