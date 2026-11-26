@@ -242,6 +242,40 @@ TYPED_TEST(Geqp3Test, RankDeficient) {
   }
 }
 
+// Nearly parallel columns: once one of them is the pivot, the norms of the
+// others drop so far that their downdates are inaccurate, and the blocked
+// code recomputes them. The remaining parts differ in size, so the later
+// pivots depend on the recomputed norms.
+TYPED_TEST(Geqp3Test, RecomputedNorms) {
+  using T = TypeParam;
+  ForEachTarget([] {
+    Random<T> rng(59);
+    const hwyblas_int m = 30, n = 25;
+    // Relative size of the remaining parts: small enough for the downdates to
+    // fail (its square is below sqrt(eps)), large enough to be above the
+    // rounding errors.
+    const double size = 0.5 * std::pow(LapackEps<T>(), 0.25) / std::sqrt(m);
+    for (const Blocking& b : kBlockings) {
+      const ScopedBlockSize block_size(b.nb, b.nx);
+      SCOPED_TRACE(::testing::Message() << "nb=" << b.nb << " nx=" << b.nx);
+      const std::vector<T> common = rng.Vector(m);
+      std::vector<T> a = rng.Vector(m * n);
+      for (hwyblas_int j = 0; j < n; ++j) {
+        const RealT<T> delta = RealT<T>(size * std::pow(2.0, -(j * 5 % 6)));
+        for (hwyblas_int i = 0; i < m; ++i) {
+          At(a, i, j, m) = common[i] + delta * At(a, i, j, m);
+        }
+      }
+      std::vector<T> af = a;
+      std::vector<hwyblas_int> jpvt(n, 0);
+      std::vector<T> tau(n);
+      ASSERT_EQ(Geqp3(m, n, af, m, jpvt, tau, -1), 0);
+      CheckFactorization(m, n, a, af, m, jpvt, tau,
+                         std::vector<bool>(n, false));
+    }
+  });
+}
+
 TYPED_TEST(Geqp3Test, WorkspaceQuery) {
   using T = TypeParam;
   const ScopedBlockSize block_size(8);
