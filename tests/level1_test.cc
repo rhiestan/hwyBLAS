@@ -124,17 +124,23 @@ TYPED_TEST(Level1Test, CopySwap) {
   ForEachTarget([] {
     uint64_t seed = 1;
     for (int n : kLengths) {
-      for (int inc : kIncs) {
-        Random<T> rng(seed++);
-        StridedVector<T> x(n, inc, rng), y(n, inc == 1 ? 1 : -2, rng);
-        const std::vector<T> x0 = x.Elements(), y0 = y.Elements();
-        HWYBLAS_CALL(T, swap, &n, P(x.data.data()), &x.inc, P(y.data.data()),
-                     &y.inc);
-        EXPECT_EQ(x.Elements(), y0) << "swap n=" << n << " inc=" << inc;
-        EXPECT_EQ(y.Elements(), x0) << "swap n=" << n << " inc=" << inc;
-        HWYBLAS_CALL(T, copy, &n, P(x.data.data()), &x.inc, P(y.data.data()),
-                     &y.inc);
-        EXPECT_EQ(y.Elements(), y0) << "copy n=" << n << " inc=" << inc;
+      // All pairs, so that also exactly one of the vectors is contiguous.
+      for (int incx : kIncs) {
+        for (int incy : kIncs) {
+          Random<T> rng(seed++);
+          StridedVector<T> x(n, incx, rng), y(n, incy, rng);
+          const std::vector<T> x0 = x.Elements(), y0 = y.Elements();
+          HWYBLAS_CALL(T, swap, &n, P(x.data.data()), &x.inc, P(y.data.data()),
+                       &y.inc);
+          EXPECT_EQ(x.Elements(), y0)
+              << "swap n=" << n << " incx=" << incx << " incy=" << incy;
+          EXPECT_EQ(y.Elements(), x0)
+              << "swap n=" << n << " incx=" << incx << " incy=" << incy;
+          HWYBLAS_CALL(T, copy, &n, P(x.data.data()), &x.inc, P(y.data.data()),
+                       &y.inc);
+          EXPECT_EQ(y.Elements(), y0)
+              << "copy n=" << n << " incx=" << incx << " incy=" << incy;
+        }
       }
     }
   });
@@ -556,6 +562,36 @@ TYPED_TEST(Level1Test, Rotmg) {
           double(d1_in) * x1_in * x1_in + double(d2_in) * y1 * y1;
       EXPECT_NEAR(lhs, rhs, 64 * Eps<T>() * (std::abs(lhs) + std::abs(rhs)))
           << iter;
+    }
+  }
+}
+
+// A weight exactly on a bound of the rescaling interval [rgamsq, gamsq] is
+// rescaled once, as in the reference.
+TYPED_TEST(Level1Test, RotmgScalingBounds) {
+  using T = TypeParam;
+  if constexpr (!IsComplex<T>::value) {
+    const T gam(4096), gamsq(16777216), rgamsq = T(5.9604645e-8);
+    // Small enough that u = 1 + q2/q1 rounds to 1: the H step leaves d1 and
+    // d2 unchanged.
+    const T y1_in = std::ldexp(T(1), -60);
+    for (const bool first : {true, false}) {
+      for (const T bound : {rgamsq, gamsq}) {
+        const T d1_in = first ? bound : T(1), d2_in = first ? T(1) : bound;
+        T d1 = d1_in, d2 = d2_in, x1 = 1, param[5] = {};
+        T y1 = y1_in;
+        HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);
+        const T s = bound == gamsq ? gam : T(1) / gam;
+        const T h21 = -y1_in, h12 = d2_in * y1_in / d1_in;
+        EXPECT_EQ(param[0], T(-1)) << first << " " << bound;
+        EXPECT_EQ(d1, first ? d1_in / (s * s) : d1_in);
+        EXPECT_EQ(d2, first ? d2_in : d2_in / (s * s));
+        EXPECT_EQ(x1, first ? s : T(1));
+        EXPECT_EQ(param[1], first ? s : T(1));       // h11
+        EXPECT_EQ(param[2], first ? h21 : h21 * s);  // h21
+        EXPECT_EQ(param[3], first ? h12 * s : h12);  // h12
+        EXPECT_EQ(param[4], first ? T(1) : s);       // h22
+      }
     }
   }
 }
