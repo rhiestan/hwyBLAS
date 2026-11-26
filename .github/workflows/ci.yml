@@ -158,6 +158,7 @@ jobs:
           7z x -bso0 -o"$dir" openblas.zip
 
       - name: Configure
+        id: configure
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
@@ -180,6 +181,18 @@ jobs:
             fi
           fi
           cmake -S hwyBLAS -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${args[@]}"
+
+      # The compiler output of the failed checks is only in CMake's own log
+      # (CMakeError.log before CMake 3.26).
+      - name: Show the configure log
+        if: failure() && steps.configure.outcome == 'failure'
+        run: |
+          for log in build/CMakeFiles/CMakeConfigureLog.yaml build/CMakeFiles/CMakeError.log; do
+            if [ -f "$log" ]; then
+              echo "== $log"
+              tail -n 400 "$log"
+            fi
+          done
 
       - name: Build
         run: cmake --build build
