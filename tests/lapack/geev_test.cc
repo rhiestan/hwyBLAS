@@ -1067,7 +1067,8 @@ TYPED_TEST(GeevTest, GeevScaling) {
   Random<T> rng(229);
   const R tiny = std::sqrt(std::numeric_limits<R>::min()) *
                  std::numeric_limits<R>::epsilon() / 64;
-  for (const R factor : {tiny, 1 / tiny}) {
+  for (const R factor :
+       {tiny, 1 / tiny, ScaleNearUnderflow<R>(), ScaleNearOverflow<R>()}) {
     for (const hwyblas_int n : {4, 12}) {
       SCOPED_TRACE(::testing::Message() << "factor=" << factor << " n=" << n);
       std::vector<T> a = TestMatrix<T>(Kind::kRandom, n, n, rng);
@@ -1250,6 +1251,32 @@ TYPED_TEST(GeevTest, GeevxScaling) {
     }
     EXPECT_NEAR(out.abnrm / factor, ref.abnrm, 1e-3 * ref.abnrm);
   }
+}
+
+// The zero matrix has nothing to scale: no error report from within.
+TYPED_TEST(GeevTest, ZeroMatrix) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  ErrorCapture errors;
+  const hwyblas_int n = 4;
+  std::vector<T> a(Sz2(n, n), T(0)), vl(Sz2(n, n)), vr(Sz2(n, n));
+  std::vector<Eig<T>> w;
+  GeevxOut<R> out;
+  ASSERT_EQ(Geevx<T>('B', 'V', 'V', 'N', n, a, n, w, vl, n, vr, n, out,
+                     n * n + 8 * n),
+            0);
+  for (const Eig<T>& e : w) EXPECT_EQ(e, Eig<T>(0));
+  a.assign(Sz2(n, n), T(0));
+  ASSERT_EQ(Geev<T>('V', 'V', n, a, n, w, vl, n, vr, n, 64 * n), 0);
+  for (const Eig<T>& e : w) EXPECT_EQ(e, Eig<T>(0));
+  a.assign(Sz2(n, n), T(0));
+  hwyblas_int sdim = -1;
+  R rconde = -1, rcondv = -1;
+  ASSERT_EQ(Geesx<T>('V', 'N', 'N', n, a, n, &sdim, w, vl, n, &rconde, &rcondv,
+                     64 * n, 1),
+            0);
+  for (const Eig<T>& e : w) EXPECT_EQ(e, Eig<T>(0));
+  EXPECT_TRUE(errors.Take().empty());
 }
 
 // ---------------------------------------------------------------------------

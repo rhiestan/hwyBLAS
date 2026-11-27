@@ -342,6 +342,21 @@ hwyblas_int AlwaysC(const R* /*w*/) {
   return 1;
 }
 
+// Selects the eigenvalues whose real part exceeds Threshold<R>().
+template <typename R>
+R& Threshold() {
+  static R threshold = 0;
+  return threshold;
+}
+template <typename R>
+hwyblas_int AboveThreshold(const R* wr, const R* /*wi*/) {
+  return *wr > Threshold<R>() ? 1 : 0;
+}
+template <typename R>
+hwyblas_int AboveThresholdC(const R* w) {
+  return w[0] > Threshold<R>() ? 1 : 0;
+}
+
 // kPositiveImag selects only one eigenvalue of each complex conjugate pair
 // of a real matrix: xGEES then selects both.
 enum class Select { kPositiveReal, kPositiveImag, kNone, kAll };
@@ -1016,7 +1031,8 @@ TYPED_TEST(GeesTest, GeesScaling) {
   const R tiny = std::sqrt(std::numeric_limits<R>::min()) *
                  std::numeric_limits<R>::epsilon() / 64;
   const R huge = 1 / tiny;
-  for (const R factor : {tiny, huge}) {
+  for (const R factor :
+       {tiny, huge, ScaleNearUnderflow<R>(), ScaleNearOverflow<R>()}) {
     for (const char sort : {'N', 'S'}) {
       for (const hwyblas_int n : {4, 12}) {
         SCOPED_TRACE(::testing::Message()
@@ -1046,6 +1062,110 @@ TYPED_TEST(GeesTest, GeesScaling) {
     ASSERT_EQ(Gees<T>('V', 'N', Select::kNone, 2, t, 2, &sdim, w, vs, 2, 64),
               0);
     ASSERT_NO_FATAL_FAILURE(ExpectSchurForm(t, 2, 2, w));
+  }
+}
+
+// xGEES on a nearly defective pair of complex eigenvalues at the underflow
+// threshold, inside an upper triangular matrix: scaling the Schur form back
+// can make an off-diagonal element of the 2 x 2 block underflow, which
+// leaves two real eigenvalues; if it is the upper one, xGEES swaps rows and
+// columns to keep the form triangular.
+TYPED_TEST(GeesRealTest, GeesBlockUnderflow) {
+  using R = TypeParam;
+  Random<R> rng(79);
+  const R eps = std::numeric_limits<R>::epsilon();
+  const R min = std::numeric_limits<R>::min();
+  for (const int k : {1, 2, 3, 4, 8}) {
+    for (const R s : {min, 2 * min, 4 * min}) {
+      for (const bool transposed : {false, true}) {
+        for (const R sign : {R(1), R(-1)}) {
+          for (const char sort : {'N', 'S'}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "k=" << k << " s=" << s << " transposed="
+                         << transposed << " sign=" << sign << " sort=" << sort);
+            const hwyblas_int n = 6;
+            std::vector<R> a = TestMatrix<R>(Kind::kTriangular, n, n, rng);
+            for (R& x : a) x *= s / 4;
+            const R b = sign, c = -sign * (1 + k * eps);
+            At(a, 2, 2, n) = s;
+            At(a, 3, 3, n) = -s;
+            At(a, 2, 3, n) = s * (transposed ? c : b);
+            At(a, 3, 2, n) = s * (transposed ? b : c);
+            std::vector<R> t = a, vs(Sz2(n, n));
+            std::vector<Eig<R>> w;
+            hwyblas_int sdim = -1;
+            ASSERT_EQ(Gees<R>('V', sort, Select::kNone, n, t, n, &sdim, w, vs,
+                              n, 64 * n),
+                      0);
+            // Quasi-triangular, with a complex pair exactly where a 2 x 2
+            // block has two nonzero off-diagonal elements. (Too coarse in
+            // the subnormal range for the checks of ExpectSchurForm.)
+            for (hwyblas_int j = 0; j < n; ++j) {
+              EXPECT_EQ(w[j].real(), At(t, j, j, n)) << j;
+              for (hwyblas_int i = j + 1; i < n; ++i) {
+                if (i == 3 && j == 2) continue;
+                EXPECT_EQ(At(t, i, j, n), R(0)) << i << ", " << j;
+              }
+              if (j != 2 && j != 3) {
+                EXPECT_EQ(w[j].imag(), R(0)) << j;
+              }
+            }
+            const bool block = At(t, 3, 2, n) != 0;
+            EXPECT_EQ(w[2].imag() != 0, block);
+            EXPECT_EQ(w[3].imag(), -w[2].imag());
+            if (block) {
+              EXPECT_NE(At(t, 2, 3, n), R(0));
+            }
+            ExpectSchurFactorization(a, vs, t, n, n, n, n);
+          }
+        }
+      }
+    }
+  }
+}
+
+// xGEES with a SELECT that depends on the size of the eigenvalues, also on
+// matrices that it scales: SELECT gets them in the units of A (upper
+// triangular here, so that they are its diagonal).
+TYPED_TEST(GeesTest, GeesSelectsUnscaled) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  Random<T> rng(73);
+  const R tiny = std::sqrt(std::numeric_limits<R>::min()) *
+                 std::numeric_limits<R>::epsilon() / 64;
+  for (const R factor : {R(1), tiny, 1 / tiny}) {
+    SCOPED_TRACE(::testing::Message() << "factor=" << factor);
+    const hwyblas_int n = 6;
+    std::vector<T> a = TestMatrix<T>(Kind::kTriangular, n, n, rng);
+    for (hwyblas_int i = 0; i < n; ++i) {
+      At(a, i, i, n) = T(static_cast<R>(i % 2 == 0 ? i + 1 : 10 + i));
+    }
+    for (T& x : a) x *= factor;
+    // Selects the 3 diagonal elements >= 11.
+    Threshold<R>() = R(8) * factor;
+    hwyblas_int sdim = -1, info = -99;
+    const hwyblas_int lwork = 64 * n;
+    std::vector<T> work(Sz(lwork)), vs(Sz2(n, n));
+    std::vector<hwyblas_int> bwork(Sz(n));
+    const char jobvs = 'V', sort = 'S';
+    if constexpr (IsComplex<T>::value) {
+      std::vector<T> w(Sz(n));
+      std::vector<R> rwork(Sz(n));
+      HWYBLAS_CALL_COMPLEX(T, gees, &jobvs, &sort, &AboveThresholdC<R>, &n,
+                           P(a.data()), &n, &sdim, P(w.data()), P(vs.data()),
+                           &n, P(work.data()), &lwork, rwork.data(),
+                           bwork.data(), &info);
+    } else {
+      std::vector<R> wr(Sz(n)), wi(Sz(n));
+      HWYBLAS_CALL_REAL(T, gees, &jobvs, &sort, &AboveThreshold<R>, &n,
+                        a.data(), &n, &sdim, wr.data(), wi.data(), vs.data(),
+                        &n, work.data(), &lwork, bwork.data(), &info);
+    }
+    ASSERT_EQ(info, 0);
+    EXPECT_EQ(sdim, 3);
+    for (hwyblas_int i = 0; i < n; ++i) {
+      EXPECT_EQ(std::real(At(a, i, i, n)) > Threshold<R>(), i < 3) << i;
+    }
   }
 }
 

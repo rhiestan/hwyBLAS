@@ -242,7 +242,10 @@ TYPED_TEST(SyevdTest, Heevd) {
         const ScopedSubproblemSize subproblems(smlsiz);
         for (const char uplo : {'U', 'L'}) {
           for (const hwyblas_int n : {1, 2, 5, 17, 40}) {
-            for (const double scale : {1.0, rmin * 1e-3, 1 / (rmin * 1e-3)}) {
+            for (const double scale :
+                 {1.0, rmin * 1e-3, 1 / (rmin * 1e-3),
+                  static_cast<double>(ScaleNearUnderflow<R>()),
+                  static_cast<double>(ScaleNearOverflow<R>())}) {
               for (const bool minimal : {false, true}) {
                 SCOPED_TRACE(::testing::Message()
                              << "uplo=" << uplo << " n=" << n << " nb=" << b.nb

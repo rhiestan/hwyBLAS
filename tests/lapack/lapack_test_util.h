@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -143,6 +144,17 @@ std::string LapackeName(const char* rest) {
   std::string name = Name<T>(rest);
   name[0] = static_cast<char>(name[0] - 'A' + 'a');
   return "LAPACKE_" + name;
+}
+
+// Factors close to the underflow and overflow thresholds, for matrices with
+// elements of about 1 that a driver must scale to compute with.
+template <typename R>
+R ScaleNearUnderflow() {
+  return std::numeric_limits<R>::min() * 64;
+}
+template <typename R>
+R ScaleNearOverflow() {
+  return std::numeric_limits<R>::max() / 64;
 }
 
 // The 1-norm (maximum column sum) of a dense matrix; NaN if an element is

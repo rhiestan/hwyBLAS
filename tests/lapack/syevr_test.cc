@@ -652,7 +652,10 @@ TYPED_TEST(SyevrTest, Heevr) {
       const ScopedConfig config(c.nb, c.nx, c.nan_trusted);
       for (const char uplo : {'U', 'L'}) {
         for (const hwyblas_int n : {1, 2, 5, 17, 40}) {
-          for (const double scale : {1.0, rmin * 1e-3, 1 / (rmin * 1e-3)}) {
+          for (const double scale :
+               {1.0, rmin * 1e-3, 1 / (rmin * 1e-3),
+                static_cast<double>(ScaleNearUnderflow<R>()),
+                static_cast<double>(ScaleNearOverflow<R>())}) {
             const hwyblas_int lda = n + 1;
             std::vector<T> a = RandomHermitian(uplo, n, lda, rng);
             // xHEEVR's norm (xLANSY) reads the imaginary parts of the
@@ -705,6 +708,169 @@ TYPED_TEST(SyevrTest, Heevr) {
       }
     }
   });
+}
+
+// xSYEVR / xHEEVR on block diagonal matrices, whose tridiagonal form splits:
+// xSTEBZ orders the eigenvalues by block, and the driver sorts them with
+// their eigenvectors.
+TYPED_TEST(SyevrTest, HeevrSplit) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  Random<T> rng(331);
+  for (const bool nan_trusted : {true, false}) {
+    const ScopedConfig config(0, 0, nan_trusted);
+    for (const char uplo : {'U', 'L'}) {
+      for (const hwyblas_int n : {5, 17}) {
+        const hwyblas_int lda = n + 1, h = n / 2;
+        std::vector<T> a = RandomHermitian(uplo, n, lda, rng);
+        for (hwyblas_int j = 0; j < n; ++j) {
+          a[j + j * lda] = T(std::real(a[j + j * lda]));
+          for (hwyblas_int i = 0; i < n; ++i) {
+            if ((i < h) != (j < h)) a[i + j * lda] = T(0);
+          }
+        }
+        const Dense<T> ad = HermitianDense(uplo, a, n, lda);
+        const std::vector<R> ref = ReferenceEigenvalues(uplo, n, a, lda);
+        const double tol =
+            kMrrrThreshold * n * Eps<T>() * static_cast<double>(MaxAbs(ref));
+        for (const Subset<R>& s : Subsets(ref)) {
+          SCOPED_TRACE(::testing::Message()
+                       << "nan=" << nan_trusted << " uplo=" << uplo
+                       << " n=" << n << " " << Trace(s));
+          const hwyblas_int ldz = n + 2;
+          std::vector<T> z(ldz * n, NaN<T>());
+          std::vector<R> w;
+          std::vector<hwyblas_int> isuppz;
+          hwyblas_int m = -1;
+          ASSERT_EQ(Heevr('V', s, uplo, n, a, lda, R(0), &m, w, z, ldz, isuppz,
+                          false),
+                    0);
+          ExpectEigenvalues(w, m, ref, s, tol);
+          ExpectEigenvectors(ad, z, n, m, ldz, w, 1.0, kMrrrThreshold);
+        }
+      }
+    }
+  }
+}
+
+// xSTEBZ and xLARRD on matrices that split into blocks, some of them equal,
+// so that an index range can end between equal eigenvalues of two blocks:
+// the wanted eigenvalues, each with the block it belongs to (and, from
+// xLARRD, its index in the block), ordered by block or as a whole.
+TYPED_TEST(SyevrRealTest, BisectionOfSplitMatrices) {
+  using R = TypeParam;
+  Random<R> rng(333);
+  for (const int copies : {2, 3}) {
+    // Blocks of order 3, `copies` times, and one of order 4 second.
+    std::vector<R> d3(3), e3(2), d4(4), e4(3);
+    for (R& x : d3) x = rng.Next();
+    for (R& x : e3) x = R(0.5) + rng.Next() / 4;
+    for (R& x : d4) x = rng.Next();
+    for (R& x : e4) x = R(0.5) + rng.Next() / 4;
+    std::vector<R> d, e;
+    std::vector<hwyblas_int> isplit;
+    std::vector<std::vector<R>> blocks;
+    for (int c = 0; c <= copies; ++c) {
+      const std::vector<R>& bd = c == 1 ? d4 : d3;
+      const std::vector<R>& be = c == 1 ? e4 : e3;
+      d.insert(d.end(), bd.begin(), bd.end());
+      e.insert(e.end(), be.begin(), be.end());
+      e.push_back(0);
+      isplit.push_back(static_cast<hwyblas_int>(d.size()));
+      blocks.push_back(SterfEigenvalues(bd, be));
+    }
+    const hwyblas_int n = static_cast<hwyblas_int>(d.size());
+    const hwyblas_int nsplit = static_cast<hwyblas_int>(isplit.size());
+    std::vector<R> ref;
+    for (const auto& b : blocks) ref.insert(ref.end(), b.begin(), b.end());
+    std::sort(ref.begin(), ref.end());
+    const R anorm = MaxAbs(d, e);
+    const double tol = 100.0 * n * Eps<R>() * static_cast<double>(anorm);
+
+    // The input of xLARRD: E**2, the Gershgorin intervals and PIVMIN.
+    std::vector<R> e2(n), gers(2 * static_cast<size_t>(n));
+    R e2max = 1;
+    for (hwyblas_int i = 0; i < n; ++i) {
+      e2[i] = e[i] * e[i];
+      e2max = std::max(e2max, e2[i]);
+      const R radius = std::abs(e[i]) + (i > 0 ? std::abs(e[i - 1]) : R(0));
+      gers[2 * i] = d[i] - radius;
+      gers[2 * i + 1] = d[i] + radius;
+    }
+    const R pivmin = std::numeric_limits<R>::min() * e2max;
+
+    struct Range {
+      char range;
+      hwyblas_int il, iu;
+    };
+    std::vector<Range> ranges = {{'A', 1, n}};
+    for (hwyblas_int il = 1; il <= n; ++il) {
+      for (hwyblas_int iu = il; iu <= n; ++iu) ranges.push_back({'I', il, iu});
+    }
+    for (const Range& r : ranges) {
+      for (const char order : {'B', 'E'}) {
+        for (const bool larrd : {false, true}) {
+          SCOPED_TRACE(::testing::Message()
+                       << (larrd ? "larrd" : "stebz") << " copies=" << copies
+                       << " range=" << r.range << " il=" << r.il
+                       << " iu=" << r.iu << " order=" << order);
+          const R vl = 0, vu = 0;
+          const R abstol = 0, reltol = 4 * std::numeric_limits<R>::epsilon();
+          hwyblas_int m = -1, ns = nsplit, info = -99;
+          std::vector<R> w(n, NAN), werr(n, NAN), work(4 * n, NAN);
+          std::vector<hwyblas_int> iblock(n, -77), indexw(n, -77), split(n),
+              iwork(3 * static_cast<size_t>(n), -77);
+          if (larrd) {
+            split = isplit;
+            split.resize(n);
+            R wl = 0, wu = 0;
+            std::vector<R> dc = d, ec = e;
+            HWYBLAS_CALL_REAL(R, larrd, &r.range, &order, &n, &vl, &vu, &r.il,
+                              &r.iu, gers.data(), &reltol, dc.data(), ec.data(),
+                              e2.data(), &pivmin, &ns, split.data(), &m,
+                              w.data(), werr.data(), &wl, &wu, iblock.data(),
+                              indexw.data(), work.data(), iwork.data(), &info);
+          } else {
+            HWYBLAS_CALL_REAL(R, stebz, &r.range, &order, &n, &vl, &vu, &r.il,
+                              &r.iu, &abstol, d.data(), e.data(), &m, &ns,
+                              w.data(), iblock.data(), split.data(),
+                              work.data(), iwork.data(), &info);
+          }
+          ASSERT_EQ(info, 0);
+          ASSERT_EQ(ns, nsplit);
+          ASSERT_EQ(m, r.iu - r.il + 1);
+          std::vector<R> sorted(w.begin(), w.begin() + m);
+          std::sort(sorted.begin(), sorted.end());
+          for (hwyblas_int k = 0; k < m; ++k) {
+            EXPECT_NEAR(sorted[k], ref[r.il - 1 + k], tol) << k;
+            if (order == 'E') {
+              EXPECT_EQ(w[k], sorted[k]) << k;
+            }
+            ASSERT_GE(iblock[k], 1) << k;
+            ASSERT_LE(iblock[k], nsplit) << k;
+            const std::vector<R>& b = blocks[iblock[k] - 1];
+            double nearest = std::numeric_limits<double>::infinity();
+            for (const R x : b) {
+              nearest = std::min(nearest, std::abs(static_cast<double>(w[k]) -
+                                                   static_cast<double>(x)));
+            }
+            EXPECT_LE(nearest, tol) << k << " block " << iblock[k];
+            if (order == 'B' && k > 0) {
+              EXPECT_LE(iblock[k - 1], iblock[k]) << k;
+              if (iblock[k - 1] == iblock[k]) {
+                EXPECT_LE(w[k - 1], w[k]) << k;
+              }
+            }
+            if (larrd) {
+              ASSERT_GE(indexw[k], 1) << k;
+              ASSERT_LE(indexw[k], static_cast<hwyblas_int>(b.size())) << k;
+              EXPECT_NEAR(w[k], b[indexw[k] - 1], tol) << k;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 // xSTEVR: as xSTEMR (through xSTEMR or, with NaN arithmetic not trusted,
@@ -861,7 +1027,10 @@ TYPED_TEST(SyevrTest, Heevx) {
       const ScopedConfig config(nb, nb + 2, true);
       for (const char uplo : {'U', 'L'}) {
         for (const hwyblas_int n : {1, 2, 5, 17, 40}) {
-          for (const double scale : {1.0, rmin * 1e-3, 1 / (rmin * 1e-3)}) {
+          for (const double scale :
+               {1.0, rmin * 1e-3, 1 / (rmin * 1e-3),
+                static_cast<double>(ScaleNearUnderflow<R>()),
+                static_cast<double>(ScaleNearOverflow<R>())}) {
             for (const bool blocks : {false, true}) {
               if (blocks && (n < 5 || scale != 1.0)) continue;
               const hwyblas_int lda = n + 1;
@@ -886,6 +1055,12 @@ TYPED_TEST(SyevrTest, Heevx) {
                 for (const char jobz : {'V', 'N'}) {
                   for (const R abstol :
                        {R(0), 2 * std::numeric_limits<R>::min()}) {
+                    // Not small compared with a matrix near the underflow
+                    // threshold (the driver scales ABSTOL with A).
+                    if (abstol != 0 &&
+                        scale == static_cast<double>(ScaleNearUnderflow<R>())) {
+                      continue;
+                    }
                     const bool minimal = (n + (jobz == 'V')) % 2 == 0;
                     SCOPED_TRACE(::testing::Message()
                                  << "nb=" << nb << " uplo=" << uplo << " n="

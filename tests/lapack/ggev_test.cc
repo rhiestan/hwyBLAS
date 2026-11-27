@@ -67,17 +67,25 @@ bool SameValues(const std::vector<T>& x, const std::vector<T>& y) {
 
 enum class Kind {
   kRandom,
-  kSingularB,   // B with a zero column and row: infinite eigenvalues
-  kTriangular,  // A and B upper triangular
-  kPermutable,  // block triangular after permutations (xGGBAL 'P')
-  kGraded,      // random, (i,j) scaled by 4**(j - i) (xGGBAL 'S')
-  kLarge,       // random times a huge number (the drivers scale A and B)
-  kSmall,       // random times a tiny number
-  kPairs,       // A block diagonal with rotations, B = I (complex pairs)
+  kSingularB,      // B with a zero column and row: infinite eigenvalues
+  kTriangular,     // A and B upper triangular
+  kPermutable,     // block triangular after permutations (xGGBAL 'P')
+  kGraded,         // random, (i,j) scaled by 4**(j - i) (xGGBAL 'S')
+  kLarge,          // random times a huge number (the drivers scale A and B)
+  kSmall,          // random times a tiny number
+  kPairs,          // A block diagonal with rotations, B = I (complex pairs)
+  kZeroB,          // B = 0: all eigenvalues infinite
+  kNearOverflow,   // random, elements close to the overflow threshold
+  kNearUnderflow,  // random, elements close to the underflow threshold
 };
 const Kind kKinds[] = {Kind::kRandom,     Kind::kSingularB, Kind::kTriangular,
                        Kind::kPermutable, Kind::kGraded,    Kind::kLarge,
                        Kind::kSmall,      Kind::kPairs};
+// For the drivers, which also scale matrices with extreme elements.
+const Kind kDriverKinds[] = {
+    Kind::kRandom, Kind::kSingularB,    Kind::kTriangular,   Kind::kPermutable,
+    Kind::kGraded, Kind::kLarge,        Kind::kSmall,        Kind::kPairs,
+    Kind::kZeroB,  Kind::kNearOverflow, Kind::kNearUnderflow};
 
 const char* KindName(Kind kind) {
   switch (kind) {
@@ -97,6 +105,12 @@ const char* KindName(Kind kind) {
       return "small";
     case Kind::kPairs:
       return "pairs";
+    case Kind::kZeroB:
+      return "zero B";
+    case Kind::kNearOverflow:
+      return "near overflow";
+    case Kind::kNearUnderflow:
+      return "near underflow";
   }
   return "";
 }
@@ -141,6 +155,17 @@ void TestPair(Kind kind, hwyblas_int n, hwyblas_int ld, Random<T>& rng,
         case Kind::kLarge:
           x *= huge;
           y *= huge;
+          break;
+        case Kind::kNearOverflow:
+          x *= ScaleNearOverflow<R>();
+          y *= ScaleNearOverflow<R>();
+          break;
+        case Kind::kNearUnderflow:
+          x *= ScaleNearUnderflow<R>();
+          y *= ScaleNearUnderflow<R>();
+          break;
+        case Kind::kZeroB:
+          y = zero;
           break;
         case Kind::kSmall:
           x *= tiny;
@@ -271,14 +296,21 @@ hwyblas_int Tgevc(char side, char howmny, const std::vector<hwyblas_int>& sel,
 }
 
 // Selection functions of xGGES: the eigenvalues with a negative real part.
+// x / |x|, or 0: products of alpha and beta without overflow or underflow.
+template <typename R>
+std::complex<R> Direction(std::complex<R> x) {
+  return x == std::complex<R>() ? x : x / std::abs(x);
+}
 template <typename R>
 hwyblas_int NegativeReal3(const R* ar, const R* /*ai*/, const R* b) {
-  return *ar * *b < 0 ? 1 : 0;
+  return (*ar < 0 && *b > 0) || (*ar > 0 && *b < 0) ? 1 : 0;
 }
 template <typename R>
 hwyblas_int NegativeReal2(const R* a, const R* b) {
   // Re(alpha * conj(beta)) < 0.
-  return a[0] * b[0] + a[1] * b[1] < 0 ? 1 : 0;
+  const std::complex<R> x = Direction(std::complex<R>(a[0], a[1]));
+  const std::complex<R> y = Direction(std::complex<R>(b[0], b[1]));
+  return (x * std::conj(y)).real() < 0 ? 1 : 0;
 }
 
 // xGGES (SORT = 'S' selects the eigenvalues with a negative real part) or
@@ -1034,8 +1066,9 @@ TYPED_TEST(GgevTest, TgevcEigenvectors) {
 TYPED_TEST(GgevTest, GgevEigenpairs) {
   using T = TypeParam;
   constexpr bool kComplex = IsComplex<T>::value;
+  ErrorCapture errors;  // none, also for B = 0
   Random<T> rng(16);
-  for (const Kind kind : kKinds) {
+  for (const Kind kind : kDriverKinds) {
     for (const hwyblas_int n : {0, 1, 2, 4, 11, 25}) {
       const hwyblas_int ld = n + 2;
       std::vector<T> a, b;
@@ -1082,13 +1115,15 @@ TYPED_TEST(GgevTest, GgevEigenpairs) {
       }
     }
   }
+  EXPECT_TRUE(errors.Take().empty());
 }
 
 TYPED_TEST(GgevTest, GgesSchurFormSorted) {
   using T = TypeParam;
   constexpr bool kComplex = IsComplex<T>::value;
+  ErrorCapture errors;  // none, also for B = 0
   Random<T> rng(17);
-  for (const Kind kind : kKinds) {
+  for (const Kind kind : kDriverKinds) {
     for (const hwyblas_int n : {0, 1, 2, 5, 12, 24}) {
       const hwyblas_int ld = n + 1;
       std::vector<T> a, b;
@@ -1117,9 +1152,11 @@ TYPED_TEST(GgevTest, GgesSchurFormSorted) {
                       ld, z, ld, lwork);
           // INFO = N+2: after reordering, roundoff changed an eigenvalue so
           // that the selection changed (possible for ill-conditioned pairs).
-          const bool changed = info == n + 2 && sort == 'S' &&
-                               (kind == Kind::kGraded || kind == Kind::kLarge ||
-                                kind == Kind::kSmall);
+          const bool changed =
+              info == n + 2 && sort == 'S' &&
+              (kind == Kind::kGraded || kind == Kind::kLarge ||
+               kind == Kind::kSmall || kind == Kind::kNearOverflow ||
+               kind == Kind::kNearUnderflow);
           ASSERT_TRUE(info == 0 || changed) << info;
           ExpectSchurForm(a, b, s, p, q, z, n, ld, alpha, beta, false);
           if (changed) continue;
@@ -1130,7 +1167,9 @@ TYPED_TEST(GgevTest, GgesSchurFormSorted) {
           // The selected eigenvalues (negative real part) first.
           hwyblas_int count = 0;
           for (hwyblas_int j = 0; j < n; ++j) {
-            const bool selected = (alpha[j] * std::conj(beta[j])).real() < 0;
+            const bool selected =
+                (Direction(alpha[j]) * std::conj(Direction(beta[j]))).real() <
+                0;
             if (j < sdim) {
               EXPECT_TRUE(selected) << j;
             } else {
@@ -1143,6 +1182,7 @@ TYPED_TEST(GgevTest, GgesSchurFormSorted) {
       }
     }
   }
+  EXPECT_TRUE(errors.Take().empty());
 }
 
 // JOBVSL / JOBVSR = 'N': the same Schur form.

@@ -181,7 +181,10 @@ TYPED_TEST(GelsTest, Gels) {
     for (const auto& shape : shapes) {
       const hwyblas_int m = shape[0], n = shape[1];
       const size_t mn = static_cast<size_t>(std::min(m, n));
-      for (const double scale : {1.0, smlnum / 2, 16 / smlnum}) {
+      for (const double scale :
+           {1.0, smlnum / 2, 16 / smlnum,
+            static_cast<double>(ScaleNearUnderflow<RealT<T>>()),
+            static_cast<double>(ScaleNearOverflow<RealT<T>>())}) {
         const double cond = 10;
         const hwyblas_int lda = m + 1;
         const Problem<T> prob =
@@ -408,7 +411,10 @@ TYPED_TEST(GelsTest, RankRevealing) {
       const hwyblas_int m = shape[0], n = shape[1];
       const size_t mn = static_cast<size_t>(std::min(m, n));
       for (const size_t rank : {mn, (mn + 1) / 2, size_t{1}}) {
-        for (const double scale : {1.0, smlnum / 2, 16 / smlnum}) {
+        for (const double scale :
+             {1.0, smlnum / 2, 16 / smlnum,
+              static_cast<double>(ScaleNearUnderflow<R>()),
+              static_cast<double>(ScaleNearOverflow<R>())}) {
           if (scale != 1.0 && rank != mn) continue;
           const double cond = 10;
           const hwyblas_int lda = m + 1;
