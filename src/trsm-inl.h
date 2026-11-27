@@ -39,7 +39,9 @@ namespace hn = hwy::HWY_NAMESPACE;
 
 // A small triangle: the off-diagonal elements are read in place (the
 // kernels only broadcast them, so any strides will do); inv[j] holds
-// 1 / t(j, j) (1 if unit).
+// 1 / t(j, j) (1 if unit). Unlike dividing by t(j, j), as the reference does
+// with SIDE = 'L', this gives Inf or NaN if 1 / t(j, j) overflows (see
+// "Conventions" in the README).
 template <typename T>
 struct SmallTriangle {
   const T* data;

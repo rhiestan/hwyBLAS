@@ -526,6 +526,14 @@ cover every target.
 - Unlike the reference BLAS, zero elements of x or y are not skipped
   (e.g. in `?ger_` or `?trsv_`), as in OpenBLAS. This only makes a
   difference when A contains Inf or NaN.
+- `?trsm_` multiplies by the reciprocals of the diagonal elements (as
+  OpenBLAS does), also with `SIDE = 'L'`, where the reference BLAS divides by
+  them. If a diagonal element is so small that its reciprocal overflows
+  (magnitude below about 5.6e-309 in double and 2.9e-39 in float), the
+  result contains Inf or NaN even if the solution is representable.
+  `?trsv_` divides and is not affected. This also reaches LAPACK routines
+  that solve with `?trsm_`: for example, `?gesv_` of a 1 x 1 system with such
+  a matrix returns Inf with `INFO = 0`.
 
 ## License
 

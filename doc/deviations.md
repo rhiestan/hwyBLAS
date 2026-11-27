@@ -11,8 +11,9 @@ column.
 
 The BLAS routines are not ported from the reference; they compute the same
 results up to rounding. Where their behavior differs (error handling, which
-elements are read, `?nrm2`, `?rotg`, zero elements of x and y) is described
-in [Conventions](../README.md#conventions) in the README.
+elements are read, `?nrm2`, `?rotg`, zero elements of x and y, `?trsm` with
+a tiny diagonal element) is described in
+[Conventions](../README.md#conventions) in the README.
 
 Additions to the reference interfaces:
 

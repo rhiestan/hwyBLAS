@@ -536,6 +536,11 @@ bool IsZero(std::complex<R> v) {
   return v == std::complex<R>(0);
 }
 
+// Error length of sdsdot and dsdot: hwyBLAS accumulates in double, but a
+// reference may not for all of its sum (OpenBLAS 0.3.34's x86 kernel loses
+// precision for long vectors).
+int DoubleDotErrorDim(int n) { return 1 + n / 1000; }
+
 template <typename T>
 std::vector<Routine<T>> Routines() {
   using R = Real<T>;
@@ -656,7 +661,7 @@ std::vector<Routine<T>> Routines() {
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int r = b.Result("result");
-      c.error_dim = 1;  // accumulates in double
+      c.error_dim = DoubleDotErrorDim(n);
       c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
         *o[r] = Call<float>(lib, sym, &n, &sb, o[x], &incx, o[y], &incy);
       };
@@ -667,7 +672,7 @@ std::vector<Routine<T>> Routines() {
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int r = b.Result("result");
-      c.error_dim = 1;  // accumulates in double
+      c.error_dim = DoubleDotErrorDim(n);
       c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
         *o[r] = static_cast<float>(
             Call<double>(lib, sym, &n, o[x], &incx, o[y], &incy));
@@ -684,7 +689,9 @@ std::vector<Routine<T>> Routines() {
       const int incx = std::abs(b.Inc("incx"));
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int r = b.Result("result");
-      c.error_dim = asum ? n : 2;
+      // With increments, hwyBLAS adds the squares one by one, and the
+      // rounding errors grow slowly with n.
+      c.error_dim = asum ? n : 2 + n / 1000;
       c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
         *o[r] = T(Call<R>(lib, sym, &n, o[x], &incx));
       };
