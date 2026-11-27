@@ -13,11 +13,23 @@
 //   --repro=name:seed   run one case, as printed for a failure
 //   --max-failures=N    stop after N failures (default 10)
 //   --verbose           print every case
+//   --threads=N         run the cases on N concurrent threads, replacing the
+//                       threads every few hundred cases (for ThreadSanitizer)
+//   --netlib            the reference is the Netlib reference BLAS and CBLAS
+//                       (see netlib/CMakeLists.txt): also zero and negative
+//                       increments where they are defined or a no-op
+//   --special=KIND      some inputs are special: nan, inf, zero, subnormal or
+//                       huge. Meant for --netlib; differences are expected
+//                       and have to be judged, see the category in brackets.
+//   --fp-flags          fail if hwyBLAS raises an invalid, divide-by-zero or
+//                       overflow exception that the reference does not
 //
-// Each case picks a routine and random arguments: sizes from 0 to beyond
-// the kernels' blocking, transposes, sides, triangles, alpha/beta including
-// 0 and 1, leading dimensions with padding, and positive or negative
-// increments. Besides the results, a case checks that hwyBLAS
+// Each case picks a routine and random arguments: the Fortran or the CBLAS
+// interface (in column- or row-major layout), sizes from 0 to beyond the
+// kernels' blocking, transposes, sides, triangles, alpha/beta including 0
+// and 1, leading dimensions with padding, positive or negative increments,
+// and complex operands aligned only to their real type. Besides the results, a
+// case checks that hwyBLAS
 //  - leaves every element it must not reference unchanged and unused: these
 //    elements (padding, gaps between vector elements, the other triangle, a
 //    unit diagonal, the imaginary part of a Hermitian diagonal) are NaN for
@@ -38,6 +50,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cfenv>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -47,6 +60,8 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -102,6 +117,34 @@ template <typename T>
 bool SameBits(const T& a, const T& b) {
   return memcmp(&a, &b, sizeof(T)) == 0;
 }
+
+struct Options {
+  uint64_t seed = 1;
+  int64_t iterations = 1000;
+  double time = 0;  // > 0: run for this many seconds
+  std::string types = "sdcz";
+  std::vector<std::string> routines;  // empty: all
+  std::string repro;                  // name:seed
+  int max_failures = 10;
+  bool verbose = false;
+  bool netlib = false;
+  std::string special;  // empty: ordinary values
+  bool fp_flags = false;
+  int threads = 1;
+};
+
+// A character argument and its CBLAS enumerator.
+struct Flag {
+  char letter;
+  int cblas;
+  // NOLINTNEXTLINE(google-explicit-constructor): used as a char.
+  operator char() const { return letter; }
+};
+
+// Placeholder for the layout, the first argument of CBLAS Level 2 and 3.
+struct Layout {};
+
+enum class Api { kFortran, kCblasCol, kCblasRow };
 
 std::string ToString(int v) { return std::to_string(v); }
 std::string ToString(char v) { return std::string(1, v); }
@@ -192,12 +235,21 @@ template <typename T>
 struct Operand {
   std::string name;
   bool output = false;
-  bool exact = false;  // integer result: must match exactly
-  int ld = 0;          // leading dimension, for messages (0: vector)
+  bool exact = false;     // integer result: must match exactly
+  bool relative = false;  // tolerance relative to each element
+  bool misalign = false;  // aligned only to the real type
+  int ld = 0;             // leading dimension, for messages (0: vector)
   bool guard_after = true;
   std::vector<Use> use;
   std::vector<T> hwy_init;  // initial values for hwyBLAS
   std::vector<T> ref_init;  // initial values for the reference library
+};
+
+// The routine to call, of one of the libraries.
+struct Target {
+  const Lib& lib;
+  const std::string& symbol;
+  Api api;
 };
 
 template <typename T>
@@ -205,10 +257,16 @@ struct Case {
   std::string name;    // routine, e.g. "dgemm"
   std::string symbol;  // symbol that both libraries must export
   std::string params;  // description of the arguments
+  Api api = Api::kFortran;
   std::vector<Operand<T>> ops;
   int error_dim = 0;  // length of the inner products / of the solve
   // Calls the routine `symbol` of a library with the operands.
-  std::function<void(const Lib&, const std::string& symbol, T* const*)> call;
+  std::function<void(const Target&, T* const*)> call;
+  // If set, computes the expected results instead of the reference library.
+  std::function<void(T* const*)> expected;
+  // If set, checks hwyBLAS's results instead of comparing them: returns the
+  // problem, or an empty string.
+  std::function<std::string(const std::vector<std::vector<T>>&)> verify;
 };
 
 // The libraries' functions are declared with other (const, void*) argument
@@ -225,15 +283,76 @@ FUZZ_NO_SANITIZE_FUNCTION R Call(const Lib& lib, const std::string& symbol,
   return lib.Get<R (*)(Args...)>(symbol.c_str())(args...);
 }
 
+// The CBLAS form of an argument given as for Fortran: dimensions and real
+// scalars (pointers to const) are passed by value, characters as enumerators;
+// complex scalars and arrays (pointers to non-const) stay pointers.
+std::tuple<int> CblasArg(Api api, Layout /*layout*/) {
+  return {api == Api::kCblasRow ? 101 : 102};
+}
+std::tuple<int> CblasArg(Api /*api*/, const Flag* f) { return {f->cblas}; }
+std::tuple<int> CblasArg(Api /*api*/, const int* v) { return {*v}; }
+template <typename V>
+auto CblasArg(Api /*api*/, const V* v) {
+  if constexpr (std::is_floating_point_v<V>) {
+    return std::tuple<V>(*v);
+  } else {
+    return std::tuple<const V*>(v);
+  }
+}
+template <typename V>
+std::tuple<V*> CblasArg(Api /*api*/, V* v) {
+  return {v};
+}
+
+std::tuple<> FortranArg(Layout /*layout*/) { return {}; }
+std::tuple<const char*> FortranArg(const Flag* f) { return {&f->letter}; }
+template <typename V>
+std::tuple<V*> FortranArg(V* v) {
+  return {v};
+}
+
+// Calls the target routine with arguments given as for Fortran.
+template <typename R = void, typename... Args>
+R Blas(const Target& t, Args... args) {
+  const auto invoke = [&t](auto... converted) -> R {
+    return Call<R>(t.lib, t.symbol, converted...);
+  };
+  if (t.api == Api::kFortran) {
+    return std::apply(invoke, std::tuple_cat(FortranArg(args)...));
+  }
+  return std::apply(invoke, std::tuple_cat(CblasArg(t.api, args)...));
+}
+
 // Builds one case: chooses (and records) the arguments and operands.
 template <typename T>
 class Builder {
  public:
   using R = Real<T>;
 
-  Builder(Case<T>& c, uint64_t seed) : c_(c), rng_(seed) {}
+  Builder(Case<T>& c, uint64_t seed, const Options& opt)
+      : c_(c), opt_(opt), rng_(seed) {
+    const int r = Uniform(0, 3);
+    UseApi(r < 2 ? Api::kFortran : r == 2 ? Api::kCblasCol : Api::kCblasRow);
+  }
 
-  Rng& rng() { return rng_; }
+  const Options& options() const { return opt_; }
+
+  // Overrides the interface chosen at random.
+  void UseApi(Api api) {
+    c_.api = api;
+    row_major_ = api == Api::kCblasRow;
+  }
+  // Operands are column-major whatever the interface.
+  void ColumnMajorShapes() { row_major_ = false; }
+
+  // The reference CBLAS (3.12.1) never returns from a complex ?gemv or ?gbmv
+  // in row-major layout with a conjugate transpose and m = 0.
+  bool HangsInNetlib(char trans, int m) const {
+    return kIsComplex<T> && opt_.netlib && row_major_ && trans == 'C' && m == 0;
+  }
+
+  // The dimension that the leading dimension of a rows x cols matrix covers.
+  int Major(int rows, int cols) const { return row_major_ ? cols : rows; }
 
   template <typename V>
   void Param(const char* key, const V& v) {
@@ -256,7 +375,8 @@ class Builder {
     static constexpr int kLarge[4] = {0, 20000, 400, 700};
     static constexpr int kMedium[4] = {0, 2000, 100, 300};
     int d;
-    if (level == 3 && r < 2 && !huge_) {
+    // (The reference BLAS is unblocked: huge cases take too long with it.)
+    if (level == 3 && r < 2 && !huge_ && !opt_.netlib) {
       huge_ = true;
       d = Uniform(2000, 4300);
     } else if (r < 100) {
@@ -280,12 +400,21 @@ class Builder {
     return k;
   }
 
-  int Inc(const char* key) {
+  // An increment; `zero`: 0 is defined (only tested against Netlib, other
+  // libraries differ).
+  int Inc(const char* key, bool zero = false) {
     static constexpr int kIncs[] = {1, 1, 1, 1, 1, -1, 2, -2, 3, -5, 8, 17};
-    const int inc = kIncs[Uniform(
+    int inc = kIncs[Uniform(
         0, static_cast<int>(sizeof(kIncs) / sizeof(kIncs[0])) - 1)];
+    if (zero && opt_.netlib && Uniform(0, 7) == 0) inc = 0;
     Param(key, inc);
     return inc;
+  }
+  // The increment of a routine for which a negative or zero one is a no-op or
+  // differs between libraries: only against Netlib.
+  int ForwardInc(const char* key) {
+    const int inc = Inc(key, true);
+    return opt_.netlib ? inc : std::abs(inc);
   }
 
   // A leading dimension for `rows` rows.
@@ -306,10 +435,26 @@ class Builder {
     return ld;
   }
 
-  char Letter(const char* key, const char* choices) {
+  Flag Letter(const char* key, const char* choices) {
     const char ch = choices[Uniform(0, static_cast<int>(strlen(choices)) - 1)];
     Param(key, ch);
-    return ch;
+    return MakeFlag(key, ch);
+  }
+
+  static Flag MakeFlag(const char* key, char ch) {
+    int e = 0;
+    if (strncmp(key, "trans", 5) == 0) {
+      e = ch == 'N' ? 111 : ch == 'T' ? 112 : ch == 'C' ? 113 : 114;
+    } else if (strcmp(key, "uplo") == 0) {
+      e = ch == 'U' ? 121 : 122;
+    } else if (strcmp(key, "diag") == 0) {
+      e = ch == 'N' ? 131 : 132;
+    } else if (strcmp(key, "side") == 0) {
+      e = ch == 'L' ? 141 : 142;
+    } else if (strcmp(key, "order") == 0) {
+      e = ch == 'C' ? 102 : 101;
+    }
+    return Flag{ch, e};
   }
 
   // alpha (or beta, with more zeros): 0, 1, -1, a real or a general value.
@@ -327,6 +472,7 @@ class Builder {
     } else {
       v = Random(2);
     }
+    if (!opt_.special.empty() && Uniform(0, 19) == 0) v = Special(v);
     Param(key, v);
     return v;
   }
@@ -342,6 +488,7 @@ class Builder {
     } else {
       v = static_cast<R>(2 * Unit());
     }
+    if (!opt_.special.empty() && Uniform(0, 19) == 0) v = SpecialReal();
     Param(key, v);
     return v;
   }
@@ -353,6 +500,48 @@ class Builder {
       return T(re, static_cast<R>(scale * Unit()));
     } else {
       return static_cast<T>(scale * Unit());
+    }
+  }
+
+  // A random value with a random binary exponent, or zero.
+  T Wide() {
+    const auto part = [this]() {
+      if (Uniform(0, 9) == 0) return R(0);
+      return static_cast<R>(std::ldexp(Unit(), Uniform(-40, 40)));
+    };
+    if constexpr (kIsComplex<T>) {
+      const R re = part();
+      return T(re, part());
+    } else {
+      return part();
+    }
+  }
+
+  // A special value of the kind given by --special.
+  R SpecialReal() {
+    using L = std::numeric_limits<R>;
+    const bool negative = Uniform(0, 1) != 0;
+    R v = 0;
+    if (opt_.special == "nan") {
+      v = L::quiet_NaN();
+    } else if (opt_.special == "inf") {
+      v = L::infinity();
+    } else if (opt_.special == "subnormal") {
+      v = std::max(L::denorm_min(),
+                   static_cast<R>(std::abs(Unit())) * L::min());
+    } else if (opt_.special == "huge") {
+      v = static_cast<R>(0.5 + 0.25 * Unit()) * L::max();
+    }
+    return negative ? -v : v;
+  }
+  // `v` with one or both of its parts replaced by special values.
+  T Special(T v) {
+    if constexpr (kIsComplex<T>) {
+      const int which = Uniform(0, 2);
+      const R re = which != 1 ? SpecialReal() : v.real();
+      return T(re, which != 0 ? SpecialReal() : v.imag());
+    } else {
+      return SpecialReal();
     }
   }
 
@@ -374,6 +563,7 @@ class Builder {
     op.output = output;
     op.ld = s.ld;
     op.guard_after = Uniform(0, 3) != 0;
+    op.misalign = kIsComplex<T> && Uniform(0, 3) == 0;
     int64_t size = 0;
     for (int j = 0; j < s.cols; ++j) {
       for (int i = 0; i < s.rows; ++i) size = std::max(size, s.index(i, j) + 1);
@@ -409,17 +599,48 @@ class Builder {
         }
       }
     }
+    // Special values in some of the operands: a few elements, or for zeros
+    // a larger part of them.
+    if (!opt_.special.empty() && size > 0 && Uniform(0, 1) == 0) {
+      const int64_t count =
+          opt_.special == "zero" ? 1 + size / 4 : Uniform(1, 3);
+      for (int64_t n = 0; n < count; ++n) {
+        const int64_t idx = Uniform(0, static_cast<int>(size) - 1);
+        if (op.use[idx] == Use::kUnused) continue;
+        T v = Special(op.ref_init[idx]);
+        op.hwy_init[idx] = v;
+        op.ref_init[idx] = v;
+        if constexpr (kIsComplex<T>) {
+          if (op.use[idx] == Use::kRealOnly) {
+            op.hwy_init[idx] = T(v.real(), Poison<R>());
+            op.ref_init[idx] = T(v.real(), 0);
+          }
+        }
+      }
+    }
     c_.ops.push_back(std::move(op));
     return static_cast<int>(c_.ops.size()) - 1;
   }
 
+  // Sets an element of operand `op` for both libraries.
+  void Set(int op, int64_t idx, T v) {
+    c_.ops[op].hwy_init[idx] = v;
+    c_.ops[op].ref_init[idx] = v;
+  }
+
   // Common shapes.
+  // (In row-major layout, element (i, j) of a matrix is at i * ld + j, and
+  // the band and packed layouts are those of the CBLAS rows.)
   Shape General(int rows, int cols, int ld) {
     Shape s;
     s.rows = rows;
     s.cols = cols;
     s.ld = ld;
-    s.index = [ld](int i, int j) { return i + static_cast<int64_t>(j) * ld; };
+    const bool row = row_major_;
+    s.index = [ld, row](int i, int j) -> int64_t {
+      return row ? static_cast<int64_t>(i) * ld + j
+                 : i + static_cast<int64_t>(j) * ld;
+    };
     return s;
   }
   Shape Vector(int n, int inc) {
@@ -433,31 +654,35 @@ class Builder {
   // The `uplo` triangle of an n x n matrix.
   Shape Triangle(int n, int ld, char uplo) {
     Shape s = General(n, n, ld);
-    s.index = [ld, uplo](int i, int j) -> int64_t {
+    const auto full = s.index;
+    s.index = [full, uplo](int i, int j) -> int64_t {
       if (uplo == 'U' ? i > j : i < j) return -1;
-      return i + static_cast<int64_t>(j) * ld;
+      return full(i, j);
     };
     return s;
   }
   // General band matrix with kl sub- and ku superdiagonals.
   Shape Band(int m, int n, int kl, int ku, int ld) {
     Shape s = General(m, n, ld);
-    s.index = [kl, ku, ld](int i, int j) -> int64_t {
+    const bool row = row_major_;
+    s.index = [kl, ku, ld, row](int i, int j) -> int64_t {
       if (i < j - ku || i > j + kl) return -1;
-      return ku + i - j + static_cast<int64_t>(j) * ld;
+      return row ? static_cast<int64_t>(i) * ld + kl + j - i
+                 : ku + i - j + static_cast<int64_t>(j) * ld;
     };
     return s;
   }
   // The `uplo` triangle of an n x n band matrix with k off-diagonals.
   Shape TriangleBand(int n, int k, int ld, char uplo) {
     Shape s = General(n, n, ld);
-    s.index = [k, ld, uplo](int i, int j) -> int64_t {
-      if (uplo == 'U') {
-        if (i > j || i < j - k) return -1;
-        return k + i - j + static_cast<int64_t>(j) * ld;
+    const bool row = row_major_;
+    s.index = [k, ld, uplo, row](int i, int j) -> int64_t {
+      const bool upper = uplo == 'U';
+      if (upper ? (i > j || i < j - k) : (i < j || i > j + k)) return -1;
+      if (row) {
+        return static_cast<int64_t>(i) * ld + (upper ? 0 : k) + j - i;
       }
-      if (i < j || i > j + k) return -1;
-      return i - j + static_cast<int64_t>(j) * ld;
+      return (upper ? k : 0) + i - j + static_cast<int64_t>(j) * ld;
     };
     return s;
   }
@@ -466,11 +691,15 @@ class Builder {
     Shape s;
     s.rows = n;
     s.cols = n;
-    s.index = [n, uplo](int i, int j) -> int64_t {
-      if (uplo == 'U') {
-        return i > j ? -1 : i + static_cast<int64_t>(j) * (j + 1) / 2;
-      }
-      return i < j ? -1 : i + static_cast<int64_t>(j) * (2 * n - j - 1) / 2;
+    const bool row = row_major_;
+    s.index = [n, uplo, row](int i, int j) -> int64_t {
+      const bool upper = uplo == 'U';
+      if (upper ? i > j : i < j) return -1;
+      // Packed by rows is packed by columns with the other triangle of the
+      // transpose.
+      const int64_t a = row ? j : i, b = row ? i : j;
+      if (upper != row) return a + b * (b + 1) / 2;
+      return a + b * (2 * n - b - 1) / 2;
     };
     return s;
   }
@@ -482,6 +711,7 @@ class Builder {
     op.output = true;
     op.exact = exact;
     op.guard_after = Uniform(0, 1) != 0;
+    op.misalign = kIsComplex<T> && Uniform(0, 3) == 0;
     op.use.assign(1, Use::kUsed);
     op.hwy_init.assign(1, Poison<T>());
     op.ref_init.assign(1, Poison<T>());
@@ -500,8 +730,10 @@ class Builder {
 
  private:
   Case<T>& c_;
+  const Options& opt_;
   Rng rng_;
   bool huge_ = false;  // a huge dimension was chosen
+  bool row_major_ = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -536,6 +768,68 @@ bool IsZero(std::complex<R> v) {
   return v == std::complex<R>(0);
 }
 
+// Checks the results of ?rotmg: with H given by `param`,
+//   H (x1, y1)^T = (z1, 0)^T  and  H^T diag(e1, e2) H = diag(d1, d2),
+// relative to the size of the terms.
+template <typename R>
+std::string CheckRotmg(R d1, R d2, R x1, R y1, R e1, R e2, R z1,
+                       const R* param) {
+  const R flag = param[0];
+  if (flag != -2 && flag != -1 && flag != 0 && flag != 1) {
+    return "flag " + ToString(flag);
+  }
+  // Elements of param that the flag leaves unset are unchanged (7).
+  const bool unset[5] = {false, flag == -2 || flag == 0,
+                         flag == -2 || flag == 1, flag == -2 || flag == 1,
+                         flag == -2 || flag == 0};
+  for (int i = 1; i < 5; ++i) {
+    if (unset[i] && param[i] != 7) {
+      return "param[" + std::to_string(i) + "] was set for flag " +
+             ToString(flag);
+    }
+  }
+  // Skip inputs without a rotation, with strong cancellation (d2 < 0), or
+  // whose products underflow.
+  const double a = d1, b = d2, x = x1, y = y1;
+  const double q1 = a * x * x, q2 = std::abs(b * y * y);
+  if (d1 < 0 || (d2 < 0 && q2 > 0.5 * q1)) return "";
+  const double tiny = std::ldexp(1.0, sizeof(R) == 4 ? -90 : -900);
+  for (double v : {a * x, b * y, q1, q2}) {
+    if (v != 0 && std::abs(v) < tiny) return "";
+  }
+  // The elements of H before rescaling are these ratios; one in the
+  // subnormal range has lost precision.
+  for (double v : {y / x, x / y, (b * y) / (a * x), (a * x) / (b * y)}) {
+    if (v != 0 && std::abs(v) < std::numeric_limits<R>::min()) return "";
+  }
+  if (flag == -2) {
+    return b * y == 0 ? "" : "flag -2, but d2 * y1 is not 0";
+  }
+  const double h11 = flag == 0 ? 1 : param[1];
+  const double h21 = flag == 1 ? -1 : param[2];
+  const double h12 = flag == 1 ? 1 : param[3];
+  const double h22 = flag == 0 ? 1 : param[4];
+  if (e1 == 0 && e2 == 0 && z1 == 0 && h11 == 0 && h12 == 0) return "";
+  // An element of H in the subnormal range has lost precision.
+  for (double v : {h11, h12, h21, h22}) {
+    if (v != 0 && std::abs(v) < std::numeric_limits<R>::min()) return "";
+  }
+  const double tol = 100 * std::numeric_limits<R>::epsilon();
+  const auto differs = [tol](double p, double q, double want) {
+    const double size = std::abs(p) + std::abs(q) + std::abs(want);
+    return !(std::abs(p + q - want) <= tol * size);
+  };
+  const double f1 = e1, f2 = e2;
+  if (differs(h11 * x, h12 * y, z1)) return "H x is not the new x1";
+  if (differs(h21 * x, h22 * y, 0)) return "H does not annihilate y1";
+  if (differs(f1 * h11 * h11, f2 * h21 * h21, a) ||
+      differs(f1 * h11 * h12, f2 * h21 * h22, 0) ||
+      differs(f1 * h12 * h12, f2 * h22 * h22, b)) {
+    return "H^T D' H differs from D";
+  }
+  return "";
+}
+
 // Error length of sdsdot and dsdot: hwyBLAS accumulates in double, but a
 // reference may not for all of its sum (OpenBLAS 0.3.34's x86 kernel loses
 // precision for long vectors).
@@ -558,13 +852,13 @@ std::vector<Routine<T>> Routines() {
   add(p + "axpy", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
     const T alpha = b.Scalar("alpha");
-    const int incx = b.Inc("incx"), incy = b.Inc("incy");
+    const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
     const int x = b.Add("x", b.Vector(n, incx), false);
     const int y = b.Add("y", b.Vector(n, incy), true);
     if (IsZero(alpha)) b.Ignore(x);
-    c.error_dim = 1;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, &alpha, o[x], &incx, o[y], &incy);
+    c.error_dim = incy == 0 ? n : 1;  // incy = 0: n updates of one element
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, &alpha, o[x], &incx, o[y], &incy);
     };
   });
   add(p + "axpby", [](Case<T>& c, Builder<T>& b) {
@@ -576,18 +870,18 @@ std::vector<Routine<T>> Routines() {
     if (IsZero(alpha)) b.Ignore(x);
     if (IsZero(beta)) b.Ignore(y);
     c.error_dim = 2;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, &alpha, o[x], &incx, &beta, o[y], &incy);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, &alpha, o[x], &incx, &beta, o[y], &incy);
     };
   });
   add(p + "scal", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
     const T alpha = b.Scalar("alpha");
-    const int incx = std::abs(b.Inc("incx"));
+    const int incx = b.ForwardInc("incx");
     const int x = b.Add("x", b.Vector(n, incx), true);
     c.error_dim = 1;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, &alpha, o[x], &incx);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, &alpha, o[x], &incx);
     };
   });
   if constexpr (cplx) {
@@ -595,31 +889,31 @@ std::vector<Routine<T>> Routines() {
     add(p + rp + "scal", [](Case<T>& c, Builder<T>& b) {
       const int n = b.Dim("n", 1);
       const R alpha = b.RealScalar("alpha");
-      const int incx = std::abs(b.Inc("incx"));
+      const int incx = b.ForwardInc("incx");
       const int x = b.Add("x", b.Vector(n, incx), true);
       c.error_dim = 1;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        Call(lib, sym, &n, &alpha, o[x], &incx);
+      c.call = [=](const Target& t, T* const* o) {
+        Blas(t, &n, &alpha, o[x], &incx);
       };
     });
   }
   add(p + "copy", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
-    const int incx = b.Inc("incx"), incy = b.Inc("incy");
+    const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
     const int x = b.Add("x", b.Vector(n, incx), false);
     const int y = b.Add("y", b.Vector(n, incy), true);
     b.Ignore(y);
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, o[x], &incx, o[y], &incy);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, o[x], &incx, o[y], &incy);
     };
   });
   add(p + "swap", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
-    const int incx = b.Inc("incx"), incy = b.Inc("incy");
+    const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
     const int x = b.Add("x", b.Vector(n, incx), true);
     const int y = b.Add("y", b.Vector(n, incy), true);
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, o[x], &incx, o[y], &incy);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, o[x], &incx, o[y], &incy);
     };
   });
   // Dot products: real ones return the result, complex ones use the CBLAS
@@ -628,21 +922,21 @@ std::vector<Routine<T>> Routines() {
     add(std::move(name), [conj](Case<T>& c, Builder<T>& b) {
       (void)conj;  // only used for complex types
       const int n = b.Dim("n", 1);
-      const int incx = b.Inc("incx"), incy = b.Inc("incy");
+      const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int r = b.Result("result");
       c.error_dim = n;
       if constexpr (cplx) {
+        b.UseApi(Api::kCblasCol);
         c.symbol = std::string("cblas_") + Prefix<T>() +
                    (conj ? "dotc_sub" : "dotu_sub");
-        c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-          Call(lib, sym, n, static_cast<const T*>(o[x]), incx,
-               static_cast<const T*>(o[y]), incy, o[r]);
+        c.call = [=](const Target& t, T* const* o) {
+          Blas(t, &n, o[x], &incx, o[y], &incy, o[r]);
         };
       } else {
-        c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-          *o[r] = Call<T>(lib, sym, &n, o[x], &incx, o[y], &incy);
+        c.call = [=](const Target& t, T* const* o) {
+          *o[r] = Blas<T>(t, &n, o[x], &incx, o[y], &incy);
         };
       }
     });
@@ -657,25 +951,25 @@ std::vector<Routine<T>> Routines() {
     add("sdsdot", [](Case<T>& c, Builder<T>& b) {
       const int n = b.Dim("n", 1);
       const float sb = static_cast<float>(b.Scalar("sb"));
-      const int incx = b.Inc("incx"), incy = b.Inc("incy");
+      const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int r = b.Result("result");
       c.error_dim = DoubleDotErrorDim(n);
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        *o[r] = Call<float>(lib, sym, &n, &sb, o[x], &incx, o[y], &incy);
+      c.call = [=](const Target& t, T* const* o) {
+        *o[r] = Blas<float>(t, &n, &sb, o[x], &incx, o[y], &incy);
       };
     });
     add("dsdot", [](Case<T>& c, Builder<T>& b) {
       const int n = b.Dim("n", 1);
-      const int incx = b.Inc("incx"), incy = b.Inc("incy");
+      const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int r = b.Result("result");
       c.error_dim = DoubleDotErrorDim(n);
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        *o[r] = static_cast<float>(
-            Call<double>(lib, sym, &n, o[x], &incx, o[y], &incy));
+      c.call = [=](const Target& t, T* const* o) {
+        *o[r] =
+            static_cast<float>(Blas<double>(t, &n, o[x], &incx, o[y], &incy));
       };
     });
   }
@@ -686,45 +980,50 @@ std::vector<Routine<T>> Routines() {
     const bool asum = what[0] == 'a';
     add(rprefix + what, [asum](Case<T>& c, Builder<T>& b) {
       const int n = b.Dim("n", 1);
-      const int incx = std::abs(b.Inc("incx"));
+      const int incx = b.ForwardInc("incx");
       const int x = b.Add("x", b.Vector(n, incx), false);
       const int r = b.Result("result");
       // With increments, hwyBLAS adds the squares one by one, and the
       // rounding errors grow slowly with n.
-      c.error_dim = asum ? n : 2 + n / 1000;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        *o[r] = T(Call<R>(lib, sym, &n, o[x], &incx));
+      c.error_dim = asum || incx == 0 ? n : 2 + n / 1000;
+      c.call = [=](const Target& t, T* const* o) {
+        *o[r] = T(Blas<R>(t, &n, o[x], &incx));
       };
     });
   }
   add(std::string("i") + p + "amax", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
-    const int incx = std::abs(b.Inc("incx"));
+    const int incx = b.ForwardInc("incx");
     const int x = b.Add("x", b.Vector(n, incx), false);
     const int r = b.Result("index", true);
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      *o[r] = T(static_cast<R>(Call<int>(lib, sym, &n, o[x], &incx)));
+    c.call = [=](const Target& t, T* const* o) {
+      // (CBLAS returns a size_t, 0-based.)
+      const int index =
+          t.api == Api::kFortran
+              ? Blas<int>(t, &n, o[x], &incx)
+              : static_cast<int>(Blas<size_t>(t, &n, o[x], &incx));
+      *o[r] = T(static_cast<R>(index));
     };
   });
   // rot with real c and s: srot, drot, csrot, zdrot.
   add((cplx ? p + rp : p) + "rot", [](Case<T>& c, Builder<T>& b) {
     const int n = b.Dim("n", 1);
-    const int incx = b.Inc("incx"), incy = b.Inc("incy");
+    const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
     const R angle = static_cast<R>(3.2 * b.Unit());
     const R cs = std::cos(angle), sn = std::sin(angle);
     b.Param("c", cs);
     b.Param("s", sn);
     const int x = b.Add("x", b.Vector(n, incx), true);
     const int y = b.Add("y", b.Vector(n, incy), true);
-    c.error_dim = 2;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &n, o[x], &incx, o[y], &incy, &cs, &sn);
+    c.error_dim = incx == 0 || incy == 0 ? 4 * n + 2 : 2;
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &n, o[x], &incx, o[y], &incy, &cs, &sn);
     };
   });
   if constexpr (!cplx) {
     add(p + "rotm", [](Case<T>& c, Builder<T>& b) {
       const int n = b.Dim("n", 1);
-      const int incx = b.Inc("incx"), incy = b.Inc("incy");
+      const int incx = b.Inc("incx", true), incy = b.Inc("incy", true);
       const int flag = b.Uniform(-2, 1);
       b.Param("flag", flag);
       const int x = b.Add("x", b.Vector(n, incx), true);
@@ -745,20 +1044,21 @@ std::vector<Routine<T>> Routines() {
       op.hwy_init.resize(5, Poison<T>());
       op.ref_init.resize(5, T(0));
       op.hwy_init[0] = op.ref_init[0] = static_cast<T>(flag);
-      c.error_dim = 2;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        Call(lib, sym, &n, o[x], &incx, o[y], &incy,
-             static_cast<const T*>(o[param]));
+      // (An increment of 0 repeats the rotation of one element.)
+      c.error_dim = incx == 0 || incy == 0 ? 4 * n + 2 : 2;
+      c.call = [=](const Target& t, T* const* o) {
+        Blas(t, &n, o[x], &incx, o[y], &incy, o[param]);
       };
     });
   }
 
   // ----- Level 2
   add(p + "gemv", [kTrans](Case<T>& c, Builder<T>& b) {
-    const char trans = b.Letter("trans", kTrans);
+    const Flag trans = b.Letter("trans", kTrans);
     const int m = b.Dim("m", 2), n = b.Dim("n", 2);
+    if (b.HangsInNetlib(trans, m)) return;
     const T alpha = b.Scalar("alpha"), beta = b.Scalar("beta", true);
-    const int lda = b.Ld("lda", m);
+    const int lda = b.Ld("lda", b.Major(m, n));
     const int incx = b.Inc("incx"), incy = b.Inc("incy");
     const int lx = trans == 'N' ? n : m, ly = trans == 'N' ? m : n;
     const int a = b.Add("A", b.General(m, n, lda), false);
@@ -768,14 +1068,15 @@ std::vector<Routine<T>> Routines() {
     // (BLAS returns at once, without scaling y, if m or n is 0.)
     if (IsZero(beta) && m > 0 && n > 0) b.Ignore(y);
     c.error_dim = lx + 1;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &trans, &m, &n, &alpha, o[a], &lda, o[x], &incx, &beta,
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, Layout{}, &trans, &m, &n, &alpha, o[a], &lda, o[x], &incx, &beta,
            o[y], &incy);
     };
   });
   add(p + "gbmv", [kTrans](Case<T>& c, Builder<T>& b) {
-    const char trans = b.Letter("trans", kTrans);
+    const Flag trans = b.Letter("trans", kTrans);
     const int m = b.Dim("m", 2), n = b.Dim("n", 2);
+    if (b.HangsInNetlib(trans, m)) return;
     const int kl = b.Bandwidth("kl", m), ku = b.Bandwidth("ku", n);
     const T alpha = b.Scalar("alpha"), beta = b.Scalar("beta", true);
     const int lda = b.Ld("lda", kl + ku + 1);
@@ -788,9 +1089,9 @@ std::vector<Routine<T>> Routines() {
     // (BLAS returns at once, without scaling y, if m or n is 0.)
     if (IsZero(beta) && m > 0 && n > 0) b.Ignore(y);
     c.error_dim = kl + ku + 2;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &trans, &m, &n, &kl, &ku, &alpha, o[a], &lda, o[x], &incx,
-           &beta, o[y], &incy);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, Layout{}, &trans, &m, &n, &kl, &ku, &alpha, o[a], &lda, o[x],
+           &incx, &beta, o[y], &incy);
     };
   });
   // symv/hemv, sbmv/hbmv, spmv/hpmv: kind 0 full, 1 band, 2 packed.
@@ -798,7 +1099,7 @@ std::vector<Routine<T>> Routines() {
     static const char* const kNames[2][3] = {{"symv", "sbmv", "spmv"},
                                              {"hemv", "hbmv", "hpmv"}};
     add(p + kNames[cplx][kind], [kind, kUplo](Case<T>& c, Builder<T>& b) {
-      const char uplo = b.Letter("uplo", kUplo);
+      const Flag uplo = b.Letter("uplo", kUplo);
       const int n = b.Dim("n", 2);
       const int k = kind == 1 ? b.Bandwidth("k", n) : 0;
       const T alpha = b.Scalar("alpha"), beta = b.Scalar("beta", true);
@@ -817,15 +1118,15 @@ std::vector<Routine<T>> Routines() {
       if (IsZero(alpha)) b.Ignore(a), b.Ignore(x);
       if (IsZero(beta)) b.Ignore(y);
       c.error_dim = (kind == 1 ? 2 * k : n) + 2;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
+      c.call = [=](const Target& t, T* const* o) {
         if (kind == 0) {
-          Call(lib, sym, &uplo, &n, &alpha, o[a], &lda, o[x], &incx, &beta,
+          Blas(t, Layout{}, &uplo, &n, &alpha, o[a], &lda, o[x], &incx, &beta,
                o[y], &incy);
         } else if (kind == 1) {
-          Call(lib, sym, &uplo, &n, &k, &alpha, o[a], &lda, o[x], &incx, &beta,
-               o[y], &incy);
+          Blas(t, Layout{}, &uplo, &n, &k, &alpha, o[a], &lda, o[x], &incx,
+               &beta, o[y], &incy);
         } else {
-          Call(lib, sym, &uplo, &n, &alpha, o[a], o[x], &incx, &beta, o[y],
+          Blas(t, Layout{}, &uplo, &n, &alpha, o[a], o[x], &incx, &beta, o[y],
                &incy);
         }
       };
@@ -836,37 +1137,38 @@ std::vector<Routine<T>> Routines() {
     for (int kind = 0; kind < 3; ++kind) {
       static const char* const kNames[2][3] = {{"trmv", "tbmv", "tpmv"},
                                                {"trsv", "tbsv", "tpsv"}};
-      add(p + kNames[solve][kind], [solve, kind, kTrans, kUplo](Case<T>& c,
-                                                                Builder<T>& b) {
-        const char uplo = b.Letter("uplo", kUplo);
-        const char trans = b.Letter("trans", kTrans);
-        const char diag = b.Letter("diag", "NU");
-        const int n = b.Dim("n", 2);
-        const int k = kind == 1 ? b.Bandwidth("k", n) : 0;
-        const int lda = kind == 0   ? b.Ld("lda", n)
-                        : kind == 1 ? b.Ld("lda", k + 1)
-                                    : 0;
-        const int incx = b.Inc("incx");
-        typename Builder<T>::Shape s = kind == 0 ? b.Triangle(n, lda, uplo)
-                                       : kind == 1
-                                           ? b.TriangleBand(n, k, lda, uplo)
-                                           : b.Packed(n, uplo);
-        s.unit_diag = diag == 'U';
-        s.solve = solve != 0;
-        const int a = b.Add("A", s, false);
-        const int x = b.Add("x", b.Vector(n, incx), true);
-        c.error_dim = (kind == 1 ? k : n) + 2;
-        c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-          if (kind == 0) {
-            Call(lib, sym, &uplo, &trans, &diag, &n, o[a], &lda, o[x], &incx);
-          } else if (kind == 1) {
-            Call(lib, sym, &uplo, &trans, &diag, &n, &k, o[a], &lda, o[x],
-                 &incx);
-          } else {
-            Call(lib, sym, &uplo, &trans, &diag, &n, o[a], o[x], &incx);
-          }
-        };
-      });
+      add(p + kNames[solve][kind],
+          [solve, kind, kTrans, kUplo](Case<T>& c, Builder<T>& b) {
+            const Flag uplo = b.Letter("uplo", kUplo);
+            const Flag trans = b.Letter("trans", kTrans);
+            const Flag diag = b.Letter("diag", "NU");
+            const int n = b.Dim("n", 2);
+            const int k = kind == 1 ? b.Bandwidth("k", n) : 0;
+            const int lda = kind == 0   ? b.Ld("lda", n)
+                            : kind == 1 ? b.Ld("lda", k + 1)
+                                        : 0;
+            const int incx = b.Inc("incx");
+            typename Builder<T>::Shape s = kind == 0 ? b.Triangle(n, lda, uplo)
+                                           : kind == 1
+                                               ? b.TriangleBand(n, k, lda, uplo)
+                                               : b.Packed(n, uplo);
+            s.unit_diag = diag == 'U';
+            s.solve = solve != 0;
+            const int a = b.Add("A", s, false);
+            const int x = b.Add("x", b.Vector(n, incx), true);
+            c.error_dim = (kind == 1 ? k : n) + 2;
+            c.call = [=](const Target& t, T* const* o) {
+              if (kind == 0) {
+                Blas(t, Layout{}, &uplo, &trans, &diag, &n, o[a], &lda, o[x],
+                     &incx);
+              } else if (kind == 1) {
+                Blas(t, Layout{}, &uplo, &trans, &diag, &n, &k, o[a], &lda,
+                     o[x], &incx);
+              } else {
+                Blas(t, Layout{}, &uplo, &trans, &diag, &n, o[a], o[x], &incx);
+              }
+            };
+          });
     }
   }
   // ger (geru, gerc).
@@ -876,14 +1178,14 @@ std::vector<Routine<T>> Routines() {
       const int m = b.Dim("m", 2), n = b.Dim("n", 2);
       const T alpha = b.Scalar("alpha");
       const int incx = b.Inc("incx"), incy = b.Inc("incy");
-      const int lda = b.Ld("lda", m);
+      const int lda = b.Ld("lda", b.Major(m, n));
       const int x = b.Add("x", b.Vector(m, incx), false);
       const int y = b.Add("y", b.Vector(n, incy), false);
       const int a = b.Add("A", b.General(m, n, lda), true);
       if (IsZero(alpha)) b.Ignore(x), b.Ignore(y);
       c.error_dim = 2;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        Call(lib, sym, &m, &n, &alpha, o[x], &incx, o[y], &incy, o[a], &lda);
+      c.call = [=](const Target& t, T* const* o) {
+        Blas(t, Layout{}, &m, &n, &alpha, o[x], &incx, o[y], &incy, o[a], &lda);
       };
     });
   }
@@ -894,7 +1196,7 @@ std::vector<Routine<T>> Routines() {
       if (cplx && !packed) name = p + "her";
       if (two) name += "2";
       add(name, [two, packed, kUplo](Case<T>& c, Builder<T>& b) {
-        const char uplo = b.Letter("uplo", kUplo);
+        const Flag uplo = b.Letter("uplo", kUplo);
         const int n = b.Dim("n", 2);
         // her and hpr take a real alpha.
         const bool real_alpha = cplx && !two;
@@ -920,17 +1222,23 @@ std::vector<Routine<T>> Routines() {
           if (two) b.Ignore(y);
         }
         c.error_dim = 3;
-        c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-          const void* al = real_alpha ? static_cast<const void*>(&ralpha)
-                                      : static_cast<const void*>(&alpha);
-          if (two && packed) {
-            Call(lib, sym, &uplo, &n, al, o[x], &incx, o[y], &incy, o[a]);
-          } else if (two) {
-            Call(lib, sym, &uplo, &n, al, o[x], &incx, o[y], &incy, o[a], &lda);
-          } else if (packed) {
-            Call(lib, sym, &uplo, &n, al, o[x], &incx, o[a]);
+        c.call = [=](const Target& t, T* const* o) {
+          const auto call = [&](const auto* al) {
+            if (two && packed) {
+              Blas(t, Layout{}, &uplo, &n, al, o[x], &incx, o[y], &incy, o[a]);
+            } else if (two) {
+              Blas(t, Layout{}, &uplo, &n, al, o[x], &incx, o[y], &incy, o[a],
+                   &lda);
+            } else if (packed) {
+              Blas(t, Layout{}, &uplo, &n, al, o[x], &incx, o[a]);
+            } else {
+              Blas(t, Layout{}, &uplo, &n, al, o[x], &incx, o[a], &lda);
+            }
+          };
+          if (real_alpha) {
+            call(&ralpha);
           } else {
-            Call(lib, sym, &uplo, &n, al, o[x], &incx, o[a], &lda);
+            call(&alpha);
           }
         };
       });
@@ -939,20 +1247,25 @@ std::vector<Routine<T>> Routines() {
 
   // ----- Level 3
   // gemm and gemmt (one triangle of C).
-  for (int tri = 0; tri < 2; ++tri) {
-    add(p + (tri ? "gemmt" : "gemm"),
+  // (gemmtr is the name of gemmt in the reference BLAS.)
+  for (int variant = 0; variant < 3; ++variant) {
+    const int tri = variant != 0;
+    add(p + (variant == 0   ? "gemm"
+             : variant == 1 ? "gemmt"
+                            : "gemmtr"),
         [tri, kTrans, kUplo](Case<T>& c, Builder<T>& b) {
-          const char uplo = tri ? b.Letter("uplo", kUplo) : 'N';
-          const char ta = b.Letter("transa", kTrans);
-          const char tb = b.Letter("transb", kTrans);
+          const Flag uplo = tri ? b.Letter("uplo", kUplo) : Flag{'N', 0};
+          const Flag ta = b.Letter("transa", kTrans);
+          const Flag tb = b.Letter("transb", kTrans);
           const int m = b.Dim("m", 3);
           const int n = tri ? m : b.Dim("n", 3);
           const int k = b.Dim("k", 3);
           const T alpha = b.Scalar("alpha"), beta = b.Scalar("beta", true);
           const int ar = ta == 'N' ? m : k, ac = ta == 'N' ? k : m;
           const int br = tb == 'N' ? k : n, bc = tb == 'N' ? n : k;
-          const int lda = b.Ld("lda", ar), ldb = b.Ld("ldb", br);
-          const int ldc = b.Ld("ldc", m);
+          const int lda = b.Ld("lda", b.Major(ar, ac));
+          const int ldb = b.Ld("ldb", b.Major(br, bc));
+          const int ldc = b.Ld("ldc", b.Major(m, n));
           const int a = b.Add("A", b.General(ar, ac, lda), false);
           const int bb = b.Add("B", b.General(br, bc, ldb), false);
           const int cc = b.Add(
@@ -960,12 +1273,12 @@ std::vector<Routine<T>> Routines() {
           if (IsZero(alpha)) b.Ignore(a), b.Ignore(bb);
           if (IsZero(beta)) b.Ignore(cc);
           c.error_dim = k + 1;
-          c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
+          c.call = [=](const Target& t, T* const* o) {
             if (tri) {
-              Call(lib, sym, &uplo, &ta, &tb, &n, &k, &alpha, o[a], &lda, o[bb],
-                   &ldb, &beta, o[cc], &ldc);
+              Blas(t, Layout{}, &uplo, &ta, &tb, &n, &k, &alpha, o[a], &lda,
+                   o[bb], &ldb, &beta, o[cc], &ldc);
             } else {
-              Call(lib, sym, &ta, &tb, &m, &n, &k, &alpha, o[a], &lda, o[bb],
+              Blas(t, Layout{}, &ta, &tb, &m, &n, &k, &alpha, o[a], &lda, o[bb],
                    &ldb, &beta, o[cc], &ldc);
             }
           };
@@ -974,13 +1287,13 @@ std::vector<Routine<T>> Routines() {
   // symm (and hemm).
   for (int herm = 0; herm < (cplx ? 2 : 1); ++herm) {
     add(p + (herm ? "hemm" : "symm"), [herm, kUplo](Case<T>& c, Builder<T>& b) {
-      const char side = b.Letter("side", "LR");
-      const char uplo = b.Letter("uplo", kUplo);
+      const Flag side = b.Letter("side", "LR");
+      const Flag uplo = b.Letter("uplo", kUplo);
       const int m = b.Dim("m", 3), n = b.Dim("n", 3);
       const T alpha = b.Scalar("alpha"), beta = b.Scalar("beta", true);
       const int ka = side == 'L' ? m : n;
-      const int lda = b.Ld("lda", ka), ldb = b.Ld("ldb", m),
-                ldc = b.Ld("ldc", m);
+      const int lda = b.Ld("lda", ka), ldb = b.Ld("ldb", b.Major(m, n)),
+                ldc = b.Ld("ldc", b.Major(m, n));
       typename Builder<T>::Shape s = b.Triangle(ka, lda, uplo);
       s.hermitian = herm != 0;
       const int a = b.Add("A", s, false);
@@ -989,8 +1302,8 @@ std::vector<Routine<T>> Routines() {
       if (IsZero(alpha)) b.Ignore(a), b.Ignore(bb);
       if (IsZero(beta)) b.Ignore(cc);
       c.error_dim = ka + 1;
-      c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-        Call(lib, sym, &side, &uplo, &m, &n, &alpha, o[a], &lda, o[bb], &ldb,
+      c.call = [=](const Target& t, T* const* o) {
+        Blas(t, Layout{}, &side, &uplo, &m, &n, &alpha, o[a], &lda, o[bb], &ldb,
              &beta, o[cc], &ldc);
       };
     });
@@ -1000,8 +1313,8 @@ std::vector<Routine<T>> Routines() {
     for (int two = 0; two < 2; ++two) {
       std::string name = p + (herm ? "her" : "syr") + (two ? "2k" : "k");
       add(name, [herm, two, kUplo](Case<T>& c, Builder<T>& b) {
-        const char uplo = b.Letter("uplo", kUplo);
-        const char trans =
+        const Flag uplo = b.Letter("uplo", kUplo);
+        const Flag trans =
             b.Letter("trans", herm ? "NC" : (cplx ? "NT" : "NTC"));
         const int n = b.Dim("n", 3), k = b.Dim("k", 3);
         T alpha, beta;
@@ -1019,8 +1332,8 @@ std::vector<Routine<T>> Routines() {
           beta = b.Scalar("beta", true);
         }
         const int ar = trans == 'N' ? n : k, ac = trans == 'N' ? k : n;
-        const int lda = b.Ld("lda", ar);
-        const int ldb = two ? b.Ld("ldb", ar) : 0;
+        const int lda = b.Ld("lda", b.Major(ar, ac));
+        const int ldb = two ? b.Ld("ldb", b.Major(ar, ac)) : 0;
         const int ldc = b.Ld("ldc", n);
         const int a = b.Add("A", b.General(ar, ac, lda), false);
         const int bb = two ? b.Add("B", b.General(ar, ac, ldb), false) : -1;
@@ -1033,17 +1346,22 @@ std::vector<Routine<T>> Routines() {
         }
         if (IsZero(beta)) b.Ignore(cc);
         c.error_dim = 2 * k + 1;
-        c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-          const void* al = herm && !two ? static_cast<const void*>(&ralpha)
-                                        : static_cast<const void*>(&alpha);
-          const void* be = herm ? static_cast<const void*>(&rbeta)
-                                : static_cast<const void*>(&beta);
-          if (two) {
-            Call(lib, sym, &uplo, &trans, &n, &k, al, o[a], &lda, o[bb], &ldb,
-                 be, o[cc], &ldc);
+        c.call = [=](const Target& t, T* const* o) {
+          const auto call = [&](const auto* al, const auto* be) {
+            if (two) {
+              Blas(t, Layout{}, &uplo, &trans, &n, &k, al, o[a], &lda, o[bb],
+                   &ldb, be, o[cc], &ldc);
+            } else {
+              Blas(t, Layout{}, &uplo, &trans, &n, &k, al, o[a], &lda, be,
+                   o[cc], &ldc);
+            }
+          };
+          if (herm && two) {
+            call(&alpha, &rbeta);
+          } else if (herm) {
+            call(&ralpha, &rbeta);
           } else {
-            Call(lib, sym, &uplo, &trans, &n, &k, al, o[a], &lda, be, o[cc],
-                 &ldc);
+            call(&alpha, &beta);
           }
         };
       });
@@ -1053,14 +1371,15 @@ std::vector<Routine<T>> Routines() {
   for (int solve = 0; solve < 2; ++solve) {
     add(p + (solve ? "trsm" : "trmm"),
         [solve, kTrans, kUplo](Case<T>& c, Builder<T>& b) {
-          const char side = b.Letter("side", "LR");
-          const char uplo = b.Letter("uplo", kUplo);
-          const char transa = b.Letter("transa", kTrans);
-          const char diag = b.Letter("diag", "NU");
+          const Flag side = b.Letter("side", "LR");
+          const Flag uplo = b.Letter("uplo", kUplo);
+          const Flag transa = b.Letter("transa", kTrans);
+          const Flag diag = b.Letter("diag", "NU");
           const int m = b.Dim("m", 3), n = b.Dim("n", 3);
           const T alpha = b.Scalar("alpha");
           const int ka = side == 'L' ? m : n;
-          const int lda = b.Ld("lda", ka), ldb = b.Ld("ldb", m);
+          const int lda = b.Ld("lda", ka);
+          const int ldb = b.Ld("ldb", b.Major(m, n));
           typename Builder<T>::Shape s = b.Triangle(ka, lda, uplo);
           s.unit_diag = diag == 'U';
           s.solve = solve != 0;
@@ -1068,16 +1387,17 @@ std::vector<Routine<T>> Routines() {
           const int bb = b.Add("B", b.General(m, n, ldb), true);
           if (IsZero(alpha)) b.Ignore(a), b.Ignore(bb);
           c.error_dim = ka + 1;
-          c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-            Call(lib, sym, &side, &uplo, &transa, &diag, &m, &n, &alpha, o[a],
-                 &lda, o[bb], &ldb);
+          c.call = [=](const Target& t, T* const* o) {
+            Blas(t, Layout{}, &side, &uplo, &transa, &diag, &m, &n, &alpha,
+                 o[a], &lda, o[bb], &ldb);
           };
         });
   }
   // omatcopy (OpenBLAS extension): B := alpha * op(A).
   add(p + "omatcopy", [](Case<T>& c, Builder<T>& b) {
-    const char order = b.Letter("order", "CR");
-    const char trans = b.Letter("trans", "NTRC");
+    b.ColumnMajorShapes();  // `order` decides the layout
+    const Flag order = b.Letter("order", "CR");
+    const Flag trans = b.Letter("trans", "NTRC");
     const int rows = b.Dim("rows", 2), cols = b.Dim("cols", 2);
     const T alpha = b.Scalar("alpha");
     // In column-major terms, A is ar x ac and B is br x bc.
@@ -1089,11 +1409,176 @@ std::vector<Routine<T>> Routines() {
     const int bb = b.Add("B", b.General(br, bc, ldb), true);
     b.Ignore(bb);
     c.error_dim = 1;
-    c.call = [=](const Lib& lib, const std::string& sym, T* const* o) {
-      Call(lib, sym, &order, &trans, &rows, &cols, &alpha, o[a], &lda, o[bb],
-           &ldb);
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &order, &trans, &rows, &cols, &alpha, o[a], &lda, o[bb], &ldb);
     };
   });
+
+  // ----- Routines added for coverage
+  // imatcopy: A := alpha * op(A) in place. Libraries differ in the details
+  // (and Netlib has none), so the expected result is computed here.
+  add(p + "imatcopy", [](Case<T>& c, Builder<T>& b) {
+    if (!b.options().special.empty()) return;
+    b.ColumnMajorShapes();
+    const Flag order = b.Letter("order", "CR");
+    const Flag trans = b.Letter("trans", "NTRC");
+    const int rows = b.Dim("rows", 2), cols = b.Dim("cols", 2);
+    const T alpha = b.Scalar("alpha");
+    const bool transpose = trans == 'T' || trans == 'C';
+    const bool conj = trans == 'C' || trans == 'R';
+    const int ar = order == 'C' ? rows : cols, ac = order == 'C' ? cols : rows;
+    const int br = transpose ? ac : ar, bc = transpose ? ar : ac;
+    const int lda = b.Ld("lda", ar), ldb = b.Ld("ldb", br);
+    // The array holds A (ar x ac, lda) before and B (br x bc, ldb) after.
+    const int64_t a_end =
+        ar > 0 && ac > 0 ? static_cast<int64_t>(ac - 1) * lda + ar : 0;
+    const int64_t b_end =
+        br > 0 && bc > 0 ? static_cast<int64_t>(bc - 1) * ldb + br : 0;
+    const int size = static_cast<int>(std::max(a_end, b_end));
+    typename Builder<T>::Shape s;
+    s.rows = size;
+    s.cols = 1;
+    s.index = [=](int i, int) -> int64_t {
+      const bool in_a = i < a_end && i % lda < ar;
+      const bool in_b = i < b_end && i % ldb < br;
+      return in_a || in_b ? i : -1;
+    };
+    const int a = b.Add("A", s, true);
+    // Both start from the same values (those outside A are overwritten).
+    for (int i = 0; i < size; ++i) {
+      const bool in_a = i < a_end && i % lda < ar;
+      const bool in_b = i < b_end && i % ldb < br;
+      if (in_a || in_b) {
+        c.ops[a].ref_init[i] = c.ops[a].hwy_init[i];
+      } else {
+        c.ops[a].ref_init[i] = c.ops[a].hwy_init[i] = Poison<T>();
+      }
+    }
+    c.error_dim = 2;
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, &order, &trans, &rows, &cols, &alpha, o[a], &lda, &ldb);
+    };
+    const std::vector<T> before = c.ops[a].hwy_init;
+    c.expected = [=](T* const* o) {
+      for (int j = 0; j < bc; ++j) {
+        for (int i = 0; i < br; ++i) {
+          const int64_t from = transpose ? j + static_cast<int64_t>(i) * lda
+                                         : i + static_cast<int64_t>(j) * lda;
+          T v{};
+          if (!IsZero(alpha)) {
+            v = before[from];
+            if constexpr (cplx) {
+              if (conj) v = std::conj(v);
+            }
+            v *= alpha;
+          }
+          o[a][i + static_cast<int64_t>(j) * ldb] = v;
+        }
+      }
+    };
+  });
+  // i?amin (an extension, so the expected result is computed here).
+  add(std::string("i") + p + "amin", [](Case<T>& c, Builder<T>& b) {
+    if (!b.options().special.empty()) return;
+    const int n = b.Dim("n", 1);
+    const int incx = std::abs(b.Inc("incx"));
+    const int x = b.Add("x", b.Vector(n, incx), false);
+    const int r = b.Result("index", true);
+    c.call = [=](const Target& t, T* const* o) {
+      const int index =
+          t.api == Api::kFortran
+              ? Blas<int>(t, &n, o[x], &incx)
+              : static_cast<int>(Blas<size_t>(t, &n, o[x], &incx));
+      *o[r] = T(static_cast<R>(index));
+    };
+    const bool one_based = c.api == Api::kFortran;
+    c.expected = [=](T* const* o) {
+      int best = 0;  // 0-based
+      double smallest = 0;
+      for (int i = 0; i < n; ++i) {
+        const T v = o[x][static_cast<int64_t>(i) * incx];
+        double abs = std::abs(static_cast<double>(std::real(v)));
+        if constexpr (cplx) {
+          abs += std::abs(static_cast<double>(std::imag(v)));
+        }
+        if (i == 0 || abs < smallest) {
+          smallest = abs;
+          best = i;
+        }
+      }
+      *o[r] = T(static_cast<R>(n > 0 && one_based ? best + 1 : best));
+    };
+  });
+  if constexpr (cplx) {
+    // scabs1, dcabs1 (Fortran only).
+    add(rp + "cabs1", [](Case<T>& c, Builder<T>& b) {
+      b.UseApi(Api::kFortran);
+      const int x = b.Add("z", b.Vector(1, 1), false);
+      b.Set(x, 0, b.Wide());
+      const int r = b.Result("result");
+      c.error_dim = 1;
+      c.ops[r].relative = true;
+      c.call = [=](const Target& t, T* const* o) {
+        *o[r] = T(Blas<R>(t, o[x]));
+      };
+    });
+  }
+  // rotg: constructs a plane rotation from a and b.
+  add(p + "rotg", [](Case<T>& c, Builder<T>& b) {
+    const int x = b.Add("a", b.Vector(1, 1), true);
+    const int y = b.Add("b", b.Vector(1, 1), !cplx);
+    // For complex types, values of very different sizes only against Netlib:
+    // OpenBLAS 0.3.34 is inaccurate for them.
+    if (!cplx || b.options().netlib) {
+      b.Set(x, 0, b.Wide());
+      b.Set(y, 0, b.Wide());
+    }
+    const int cs = b.Result("c"), sn = b.Result("s");
+    // For complex types, c is real.
+    if (cplx) c.ops[cs].use[0] = Use::kRealOnly;
+    for (int op : {x, y, cs, sn}) c.ops[op].relative = true;
+    c.error_dim = 4;
+    c.call = [=](const Target& t, T* const* o) {
+      Blas(t, o[x], o[y], o[cs], o[sn]);
+    };
+  });
+  if constexpr (!cplx) {
+    // rotmg: constructs a modified plane rotation.
+    add(p + "rotmg", [](Case<T>& c, Builder<T>& b) {
+      const int d1 = b.Add("d1", b.Vector(1, 1), true);
+      const int d2 = b.Add("d2", b.Vector(1, 1), true);
+      const int x1 = b.Add("x1", b.Vector(1, 1), true);
+      const int param = b.Add("param", b.Vector(5, 1), true);
+      b.Set(d1, 0, std::abs(b.Wide()) * (b.Uniform(0, 9) == 0 ? -1 : 1));
+      b.Set(d2, 0, b.Wide());
+      b.Set(x1, 0, b.Wide());
+      // Elements of param that a flag leaves unset keep this value.
+      for (int i = 0; i < 5; ++i) b.Set(param, i, T(7));
+      const T y1 = b.Wide();
+      b.Param("y1", y1);
+      const T in1 = c.ops[d1].hwy_init[0], in2 = c.ops[d2].hwy_init[0];
+      const T in_x = c.ops[x1].hwy_init[0];
+      // The reference BLAS (3.12.1) rescales H wrongly, so the results are
+      // checked against the defining equations instead.
+      c.verify = [=](const std::vector<std::vector<T>>& out) {
+        std::string problem =
+            CheckRotmg(in1, in2, in_x, y1, out[d1][0], out[d2][0], out[x1][0],
+                       out[param].data());
+        if (!problem.empty()) {
+          problem += ": d1=" + ToString(in1) + " d2=" + ToString(in2) +
+                     " x1=" + ToString(in_x) +
+                     " -> d1=" + ToString(out[d1][0]) +
+                     " d2=" + ToString(out[d2][0]) +
+                     " x1=" + ToString(out[x1][0]) + " param";
+          for (const T& v : out[param]) problem += ' ' + ToString(v);
+        }
+        return problem;
+      };
+      c.call = [=](const Target& t, T* const* o) {
+        Blas(t, o[d1], o[d2], o[x1], &y1, o[param]);
+      };
+    });
+  }
   return list;
 }
 
@@ -1101,8 +1586,8 @@ std::vector<Routine<T>> Routines() {
 // Running and checking cases
 
 // The current case and library, printed if it crashes.
-std::string g_current_case;
-const char* g_current_library = "";
+thread_local std::string g_current_case;
+thread_local const char* g_current_library = "";
 
 void PrintCrash(const char* what) {
   fprintf(stderr, "\nCRASH (%s) in %s, case: %s\n", what, g_current_library,
@@ -1131,9 +1616,18 @@ void InstallCrashHandler() {
 }
 #endif
 
+// The size of a value; 0 for NaN and infinity, which must not widen the
+// tolerance.
 template <typename T>
 double Magnitude(const T& v) {
-  return IsNan(v) ? 0 : static_cast<double>(std::abs(v));
+  const double m = static_cast<double>(std::abs(v));
+  return std::isfinite(m) ? m : 0;
+}
+
+template <typename T>
+const char* Category(const T& v) {
+  if (IsNan(v)) return "NaN";
+  return std::isfinite(static_cast<double>(std::abs(v))) ? "finite" : "Inf";
 }
 
 // Returns the first problem with the results, or an empty string.
@@ -1161,7 +1655,7 @@ std::string Check(const Case<T>& c, const std::vector<std::vector<T>>& hwy,
             std::max({scale, Magnitude(ref[k][i]), Magnitude(op.ref_init[i])});
       }
     }
-    const double tol = 16 * eps * (c.error_dim + 1) * scale;
+    const double factor = 16 * eps * (c.error_dim + 1);
     for (size_t i = 0; i < op.use.size(); ++i) {
       const T h = hwy[k][i], r = ref[k][i], init = op.hwy_init[i];
       if (!op.output || op.use[i] == Use::kUnused) {
@@ -1187,15 +1681,20 @@ std::string Check(const Case<T>& c, const std::vector<std::vector<T>>& hwy,
       if (IsNan(hc) || IsNan(rc)) {
         if (IsNan(hc) != IsNan(rc)) {
           return where(i) + ": hwyBLAS " + ToString(h) + ", " + ref_name + " " +
-                 ToString(r);
+                 ToString(r) + " [" + Category(hc) + " vs " + Category(rc) +
+                 "]";
         }
         continue;
       }
+      if (hc == rc) continue;  // also equal infinities
       const double diff = static_cast<double>(std::abs(hc - rc));
-      if (op.exact ? diff != 0 : !(diff <= tol)) {
+      const double tol =
+          factor * (op.relative ? static_cast<double>(std::abs(rc)) : scale);
+      if (op.exact || !(diff <= tol) || std::isinf(diff)) {
         return where(i) + ": hwyBLAS " + ToString(h) + ", " + ref_name + " " +
                ToString(r) + " (difference " + ToString(diff) + ", tolerance " +
-               ToString(tol) + ")";
+               ToString(tol) + ") [" + Category(hc) + " vs " + Category(rc) +
+               "]";
       }
     }
   }
@@ -1203,14 +1702,15 @@ std::string Check(const Case<T>& c, const std::vector<std::vector<T>>& hwy,
 }
 
 template <typename T>
-std::string RunCase(const Case<T>& c, const Lib& hwy, const Lib& ref) {
+std::string RunCase(const Case<T>& c, const Lib& hwy, const Lib& ref,
+                    const Options& opt) {
   // Runs the case with library `lib` on copies of the operands (`init` of
   // each), and returns the operands afterwards. hwyBLAS gets guarded
   // copies; the reference gets padded ones, because reference libraries
   // may access a little beyond the operands (e.g. OpenBLAS 0.3.34 cscal
   // with alpha = 0).
   const auto run = [&c](const Lib& lib, std::vector<T> Operand<T>::* init,
-                        bool guarded) {
+                        bool guarded, int* exceptions) {
     constexpr size_t kPadding = 64;  // elements before and after
     const size_t num = c.ops.size();
     std::vector<std::unique_ptr<GuardedBuffer>> guarded_buffers;
@@ -1219,9 +1719,14 @@ std::string RunCase(const Case<T>& c, const Lib& hwy, const Lib& ref) {
     for (size_t k = 0; k < num; ++k) {
       const std::vector<T>& values = c.ops[k].*init;
       if (guarded) {
+        // A misaligned operand starts half an element later; the buffer is
+        // that much larger, so one end still touches the inaccessible page.
+        const size_t shift = c.ops[k].misalign ? sizeof(Real<T>) : 0;
         guarded_buffers.push_back(std::make_unique<GuardedBuffer>(
-            values.size() * sizeof(T), c.ops[k].guard_after));
-        ptrs[k] = static_cast<T*>(guarded_buffers.back()->data());
+            values.size() * sizeof(T) + shift, c.ops[k].guard_after));
+        char* data = static_cast<char*>(guarded_buffers.back()->data());
+        if (!c.ops[k].guard_after) data += shift;
+        ptrs[k] = reinterpret_cast<T*>(data);
       } else {
         padded_buffers[k].assign(values.size() + 2 * kPadding, T(0));
         ptrs[k] = padded_buffers[k].data() + kPadding;
@@ -1231,18 +1736,36 @@ std::string RunCase(const Case<T>& c, const Lib& hwy, const Lib& ref) {
       }
     }
     g_current_library = lib.name().c_str();
-    c.call(lib, c.symbol, ptrs.data());
+    std::feclearexcept(FE_ALL_EXCEPT);
+    if (!guarded && c.expected) {
+      c.expected(ptrs.data());
+    } else {
+      c.call(Target{lib, c.symbol, c.api}, ptrs.data());
+    }
+    *exceptions = std::fetestexcept(FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW);
     std::vector<std::vector<T>> data(num);
     for (size_t k = 0; k < num; ++k) {
       data[k].assign(ptrs[k], ptrs[k] + (c.ops[k].*init).size());
     }
     return data;
   };
+  int ref_exceptions = 0, hwy_exceptions = 0;
+  if (c.verify) {
+    return c.verify(run(hwy, &Operand<T>::hwy_init, true, &hwy_exceptions));
+  }
   const std::vector<std::vector<T>> ref_data =
-      run(ref, &Operand<T>::ref_init, false);
+      run(ref, &Operand<T>::ref_init, false, &ref_exceptions);
   const std::vector<std::vector<T>> hwy_data =
-      run(hwy, &Operand<T>::hwy_init, true);
-  return Check(c, hwy_data, ref_data, ref.name());
+      run(hwy, &Operand<T>::hwy_init, true, &hwy_exceptions);
+  std::string problem = Check(c, hwy_data, ref_data, ref.name());
+  const int extra = hwy_exceptions & ~ref_exceptions;
+  if (problem.empty() && opt.fp_flags && extra != 0 && !c.expected) {
+    problem = "floating-point exceptions only in hwyBLAS:";
+    if (extra & FE_INVALID) problem += " invalid";
+    if (extra & FE_DIVBYZERO) problem += " divide-by-zero";
+    if (extra & FE_OVERFLOW) problem += " overflow";
+  }
+  return problem;
 }
 
 uint64_t SplitMix(uint64_t x) {
@@ -1251,17 +1774,6 @@ uint64_t SplitMix(uint64_t x) {
   x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
   return x ^ (x >> 31);
 }
-
-struct Options {
-  uint64_t seed = 1;
-  int64_t iterations = 1000;
-  double time = 0;  // > 0: run for this many seconds
-  std::string types = "sdcz";
-  std::vector<std::string> routines;  // empty: all
-  std::string repro;                  // name:seed
-  int max_failures = 10;
-  bool verbose = false;
-};
 
 struct Stats {
   int64_t cases = 0, failures = 0;
@@ -1287,14 +1799,24 @@ void AddRoutines(std::vector<AnyRoutine>& all) {
            Case<T> c;
            c.name = name;
            c.symbol = name + "_";
-           Builder<T> b(c, seed);
+           Builder<T> b(c, seed, opt);
            gen(c, b);
-           if (!hwy.Find(c.symbol.c_str()) || !ref.Find(c.symbol.c_str())) {
+           if (!c.call) return true;  // not tested with these options
+           // (Generators may set a symbol, or change the interface.)
+           if (c.api != Api::kFortran && c.symbol == name + "_") {
+             c.symbol = "cblas_" + name;
+           }
+           if (!hwy.Find(c.symbol.c_str()) ||
+               (!c.expected && !c.verify && !ref.Find(c.symbol.c_str()))) {
              return true;  // not provided by one of the libraries
            }
            char seed_str[32];
            snprintf(seed_str, sizeof(seed_str), "0x%016" PRIx64, seed);
            const std::string repro = name + ":" + seed_str;
+           if (c.api != Api::kFortran) {
+             c.params +=
+                 c.api == Api::kCblasRow ? " api=cblas-row" : " api=cblas-col";
+           }
            g_current_case = repro + " " + c.params;
            if (opt.verbose) {
              printf("%s\n", g_current_case.c_str());
@@ -1302,11 +1824,16 @@ void AddRoutines(std::vector<AnyRoutine>& all) {
            }
            ++stats.cases;
            ++stats.per_routine[name];
-           const std::string problem = RunCase(c, hwy, ref);
+           const std::string problem = RunCase(c, hwy, ref, opt);
            if (problem.empty()) return true;
            ++stats.failures;
-           printf("FAIL %s:%s\n  %s\n  reproduce: --repro=%s\n", name.c_str(),
-                  c.params.c_str(), problem.c_str(), repro.c_str());
+           std::string options;
+           if (opt.netlib) options += " --netlib";
+           if (!opt.special.empty()) options += " --special=" + opt.special;
+           if (opt.fp_flags) options += " --fp-flags";
+           printf("FAIL %s:%s\n  %s\n  reproduce: --repro=%s%s\n", name.c_str(),
+                  c.params.c_str(), problem.c_str(), repro.c_str(),
+                  options.c_str());
            fflush(stdout);
            return false;
          }});
@@ -1341,6 +1868,20 @@ int Main(int argc, char** argv) {
       opt.max_failures = atoi(arg + 15);
     } else if (strcmp(arg, "--verbose") == 0) {
       opt.verbose = true;
+    } else if (strcmp(arg, "--netlib") == 0) {
+      opt.netlib = true;
+    } else if (strncmp(arg, "--special=", 10) == 0) {
+      opt.special = arg + 10;
+      if (opt.special != "nan" && opt.special != "inf" &&
+          opt.special != "zero" && opt.special != "subnormal" &&
+          opt.special != "huge") {
+        fprintf(stderr, "Unknown special values: %s\n", arg);
+        return 1;
+      }
+    } else if (strncmp(arg, "--threads=", 10) == 0) {
+      opt.threads = std::max(1, atoi(arg + 10));
+    } else if (strcmp(arg, "--fp-flags") == 0) {
+      opt.fp_flags = true;
     } else if (const char* eq = strchr(arg, '=');
                eq != nullptr && arg[0] != '-') {
       ref_name.assign(arg, eq);
@@ -1414,19 +1955,47 @@ int Main(int argc, char** argv) {
   }
 
   const auto start = std::chrono::steady_clock::now();
-  for (int64_t i = 0;; ++i) {
-    if (opt.time > 0) {
-      const double elapsed = std::chrono::duration<double>(
-                                 std::chrono::steady_clock::now() - start)
-                                 .count();
-      if (elapsed >= opt.time) break;
-    } else if (i >= opt.iterations) {
-      break;
-    }
+  const auto done = [&opt, start](int64_t i) {
+    if (opt.time <= 0) return i >= opt.iterations;
+    const double elapsed =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+            .count();
+    return elapsed >= opt.time;
+  };
+  const auto run_case = [&](int64_t i, Stats& s) {
     const uint64_t seed = SplitMix(opt.seed * 0x100000001B3ull + i);
     const AnyRoutine& r = all[seed % all.size()];
-    r.run(SplitMix(seed), hwy, ref, opt, stats);
-    if (stats.failures >= opt.max_failures) break;
+    r.run(SplitMix(seed), hwy, ref, opt, s);
+  };
+  if (opt.threads == 1) {
+    for (int64_t i = 0; !done(i) && stats.failures < opt.max_failures; ++i) {
+      run_case(i, stats);
+    }
+  } else {
+    // Thread t runs every threads-th case of a block, so that every case is
+    // the same as with one thread.
+    const int64_t block = 200 * static_cast<int64_t>(opt.threads);
+    for (int64_t first = 0; !done(first) && stats.failures < opt.max_failures;
+         first += block) {
+      std::vector<Stats> per_thread(opt.threads);
+      std::vector<std::thread> threads;
+      for (int t = 0; t < opt.threads; ++t) {
+        threads.emplace_back([&, t] {
+          for (int64_t i = first + t; i < first + block; i += opt.threads) {
+            if (opt.time <= 0 && i >= opt.iterations) break;
+            run_case(i, per_thread[t]);
+          }
+        });
+      }
+      for (std::thread& t : threads) t.join();
+      for (const Stats& s : per_thread) {
+        stats.cases += s.cases;
+        stats.failures += s.failures;
+        for (const auto& [name, count] : s.per_routine) {
+          stats.per_routine[name] += count;
+        }
+      }
+    }
   }
   printf("%" PRId64 " cases of %zu routines, %" PRId64 " failures\n",
          stats.cases, stats.per_routine.size(), stats.failures);

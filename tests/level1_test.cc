@@ -596,6 +596,50 @@ TYPED_TEST(Level1Test, RotmgScalingBounds) {
   }
 }
 
+// d2 * y1^2 < 0 gives the zero result also when it underflows to -0. The
+// reference then makes d1 negative and rescales it forever.
+TYPED_TEST(Level1Test, RotmgNegativeUnderflow) {
+  using T = TypeParam;
+  if constexpr (!IsComplex<T>::value) {
+    // The square of y1 underflows.
+    const T small = std::sqrt(std::numeric_limits<T>::denorm_min()) / 4;
+    for (const T d1_in : {T(0), T(1)}) {
+      for (const T y1_in : {small, -small}) {
+        // x1 = 0 where d1 is not, so that d1 * x1^2 is 0 too.
+        T d1 = d1_in, d2 = -1, x1 = d1_in == 0 ? T(1) : T(0), y1 = y1_in;
+        T param[5] = {7, 7, 7, 7, 7};
+        HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);
+        EXPECT_EQ(param[0], T(-1)) << d1_in << " " << y1_in;
+        for (int i = 1; i < 5; ++i) EXPECT_EQ(param[i], T(0)) << i;
+        EXPECT_EQ(d1, T(0));
+        EXPECT_EQ(d2, T(0));
+        EXPECT_EQ(x1, T(0));
+      }
+    }
+  }
+}
+
+// An infinite d1 or d2, which no rescaling brings into range, is left as it
+// is. The reference does not return.
+TYPED_TEST(Level1Test, RotmgInfiniteWeights) {
+  using T = TypeParam;
+  if constexpr (!IsComplex<T>::value) {
+    const T inf = std::numeric_limits<T>::infinity();
+    const T max = std::numeric_limits<T>::max();
+    // The last case has finite input: d1 / u overflows.
+    const T in[][4] = {{inf, 1, 1, 1},   {1, inf, 1, 1},
+                       {inf, -1, 1, 1},  {inf, inf, 1, 1},
+                       {max, -max / 2, 1, 1}};
+    for (const auto& v : in) {
+      T d1 = v[0], d2 = v[1], x1 = v[2], y1 = v[3], param[5] = {};
+      HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);
+      EXPECT_TRUE(std::isinf(d1) || std::isinf(d2) || std::isnan(d1) ||
+                  std::isnan(d2) || (d1 == 0 && d2 == 0))
+          << v[0] << " " << v[1] << ": " << d1 << " " << d2;
+    }
+  }
+}
+
 TEST(Level1Test, Cabs1) {
   const float zf[2] = {-1.5f, 2.0f};
   const double zd[2] = {3.0, -0.25};

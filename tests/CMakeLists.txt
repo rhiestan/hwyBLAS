@@ -337,7 +337,9 @@ endif()
 #   blas_fuzz --time=600 --seed=7 OpenBLAS=path/to/libopenblas.dll
 add_executable(blas_fuzz fuzz/blas_fuzz.cc)
 target_include_directories(blas_fuzz PRIVATE "${PROJECT_SOURCE_DIR}/bench")
-target_link_libraries(blas_fuzz PRIVATE hwyblas_options ${CMAKE_DL_LIBS})
+find_package(Threads REQUIRED)  # --threads
+target_link_libraries(blas_fuzz PRIVATE hwyblas_options ${CMAKE_DL_LIBS}
+                                        Threads::Threads)
 # It loads hwyblas at runtime (as the benchmark does), from this path.
 add_dependencies(blas_fuzz hwyblas)
 target_compile_definitions(blas_fuzz PRIVATE

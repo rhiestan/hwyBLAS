@@ -119,8 +119,11 @@ void MergeTile(const T* tmp, size_t ld_tmp, Part part, bool real_diagonal,
       T v = tmp[i + j * ld_tmp];
       if (real_diagonal && gi == gj) {
         // HERK: the imaginary part of the diagonal is neither read nor kept.
-        v = T(std::real(v));
-        if (!IsZero(beta)) v += beta * T(std::real(cij));
+        // beta is real; a complex product would make the imaginary part NaN
+        // if the diagonal is not finite.
+        auto diagonal = std::real(v);
+        if (!IsZero(beta)) diagonal += std::real(beta) * std::real(cij);
+        v = T(diagonal);
       } else if (!IsZero(beta)) {
         v += beta * cij;
       }

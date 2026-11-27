@@ -68,7 +68,7 @@ void LoadSmallTriangle(const Operand<T>& tri, size_t r, SmallTriangle<T>* s) {
   s->conj = tri.conj;
   for (size_t j = 0; j < r; ++j) {
     const T diag = tri.conj ? Conj(s->At(j, j)) : s->At(j, j);
-    s->inv[j] = tri.unit_diag ? T(1) : T(1) / diag;
+    s->inv[j] = tri.unit_diag ? T(1) : Quotient(T(1), diag);
   }
 }
 

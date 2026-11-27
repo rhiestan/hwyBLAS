@@ -50,6 +50,27 @@ inline T Conj(T x) {
   }
 }
 
+// Clang for x86 may compute two float divisions (or the two of a complex
+// float one) with one SIMD instruction, whose other lanes divide 0 by 0 and
+// raise the invalid and divide-by-zero exceptions.
+
+// At the start of a block of scalar code: no such spurious exceptions. The
+// block is then not inlined into other code.
+#if defined(__clang__) && (defined(__x86_64__) || defined(__i386__))
+#define HWYBLAS_NO_SPURIOUS_EXCEPTIONS _Pragma("clang fp exceptions(maytrap)")
+#else
+#define HWYBLAS_NO_SPURIOUS_EXCEPTIONS
+#endif
+
+// a / b for the diagonal elements of the triangular solves.
+template <typename T>
+inline T Quotient(T a, T b) {
+  return a / b;
+}
+// Complex float is divided in double, whose two divisions fill a SIMD
+// register (this can be inlined, unlike HWYBLAS_NO_SPURIOUS_EXCEPTIONS).
+inline c32 Quotient(c32 a, c32 b) { return c32(c64(a) / c64(b)); }
+
 // Exact comparisons against 0 and 1 are intended here: BLAS semantics treat
 // alpha == 0 and beta == 0/1 as special cases (e.g. beta == 0 means C is not
 // read, so NaNs in C do not propagate).

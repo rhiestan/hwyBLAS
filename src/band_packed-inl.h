@@ -467,7 +467,7 @@ HWY_INLINE void TriangularSvStrip(const ColumnLayout& layout, bool lower, Op op,
     } else {
       for (size_t q = p + 1; q < j + kCols; ++q) sum -= op_a(p, q) * x[q];
     }
-    x[p] = unit ? sum : sum / op_a(p, p);
+    x[p] = unit ? sum : Quotient(sum, op_a(p, p));
   }
 
   if (op == Op::kNoTrans) {
@@ -495,11 +495,11 @@ HWY_INLINE void TriangularSvByColumn(const ColumnLayout& layout, bool lower,
     OffDiagonalRows(col, lower, j, &begin, &end);
     const T* off = Element(a, col, begin);
     if (op == Op::kNoTrans) {
-      if (!unit) x[j] /= diag;
+      if (!unit) x[j] = Quotient(x[j], diag);
       ColumnAxpy(end - begin, -x[j], off, x + begin);
     } else {
       const T v = x[j] - ColumnDot(conj, end - begin, off, x + begin);
-      x[j] = unit ? v : v / diag;
+      x[j] = unit ? v : Quotient(v, diag);
     }
   }
 }

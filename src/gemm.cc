@@ -59,6 +59,9 @@ void ScaleMatrix(size_t m, size_t n, T beta, T* c, size_t ldc, Part part,
       for (size_t i = begin; i < end; ++i) cj[i] = T(0);
     } else {
       for (size_t i = begin; i < end; ++i) cj[i] *= beta;
+      // The complex product above makes the imaginary part NaN if the real
+      // part is not finite.
+      if (real_diagonal && j < m) cj[j] = T(std::real(cj[j]));
     }
   }
 }

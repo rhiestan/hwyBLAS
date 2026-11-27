@@ -63,7 +63,7 @@ void TrsvContiguous(bool lower, Op op, bool unit, size_t n, const T* a,
       } else {
         for (size_t q = p + 1; q < j + cols; ++q) sum -= op_a(p, q) * x[q];
       }
-      x[p] = unit ? sum : sum / op_a(p, p);
+      x[p] = unit ? sum : Quotient(sum, op_a(p, p));
     }
     if (op == Op::kNoTrans) {
       T t[kStrip];

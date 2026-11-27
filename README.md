@@ -234,9 +234,10 @@ ctest --test-dir build -j16 -L "target_AVX3"   # AVX3 and AVX3_ZEN4
 
 The differential fuzzer `blas_fuzz` calls hwyBLAS and a reference BLAS
 (OpenBLAS by default, `-DHWYBLAS_FUZZ_REFERENCE=...`) with the same random
-arguments and compares the results: random sizes, transposes, triangles,
-alpha/beta (including 0 and 1), padded leading dimensions and negative
-increments. It also checks that hwyBLAS does not read elements it must not
+arguments and compares the results: the Fortran and CBLAS interfaces (both
+layouts), random sizes, transposes, triangles, alpha/beta (including 0 and
+1), padded leading dimensions, negative increments and complex operands
+aligned only to their real type. It also checks that hwyBLAS does not read elements it must not
 reference (they are NaN, e.g. the other triangle or C when beta = 0), does
 not modify its inputs, and does not access memory outside of its operands
 (each one is placed next to an inaccessible page). ctest runs a few thousand
@@ -246,6 +247,15 @@ cases per target; for longer runs:
 build/bin/blas_fuzz --time=600 --seed=7 OpenBLAS=path/to/libopenblas.dll
 build/bin/blas_fuzz --repro=dgemm:0x1234...  OpenBLAS=...   # rerun one failure
 ```
+
+The Netlib reference BLAS (built from the LAPACK sources, see
+`tests/fuzz/netlib/CMakeLists.txt`) is the stricter reference: with
+`--netlib` the fuzzer also tries zero increments. `--threads=N` runs the
+cases concurrently (e.g. for ThreadSanitizer), `--special=nan` (or `inf`,
+`zero`, `subnormal`, `huge`) puts special values into the operands, and
+`--fp-flags` reports floating-point exceptions that only hwyBLAS raises.
+Differences with special values and exception reports need to be judged, see
+[Conventions](#conventions).
 
 `-DHWYBLAS_EIGEN_TESTSUITE=ON` also builds Eigen's own test suite (from the
 Eigen checkout, about 900 programs; this takes a while) with
@@ -503,8 +513,14 @@ cover every target.
   stays NaN.
 - `?nrm2_` never overflows or underflows harmfully. Float is accumulated in
   double; double uses a fast sum of squares, and the reference safe-scaling
-  algorithm only when that sum is out of range.
+  algorithm only when that sum is out of range. For double, elements beyond
+  about 1e154 therefore raise the overflow exception flag.
 - `?rotg_` follows the reference BLAS 3.10+ algorithms (as OpenBLAS does).
+- `?rotmg_` rescales H correctly. The reference BLAS (3.12.1) overwrites
+  already scaled elements of H when it rescales more than once, so its H then
+  does not rotate (x1, y1) to (x1', 0). It also returns where the reference
+  loops forever: a negative d2 y1² that underflows to zero gives the zero
+  result, as other negative ones do, and an infinite d1 or d2 is not rescaled.
 - Error handling follows reference BLAS: invalid arguments call `xerbla_`,
   and the routine returns without side effects. Unlike the reference
   `xerbla_`, the default handler prints a message but does not terminate.
@@ -525,7 +541,16 @@ cover every target.
   imaginary parts of the diagonal to zero, as in the reference BLAS.
 - Unlike the reference BLAS, zero elements of x or y are not skipped
   (e.g. in `?ger_` or `?trsv_`), as in OpenBLAS. This only makes a
-  difference when A contains Inf or NaN.
+  difference when A contains Inf or NaN, or when a triangular solve divides
+  by a zero diagonal element (0 / 0 is NaN).
+- With NaN or Inf in the operands, other elements of the result can be NaN or
+  Inf than with the reference BLAS, as the operations are carried out in a
+  different order. For example, `?trmm_` treats the other triangle of A as
+  zeros, so a NaN in B can reach all of its column (`SIDE = 'L'`) or row, as in
+  OpenBLAS. Similarly, intermediate results of values near the overflow
+  threshold may overflow in one library and not in the other.
+- Where a sum is empty (`?gemm_` with `k = 0`, a column of `?gbmv_` outside
+  the band), a NaN or Inf `alpha` does not reach the result.
 - `?trsm_` multiplies by the reciprocals of the diagonal elements (as
   OpenBLAS does), also with `SIDE = 'L'`, where the reference BLAS divides by
   them. If a diagonal element is so small that its reciprocal overflows

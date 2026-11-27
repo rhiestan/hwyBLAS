@@ -455,6 +455,7 @@ void Rotm(blasint n, R* x, blasint incx, R* y, blasint incy, const R* param) {
 // b = z, from which c and s can be reconstructed.
 template <typename R>
 void Rotg(R* a, R* b, R* c, R* s) {
+  HWYBLAS_NO_SPURIOUS_EXCEPTIONS
   const R safmin = std::numeric_limits<R>::min();
   const R safmax = R(1) / safmin;
   const R anorm = std::abs(*a), bnorm = std::abs(*b);
@@ -497,6 +498,7 @@ R AbsSq(std::complex<R> z) {
 template <typename R>
 void RotgComplex(std::complex<R>* a, const std::complex<R>* b, R* c,
                  std::complex<R>* s) {
+  HWYBLAS_NO_SPURIOUS_EXCEPTIONS
   using C = std::complex<R>;
   const R safmin = std::numeric_limits<R>::min();
   const R safmax = R(1) / safmin;
@@ -612,6 +614,7 @@ void MakeExplicit(R* flag, R* h11, R* h12, R* h21, R* h22) {
 
 template <typename R>
 void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
+  HWYBLAS_NO_SPURIOUS_EXCEPTIONS
   const R gam = 4096, gamsq = R(16777216), rgamsq = R(5.9604645e-8);
   R flag, h11 = 0, h12 = 0, h21 = 0, h22 = 0;
   if (*d1 < 0) {
@@ -642,7 +645,10 @@ void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
         h11 = h12 = h21 = h22 = 0;
         *d1 = *d2 = *x1 = 0;
       }
-    } else if (q2 < 0) {
+    } else if (q2 < 0 || (q2 == 0 && std::signbit(q2))) {
+      // Including a negative q2 that underflowed to -0, which the reference
+      // takes for positive: d1 then becomes negative, and rescaling it below
+      // never ends.
       flag = -1;
       h11 = h12 = h21 = h22 = 0;
       *d1 = *d2 = *x1 = 0;
@@ -660,8 +666,9 @@ void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
     // (flag -1). The reference sets the implicit elements of H in every
     // iteration of the loops below, which also overwrites elements that an
     // earlier iteration has scaled; here, as in OpenBLAS and gonum (Hopkins'
-    // correction), only once.
-    if (*d1 != 0) {
+    // correction), only once. An infinite d1 or d2 stays as it is (the
+    // reference does not return).
+    if (*d1 != 0 && std::isfinite(*d1)) {
       while (*d1 <= rgamsq || *d1 >= gamsq) {
         MakeExplicit(&flag, &h11, &h12, &h21, &h22);
         if (*d1 <= rgamsq) {
@@ -677,7 +684,7 @@ void Rotmg(R* d1, R* d2, R* x1, R y1, R* param) {
         }
       }
     }
-    if (*d2 != 0) {
+    if (*d2 != 0 && std::isfinite(*d2)) {
       while (std::abs(*d2) <= rgamsq || std::abs(*d2) >= gamsq) {
         MakeExplicit(&flag, &h11, &h12, &h21, &h22);
         if (std::abs(*d2) <= rgamsq) {

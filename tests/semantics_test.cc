@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cfenv>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -229,6 +230,76 @@ TYPED_TEST(Semantics, TrsmPropagatesNanAndInf) {
   });
 }
 
+// The diagonal of the result of herk and her2k is real, as in the reference,
+// also if it holds a NaN or an Inf.
+template <typename T>
+void CheckHermitianDiagonal() {
+  using R = RealT<T>;
+  ForEachTarget([] {
+    Random<T> rng(5);
+    for (int n : {1, 5, 40, 130}) {
+      for (int k : {0, 3}) {
+        for (char uplo : {'U', 'L'}) {
+          for (char trans : {'N', 'C'}) {
+            for (R alpha : {R(0), R(1)}) {
+              for (R beta : {R(0), R(1), R(-0.5)}) {
+                for (bool nan : {true, false}) {
+                  for (int two = 0; two < 2; ++two) {
+                    if ((alpha == 0 || k == 0) && beta == 1) continue;
+                    const int rows = trans == 'N' ? n : k;
+                    const int lda = std::max(1, rows);
+                    const size_t size = static_cast<size_t>(n) * (k + 1);
+                    std::vector<T> a = rng.Vector(size), b = rng.Vector(size);
+                    std::vector<T> c = rng.Vector(static_cast<size_t>(n) * n);
+                    const R value = nan ? std::numeric_limits<R>::quiet_NaN()
+                                        : std::numeric_limits<R>::infinity();
+                    c[0] = T(value, 0);
+                    if (k > 0) a[0] = T(value, value);
+                    const T alpha2(alpha, 0);
+                    if constexpr (std::is_same_v<R, float>) {
+                      if (two) {
+                        cher2k_(&uplo, &trans, &n, &k, P(&alpha2), P(a.data()),
+                                &lda, P(b.data()), &lda, &beta, P(c.data()),
+                                &n);
+                      } else {
+                        cherk_(&uplo, &trans, &n, &k, &alpha, P(a.data()), &lda,
+                               &beta, P(c.data()), &n);
+                      }
+                    } else {
+                      if (two) {
+                        zher2k_(&uplo, &trans, &n, &k, P(&alpha2), P(a.data()),
+                                &lda, P(b.data()), &lda, &beta, P(c.data()),
+                                &n);
+                      } else {
+                        zherk_(&uplo, &trans, &n, &k, &alpha, P(a.data()), &lda,
+                               &beta, P(c.data()), &n);
+                      }
+                    }
+                    for (int j = 0; j < n; ++j) {
+                      ASSERT_EQ(c[j + static_cast<size_t>(j) * n].imag(), R(0))
+                          << (two ? "her2k" : "herk") << " uplo=" << uplo
+                          << " trans=" << trans << " n=" << n << " k=" << k
+                          << " alpha=" << alpha << " beta=" << beta
+                          << " nan=" << nan << " j=" << j;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+TEST(HermitianDiagonal, StaysRealSingle) {
+  CheckHermitianDiagonal<std::complex<float>>();
+}
+TEST(HermitianDiagonal, StaysRealDouble) {
+  CheckHermitianDiagonal<std::complex<double>>();
+}
+
 template <typename T>
 RealT<T> Nrm2(int n, const T* x, int inc) {
   if constexpr (std::is_same_v<T, float>) return snrm2_(&n, x, &inc);
@@ -299,6 +370,128 @@ TYPED_TEST(Semantics, Level1PropagatesNanAndInf) {
                 << "axpy n=" << n << " i0=" << i0 << " y(" << i << ")=" << y[i];
           }
         }
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Ordinary data raises no invalid, divide-by-zero or overflow exception (a
+// program may trap them). Compilers can raise them spuriously, e.g. by
+// computing two divisions in one SIMD instruction whose other lanes are 0 / 0.
+
+// Whether `call` raised one of these exceptions.
+template <class Call>
+bool Raises(const Call& call) {
+  std::feclearexcept(FE_ALL_EXCEPT);
+  call();
+  return std::fetestexcept(FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW) != 0;
+}
+
+TYPED_TEST(Semantics, SolvesRaiseNoExceptions) {
+  using T = TypeParam;
+  ForEachTarget([] {
+    Random<T> rng(6);
+    for (int n : {1, 2, 5, 8, 33, 70}) {
+      for (char uplo : {'U', 'L'}) {
+        for (char trans : Ops<T>()) {
+          const std::vector<T> a = DominantTriangle(n, uplo, rng);
+          // The same triangle packed, and as a band matrix with all of it.
+          std::vector<T> packed, band(static_cast<size_t>(n) * n, T(0));
+          for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < n; ++i) {
+              if (uplo == 'U' ? i > j : i < j) continue;
+              packed.push_back(a[i + j * n]);
+              const int row = uplo == 'U' ? n - 1 + i - j : i - j;
+              band[row + j * n] = a[i + j * n];
+            }
+          }
+          const char diag = 'N', side_l = 'L', side_r = 'R';
+          const int inc = 1, k = n - 1;
+          const T alpha = MakeScalar<T>(0.5, -1);
+          std::vector<T> x = rng.Vector(static_cast<size_t>(n) * n);
+          EXPECT_FALSE(Raises([&] {
+            HWYBLAS_CALL(T, trsv, &uplo, &trans, &diag, &n, P(a.data()), &n,
+                         P(x.data()), &inc);
+          })) << "trsv uplo="
+              << uplo << " trans=" << trans << " n=" << n;
+          EXPECT_FALSE(Raises([&] {
+            HWYBLAS_CALL(T, tpsv, &uplo, &trans, &diag, &n, P(packed.data()),
+                         P(x.data()), &inc);
+          })) << "tpsv uplo="
+              << uplo << " trans=" << trans << " n=" << n;
+          EXPECT_FALSE(Raises([&] {
+            HWYBLAS_CALL(T, tbsv, &uplo, &trans, &diag, &n, &k, P(band.data()),
+                         &n, P(x.data()), &inc);
+          })) << "tbsv uplo="
+              << uplo << " trans=" << trans << " n=" << n;
+          for (char side : {side_l, side_r}) {
+            EXPECT_FALSE(Raises([&] {
+              HWYBLAS_CALL(T, trsm, &side, &uplo, &trans, &diag, &n, &n,
+                           P(&alpha), P(a.data()), &n, P(x.data()), &n);
+            })) << "trsm side="
+                << side << " uplo=" << uplo << " trans=" << trans << " n=" << n;
+          }
+        }
+      }
+    }
+  });
+}
+
+TYPED_TEST(Semantics, RotationSetupRaisesNoExceptions) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  ForEachTarget([] {
+    Random<T> rng(7);
+    for (int trial = 0; trial < 200; ++trial) {
+      T a = rng.Next(), b = rng.Next();
+      // Zero, or zero real or imaginary parts, and very different sizes.
+      if (trial % 8 == 1) a = T(0);
+      if (trial % 8 == 2) b = T(0);
+      if (trial % 8 == 3) a = T(0), b = T(std::real(b));
+      if (trial % 8 == 4) a = T(0), b = MakeScalar<T>(0, std::imag(b));
+      if (trial % 8 == 5) a *= T(static_cast<R>(1e30));
+      if (trial % 8 == 6) b *= T(static_cast<R>(1e-30));
+      const T a0 = a, b0 = b;
+      R c = 0;
+      T s = T(0);
+      EXPECT_FALSE(Raises([&] {
+        if constexpr (IsComplex<T>::value) {
+          HWYBLAS_CALL_COMPLEX(T, rotg, P(&a), P(&b), &c, P(&s));
+        } else {
+          HWYBLAS_CALL_REAL(T, rotg, &a, &b, &c, &s);
+        }
+      })) << "rotg a="
+          << a0 << " b=" << b0;
+      if constexpr (!IsComplex<T>::value) {
+        T d1 = std::abs(a0), d2 = b0, x1 = rng.Next();
+        const T y1 = rng.Next();
+        T param[5] = {};
+        EXPECT_FALSE(Raises([&] {
+          HWYBLAS_CALL_REAL(T, rotmg, &d1, &d2, &x1, &y1, param);
+        })) << "rotmg trial="
+            << trial;
+      }
+    }
+  });
+}
+
+TYPED_TEST(Semantics, NormsRaiseNoExceptions) {
+  using T = TypeParam;
+  using R = RealT<T>;
+  ForEachTarget([] {
+    Random<T> rng(8);
+    const R tiny = std::sqrt(std::numeric_limits<R>::min());
+    for (int n : {1, 7, 100}) {
+      // (A double vector with elements beyond about 1e154 raises overflow in
+      // the fast sum of squares.)
+      for (R scale : {R(1), tiny / R(4)}) {
+        std::vector<T> x = rng.Vector(n);
+        for (T& v : x) v *= T(scale);
+        // Also mixed sizes.
+        if (n > 1) x[0] = rng.Next();
+        EXPECT_FALSE(Raises([&] { Nrm2(n, x.data(), 1); }))
+            << "nrm2 n=" << n << " scale=" << scale;
       }
     }
   });
