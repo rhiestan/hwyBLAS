@@ -537,7 +537,8 @@ lapack_int Geqp3(int matrix_layout, lapack_int m, lapack_int n, T* a,
 
 // xLANGE: in row-major layout, the norm of the transpose (the same array
 // in column-major layout) with the one and infinity norms exchanged; no
-// copy.
+// copy. Unlike the reference _work functions of the norms, which return 0
+// for an invalid layout, this and the others return -1.
 template <typename T>
 RealT<T> LangeWork(int matrix_layout, char norm, lapack_int m, lapack_int n,
                    const T* a, lapack_int lda, RealT<T>* work) {
@@ -602,7 +603,8 @@ RealT<T> Lange(int matrix_layout, char norm, lapack_int m, lapack_int n,
 }
 
 // xLANSY (hermitian = false) and xLANHE (hermitian = true): in row-major
-// layout, the triangle uplo is copied into a column-major temporary.
+// layout, the triangle uplo is copied into a column-major temporary. An
+// invalid layout returns -1 (see LangeWork).
 template <typename T>
 RealT<T> LansyWork(int matrix_layout, char norm, char uplo, lapack_int n,
                    const T* a, lapack_int lda, RealT<T>* work, bool hermitian) {
@@ -1768,17 +1770,17 @@ lapack_int TrexcWork(int matrix_layout, char compq, lapack_int n, T* t,
                      lapack_int* ilst, T* work) {
   MatrixArg<T> q_arg{q, n, n, ldq, -7};
   q_arg.used = lapack::Lsame(compq, 'V');
-  q_arg.in = q_arg.out = q_arg.used;
-  if (!q_arg.used) q_arg.cols = 0;
+  q_arg.in = q_arg.out = q_arg.check_ld = q_arg.used;
+  // Q first: the reference checks LDQ before LDT.
   return CallWork<T, 2>(matrix_layout, Name<T>("trexc_work"), false,
-                        {{{t, n, n, ldt, -5}, q_arg}}, [&](auto& p, auto& ld) {
+                        {{q_arg, {t, n, n, ldt, -5}}}, [&](auto& p, auto& ld) {
                           if constexpr (IsComplex<T>::value) {
                             (void)work;
-                            return lapack::Trexc(compq, n, p[0], ld[0], p[1],
-                                                 ld[1], *ifst, *ilst);
+                            return lapack::Trexc(compq, n, p[1], ld[1], p[0],
+                                                 ld[0], *ifst, *ilst);
                           } else {
-                            return lapack::Trexc(compq, n, p[0], ld[0], p[1],
-                                                 ld[1], ifst, ilst, work);
+                            return lapack::Trexc(compq, n, p[1], ld[1], p[0],
+                                                 ld[0], ifst, ilst, work);
                           }
                         });
 }
@@ -1833,19 +1835,20 @@ lapack_int TrsenWork(int matrix_layout, char job, char compq,
       q_arg.used = q_arg.in = q_arg.out = false;
     }
   }
+  // Q first: the reference checks LDQ before LDT.
   return CallWork<T, 2>(
-      matrix_layout, Name<T>("trsen_work"), kComplex && query, {{t_arg, q_arg}},
+      matrix_layout, Name<T>("trsen_work"), kComplex && query, {{q_arg, t_arg}},
       [&](auto& p, auto& ld) {
         if constexpr (IsComplex<T>::value) {
           (void)wi;
           (void)iwork;
           (void)liwork;
-          return lapack::Trsen(job, compq, select, n, p[0], ld[0], p[1], ld[1],
+          return lapack::Trsen(job, compq, select, n, p[1], ld[1], p[0], ld[0],
                                wr, m, s, sep, work, lwork);
         } else {
           // (A query in row-major layout gets the caller's Q.)
-          T* qp = (query && matrix_layout == LAPACK_ROW_MAJOR) ? q : p[1];
-          return lapack::Trsen(job, compq, select, n, p[0], ld[0], qp, ld[1],
+          T* qp = (query && matrix_layout == LAPACK_ROW_MAJOR) ? q : p[0];
+          return lapack::Trsen(job, compq, select, n, p[1], ld[1], qp, ld[0],
                                wr, wi, m, s, sep, work, lwork, iwork, liwork);
         }
       });

@@ -854,6 +854,9 @@ blasint Unml2(char side, char trans, blasint m, blasint n, blasint k, T* a,
 
 // xORMLQ / xUNMLQ: overwrites C like xORML2 / xUNML2 (see there), with the
 // blocked algorithm (see xORMQR / xUNMQR).
+// Differs from the reference CUNMLQ, whose workspace query returns 1 for
+// M, N or K = 0, a size that it then rejects (INFO = -12) if it is less than
+// the minimum: the query returns the optimal size, as in the other three.
 template <typename T>
 blasint Unmlq(char side, char trans, blasint m, blasint n, blasint k, T* a,
               blasint lda, const T* tau, T* c, blasint ldc, T* work,

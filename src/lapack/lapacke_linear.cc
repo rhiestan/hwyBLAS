@@ -396,7 +396,8 @@ lapack_int Trrfs(int matrix_layout, char uplo, char trans, char diag,
 }
 
 // xLANTR: in row-major layout, the norm of the transpose (the 1-norm and
-// the infinity norm, and the triangles, swapped) of the matrix as it is.
+// the infinity norm, and the triangles, swapped) of the matrix as it is. An
+// invalid layout returns -1 (the reference returns 0).
 template <typename T>
 RealT<T> LantrWork(int matrix_layout, char norm, char uplo, char diag,
                    lapack_int m, lapack_int n, const T* a, lapack_int lda,

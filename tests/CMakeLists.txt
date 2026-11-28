@@ -121,6 +121,7 @@ if(HWYBLAS_LAPACK)
     lapack/gesvd_test.cc
     lapack/getrf_test.cc
     lapack/householder_test.cc
+    lapack/lapacke_validation_test.cc
     lapack/linear_test.cc
     lapack/norms_test.cc
     lapack/posv_test.cc
@@ -134,6 +135,29 @@ if(HWYBLAS_LAPACK)
     lapack/triangular_test.cc
     lapack/workspace_query_test.cc
   )
+  # Every LAPACKE function, for lapacke_validation_test.cc: X(name) with a
+  # matrix_layout argument, Y(name) without one.
+  set(_header "${PROJECT_SOURCE_DIR}/include/hwyblas/lapacke.h")
+  file(READ "${_header}" _declarations)
+  string(REGEX MATCHALL "LAPACKE_[sdcz][a-z0-9_]+\\([ \r\n]*[a-z_]+ [a-z_]+"
+         _declarations "${_declarations}")
+  set(_functions "")
+  foreach(_declaration IN LISTS _declarations)
+    string(REGEX REPLACE "\\(.*" "" _function "${_declaration}")
+    if(_declaration MATCHES "int matrix_layout$")
+      string(APPEND _functions "X(${_function})\n")
+    else()
+      string(APPEND _functions "Y(${_function})\n")
+    endif()
+  endforeach()
+  file(CONFIGURE OUTPUT lapacke_functions.inc CONTENT "${_functions}" @ONLY)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_header}")
+  set_source_files_properties(lapack/lapacke_validation_test.cc PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}")
+  if(MSVC)
+    set_source_files_properties(lapack/lapacke_validation_test.cc PROPERTIES
+      COMPILE_OPTIONS /bigobj)
+  endif()
 endif()
 
 gtest_discover_tests(hwyblas_tests DISCOVERY_MODE PRE_TEST)

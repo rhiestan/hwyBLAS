@@ -1469,10 +1469,13 @@ TYPED_TEST(SyevdTest, LapackeErrors) {
   EXPECT_EQ(LAPACKE_CALL_RC(T, sygst, hegst, LAPACK_COL_MAJOR, 1, 'L', n,
                             a.data(), n, b.data(), n),
             -5);
-  // ?ormtr checks the triangle uplo of A, ?unmtr all of A.
+  // ?ormtr / ?unmtr check the triangle uplo of A.
   EXPECT_EQ(LAPACKE_CALL_RC(T, ormtr, unmtr, LAPACK_COL_MAJOR, 'L', 'U', 'N', n,
                             n, a.data(), n, tau.data(), c.data(), n),
-            kComplex ? -7 : 0);
+            0);
+  EXPECT_EQ(LAPACKE_CALL_RC(T, ormtr, unmtr, LAPACK_COL_MAJOR, 'L', 'L', 'N', n,
+                            n, a.data(), n, tau.data(), c.data(), n),
+            -7);
   EXPECT_EQ(LAPACKE_CALL_RC(T, ormql, unmql, LAPACK_COL_MAJOR, 'L', 'N', n, n,
                             1, a.data(), n, tau.data(), c.data(), n),
             -7);

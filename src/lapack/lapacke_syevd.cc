@@ -167,8 +167,9 @@ lapack_int UnmtrWork(int matrix_layout, char side, char uplo, char trans,
       });
 }
 
-// The NaN check of A: the triangle uplo for real T, all of it for complex
-// T (as the reference).
+// The NaN check of A looks at the triangle uplo, which holds the reflectors.
+// LAPACKE_zunmtr of the reference checks all of A (its three other precisions
+// the triangle).
 template <typename T>
 lapack_int Unmtr(int matrix_layout, char side, char uplo, char trans,
                  lapack_int m, lapack_int n, const T* a, lapack_int lda,
@@ -180,11 +181,7 @@ lapack_int Unmtr(int matrix_layout, char side, char uplo, char trans,
   }
   if (NanCheck()) {
     const lapack_int r = lapack::Lsame(side, 'L') ? m : n;
-    if constexpr (IsComplex<T>::value) {
-      if (GeNancheck(matrix_layout, r, r, a, lda)) return -7;
-    } else {
-      if (TrNancheck(matrix_layout, uplo, 'N', r, a, lda)) return -7;
-    }
+    if (TrNancheck(matrix_layout, uplo, 'N', r, a, lda)) return -7;
     if (GeNancheck(matrix_layout, m, n, c, ldc)) return -10;
     if (VectorNancheck(r - 1, tau, 1)) return -9;
   }

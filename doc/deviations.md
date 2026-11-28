@@ -50,6 +50,7 @@ The results differ from the reference only in the cases described.
 | `?tgsen` | IJOB = 1, 2 or 4: the minimum LWORK (also returned by the workspace query) leaves `?tgsyl` a workspace of 0, which it rejects, so PL, PR or DIF are not computed | minimum and query are one element larger | `Tgsen`, `tgsen.cc` |
 | `ctgsen`, `ztgsen` | IJOB = 3 or 5: the transposed solve of the Difl estimate passes B11 and B22 in the wrong order, so DIF(2) is the estimate of a different operator | passes them as `stgsen` and `dtgsen` do | `Tgsen`, `tgsen.cc` |
 | `?gebal` (and `?geev`, `?geevx`, `?gees`, `?geesx`, `?ggev`, ... that call it) | A has a NaN (found while scaling): returns INFO = -3 without setting ILO and IHI, which the callers use anyway; xHSEQR then fails with INFO = -4 and undoing the scaling accesses WR before its first element | sets ILO and IHI to the limits found so far (the INFO returned is the same) | `Gebal` in `hessenberg.cc` |
+| `cunmlq` | M, N or K = 0: the workspace query returns 1, which the routine then rejects (INFO = -12) if less than the minimum, as in `LAPACKE_cunmlq` with K = 0 (-13) | the query returns the optimal size, as in `sormlq`, `dormlq` and `zunmlq` | `Unmlq`, `ungqr.cc` |
 | `?getc2` (and `?tgsy2`, `?tgsyl`, `?tgsen`, ...) | A(i:n,i:n) holds only NaNs: no pivot is found and the rows and columns of an undefined (uninitialized) index are swapped | no swap | `Getc2` in `tgsen.cc` |
 | `sggev`, `dggev` | Eigenvectors, ALPHAI(J) is NaN: it is taken for the first of a complex pair, and the normalization reads column J + 1 of VL and VR, past N for J = N | a NaN is a real eigenvalue | `Ggev` in `ggev.cc` |
 | `?syevx`, `?heevx`, `?stevx`, `?syevr`, `?heevr`, `?stevr` | Matrix with NaN or Inf, scaled by the driver: INFO > 0 comes from `?stebz` (up to 4), and the final rescaling of W covers INFO - 1 elements, more than the N of W if N < 4: reads and writes past W | at most N elements | `Heevx`, `Stevx` in `syevx.cc`; `SyevrReal`, `HeevrComplex`, `Stevr` in `syevr.cc` |
@@ -89,7 +90,9 @@ the ones visible to callers also in `hwyblas/lapacke.h`).
 | `LAPACKE_sgeesx`, `LAPACKE_dgeesx` | Passes the IWORK(1) of the workspace query as LIWORK, which is 0 for N = 1 and SENSE = 'V' or 'B', and `?geesx` rejects it | LIWORK is at least 1 |
 | `LAPACKE_strsen`, `LAPACKE_dtrsen` | Passes no IWORK for JOB = 'N' or 'E', although `?trsen` writes IWORK(1): crashes | always passes IWORK |
 | `LAPACKE_?syconv` | Row-major: transposes LDA rows of A, reading and writing past its N rows if LDA > N | transposes the N x N matrix |
-| `LAPACKE_?lacpy` | Row-major: the elements of B outside the triangle UPLO become undefined | they are kept |
+| `LAPACKE_?lacpy`, `LAPACKE_?lacp2` | Row-major: the elements of B outside the triangle UPLO become undefined | they are kept |
+| `LAPACKE_?lange_work`, `?lansy_work`, `?lanhe_work`, `?lantr_work` | Invalid `matrix_layout`: report it and return 0, which looks like a norm | return -1, as the functions without `_work` do |
+| `LAPACKE_zunmtr` | Checks all of A for NaN, although only the triangle UPLO is read (`LAPACKE_cunmtr` checks the triangle) | checks the triangle |
 | `LAPACKE_cunmlq`, `LAPACKE_zunmlq` | SIDE = 'R': checks and copies A as K x M | K x N, as `LAPACKE_?ormlq` |
 | `LAPACKE_cunmbr`, `LAPACKE_zunmbr` | VECT = 'P', NQ > K: checks and copies only min(NQ, K) of the NQ columns of A | all NQ columns, as `LAPACKE_?ormbr` |
 | `LAPACKE_?ormrq`, `?unmrq`, `?ormrz`, `?unmrz` | SIDE = 'R': checks and copies A as K x M (and checks LDA against M in row-major layout) | K x N |

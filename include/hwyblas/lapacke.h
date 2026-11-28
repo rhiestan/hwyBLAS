@@ -1986,7 +1986,8 @@ HWYBLAS_API lapack_int LAPACKE_zgeqp3_work(
 /* Norms, scaling and setting (see lapack.h)                                */
 
 /* The norms return a negative argument position (as a floating-point
- * value) for an invalid argument or NaN. */
+ * value) for an invalid argument or NaN. This includes -1 for an invalid
+ * matrix_layout in the _work functions, where the reference returns 0. */
 HWYBLAS_API float LAPACKE_slange(int matrix_layout, char norm, lapack_int m,
                                  lapack_int n, const float* a, lapack_int lda);
 HWYBLAS_API double LAPACKE_dlange(int matrix_layout, char norm, lapack_int m,

@@ -355,6 +355,9 @@ struct MatrixArg {
   lapack_int band_m = 0;
   lapack_int kl = 0;
   lapack_int ku = 0;
+  // false: ld is not checked in row-major layout either (Q of xTREXC for
+  // COMPQ = 'N').
+  bool check_ld = true;
 };
 
 // A matrix that the routine only reads.
@@ -436,7 +439,7 @@ lapack_int CallWork(int matrix_layout, const std::string& name, bool query,
 
   // Check leading dimension(s).
   for (const MatrixArg<T>& arg : args) {
-    if (arg.ld < arg.cols) {
+    if (arg.check_ld && arg.ld < arg.cols) {
       Xerbla(name, arg.ld_info);
       return arg.ld_info;
     }
@@ -599,7 +602,7 @@ lapack_int WithWorkspaces(const std::string& name, const Work& work) {
 template <typename T>
 MatrixArg<T> Eigenvectors(T* v, lapack_int n, lapack_int ldv, bool wanted,
                           lapack_int ld_info) {
-  MatrixArg<T> arg{v, n, wanted ? n : 1, ldv, ld_info};
+  MatrixArg<T> arg{v, n, wanted ? std::max<lapack_int>(1, n) : 1, ldv, ld_info};
   arg.in = false;
   arg.used = arg.out = wanted;
   return arg;

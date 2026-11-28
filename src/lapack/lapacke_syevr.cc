@@ -262,16 +262,19 @@ lapack_int StemrWork(int matrix_layout, char jobz, char range, lapack_int n,
   arg.in = false;
   arg.out = wantz;
   arg.used = wantz;
-  return CallWork<T, 1>(
-      matrix_layout, Name<T>("stemr_work"), liwork == -1 || lwork == -1,
-      {{arg}}, [&](auto& p, auto& ld) {
-        bool rac = *tryrac != 0;
-        const lapack_int info =
-            lapack::Stemr(jobz, range, n, d, e, vl, vu, il, iu, m, w, p[0],
-                          ld[0], nzc, isuppz, &rac, work, lwork, iwork, liwork);
-        *tryrac = rac ? 1 : 0;
-        return info;
-      });
+  const bool query = liwork == -1 || lwork == -1;
+  return CallWork<T, 1>(matrix_layout, Name<T>("stemr_work"), query, {{arg}},
+                        [&](auto& p, auto& ld) {
+                          // A workspace query does not reference TRYRAC (it may
+                          // be null).
+                          bool rac = !query && *tryrac != 0;
+                          const lapack_int info =
+                              lapack::Stemr(jobz, range, n, d, e, vl, vu, il,
+                                            iu, m, w, p[0], ld[0], nzc, isuppz,
+                                            &rac, work, lwork, iwork, liwork);
+                          if (!query) *tryrac = rac ? 1 : 0;
+                          return info;
+                        });
 }
 
 template <typename T>

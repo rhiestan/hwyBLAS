@@ -282,6 +282,13 @@ A ported routine is accepted when:
 - **Comparison with the reference LAPACK**, run by hand with
   `tests/lapack/compare_reference.sh`: the drivers give the same results
   as the reference.
+- **Comparison with the reference LAPACKE**, run by hand with
+  `tests/lapack/compare_lapacke.sh`: every function returns the same
+  values for invalid arguments, NaNs and workspace queries, and the same
+  arrays in both layouts. With `RECORD` set it writes
+  `tests/lapack/lapacke_checks.inc`, the calls with the reference's answers
+  that `lapacke_validation_test.cc` repeats; regenerate it after porting a
+  function.
 
 Residual checks cannot see changes to heuristics that only steer the
 convergence (shifts, deflation criteria, the NIBBLE crossover of xLAQR0),
