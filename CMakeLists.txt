@@ -71,9 +71,16 @@ endif()
 # Compiler flags shared by all hwyBLAS targets.
 add_library(hwyblas_options INTERFACE)
 if(MSVC)
-  # /fp:precise keeps FMA contraction under our control (Highway emits FMA
-  # explicitly); /Zc:__cplusplus for correct feature detection.
-  target_compile_options(hwyblas_options INTERFACE /W3 /Zc:__cplusplus /fp:precise)
+  # No FMA contraction: Highway emits FMA explicitly where it is wanted.
+  # cl does not contract under /fp:precise (Visual Studio 2022 and later);
+  # clang-cl does, so it is told not to. /Zc:__cplusplus for correct feature
+  # detection.
+  target_compile_options(hwyblas_options INTERFACE /W3 /Zc:__cplusplus)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(hwyblas_options INTERFACE /clang:-ffp-contract=off)
+  else()
+    target_compile_options(hwyblas_options INTERFACE /fp:precise)
+  endif()
 else()
   target_compile_options(hwyblas_options INTERFACE -Wall -Wextra -ffp-contract=off)
 endif()
