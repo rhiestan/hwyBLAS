@@ -256,6 +256,7 @@ template <typename T>
 struct Case {
   std::string name;    // routine, e.g. "dgemm"
   std::string symbol;  // symbol that both libraries must export
+  std::string ref_symbol;  // if set: the reference library's, instead
   std::string params;  // description of the arguments
   Api api = Api::kFortran;
   std::vector<Operand<T>> ops;
@@ -1247,7 +1248,7 @@ std::vector<Routine<T>> Routines() {
 
   // ----- Level 3
   // gemm and gemmt (one triangle of C).
-  // (gemmtr is the name of gemmt in the reference BLAS.)
+  // (gemmtr is the name of gemmt in the reference BLAS; see AddRoutines.)
   for (int variant = 0; variant < 3; ++variant) {
     const int tri = variant != 0;
     add(p + (variant == 0   ? "gemm"
@@ -1740,7 +1741,10 @@ std::string RunCase(const Case<T>& c, const Lib& hwy, const Lib& ref,
     if (!guarded && c.expected) {
       c.expected(ptrs.data());
     } else {
-      c.call(Target{lib, c.symbol, c.api}, ptrs.data());
+      // (`guarded` is false for the reference library.)
+      const std::string& symbol =
+          !guarded && !c.ref_symbol.empty() ? c.ref_symbol : c.symbol;
+      c.call(Target{lib, symbol, c.api}, ptrs.data());
     }
     *exceptions = std::fetestexcept(FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW);
     std::vector<std::vector<T>> data(num);
@@ -1809,6 +1813,15 @@ void AddRoutines(std::vector<AnyRoutine>& all) {
            if (!hwy.Find(c.symbol.c_str()) ||
                (!c.expected && !c.verify && !ref.Find(c.symbol.c_str()))) {
              return true;  // not provided by one of the libraries
+           }
+           // ?gemmtr and ?gemmt are the same routine. OpenBLAS's CMake build
+           // (0.3.34) compiles ?gemmtr from gemm.c, so the reference's ?gemmt
+           // is called where it has one (the Netlib BLAS has none).
+           const size_t gemmtr = c.symbol.find("gemmtr");
+           if (gemmtr != std::string::npos) {
+             std::string gemmt = c.symbol;
+             gemmt.erase(gemmtr + 5, 1);
+             if (ref.Find(gemmt.c_str())) c.ref_symbol = gemmt;
            }
            char seed_str[32];
            snprintf(seed_str, sizeof(seed_str), "0x%016" PRIx64, seed);
